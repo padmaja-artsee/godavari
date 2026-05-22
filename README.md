@@ -29,8 +29,9 @@ Open **http://127.0.0.1:8000** in your browser.
 
 ## GitHub
 
+Remote: [github.com/padmaja-artsee/godavari](https://github.com/padmaja-artsee/godavari)
+
 ```bash
-git remote add origin https://github.com/<your-user>/Leads.git
 git push -u origin main
 ```
 
