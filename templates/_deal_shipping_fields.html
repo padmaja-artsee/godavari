@@ -1,0 +1,44 @@
+{% macro shipping_inputs(d) %}
+<div class="shipping-fields-compact">
+  <div>
+    <label>PO date</label>
+    <input name="po_date" type="date" value="{{ d.po_date or '' }}" />
+  </div>
+  <div>
+    <label>Packing</label>
+    <input name="packing" value="{{ d.packing or '' }}" placeholder="e.g. 20 MT drums" />
+  </div>
+  <div>
+    <label>GBL invoice</label>
+    <input name="gbl_invoice" value="{{ d.gbl_invoice or '' }}" />
+  </div>
+  <div>
+    <label>GBL invoice date</label>
+    <input name="gbl_invoice_date" type="date" value="{{ d.gbl_invoice_date or '' }}" />
+  </div>
+  <div>
+    <label>Container #</label>
+    <input name="container_number" value="{{ d.container_number or '' }}" />
+  </div>
+  <div>
+    <label>Vessel</label>
+    <input name="vessel_name" value="{{ d.vessel_name or '' }}" />
+  </div>
+  <div>
+    <label>ETD India</label>
+    <input name="etd_india" type="date" value="{{ d.etd_india or '' }}" />
+  </div>
+  <div>
+    <label>Transit time</label>
+    <input name="transit_time" value="{{ d.transit_time or '' }}" placeholder="e.g. 35 days" />
+  </div>
+  <div>
+    <label>Destination</label>
+    <input name="destination" value="{{ d.destination or '' }}" />
+  </div>
+  <div>
+    <label>ETA</label>
+    <input name="eta" type="date" value="{{ d.eta or '' }}" />
+  </div>
+</div>
+{% endmacro %}

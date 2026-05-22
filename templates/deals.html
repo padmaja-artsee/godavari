@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Active leads{% endblock %}
+{% block content %}
+<div class="page-header deals-page-header">
+  <div>
+    <h1>Active leads</h1>
+    <p class="subtitle">One line per deal (or lead-only product). Grouped {% if view == 'product' %}by <strong>product</strong>{% else %}by <strong>company</strong>{% endif %}.</p>
+  </div>
+  <a href="/add?tab=log&return_to=/deals" class="btn btn-primary">+ Log update</a>
+</div>
+
+<div class="card deals-card">
+  <form class="deals-toolbar" method="get" action="/deals">
+    <div class="toolbar-filters">
+      <div>
+        <label class="field-label">View by</label>
+        <select name="view" onchange="this.form.submit()">
+          <option value="company" {% if view == 'company' %}selected{% endif %}>Company</option>
+          <option value="product" {% if view == 'product' %}selected{% endif %}>Product</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Status</label>
+        <select name="status" onchange="this.form.submit()">
+          <option value="all" {% if status == 'all' %}selected{% endif %}>All statuses</option>
+          <option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
+          <option value="shipped" {% if status == 'shipped' %}selected{% endif %}>Shipped</option>
+          <option value="lost" {% if status == 'lost' %}selected{% endif %}>Lost</option>
+          <option value="archived" {% if status == 'archived' %}selected{% endif %}>Archived</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Date range</label>
+        <select name="period" onchange="this.form.submit()">
+          <option value="week" {% if period == 'week' %}selected{% endif %}>This week</option>
+          <option value="month" {% if period == 'month' %}selected{% endif %}>This month</option>
+          <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>This quarter</option>
+          <option value="year" {% if period == 'year' %}selected{% endif %}>This year</option>
+          <option value="all" {% if period == 'all' %}selected{% endif %}>All time</option>
+        </select>
+      </div>
+    </div>
+    <div class="toolbar-search">
+      <input name="company" value="{{ company }}" placeholder="Filter company" list="filter-companies" />
+      <input name="product" value="{{ product }}" placeholder="Filter product" list="filter-products" />
+      <input name="po" value="{{ po }}" placeholder="PO #" />
+      <input name="q" value="{{ q }}" placeholder="Search" />
+      <button type="submit" class="btn btn-primary">Apply</button>
+      <a href="/deals?status=all&period=month&view={{ view }}" class="btn btn-ghost">Clear</a>
+      <a href="/add?tab=log&return_to=/deals" class="btn btn-primary">Log update</a>
+    </div>
+  </form>
+
+  <datalist id="filter-companies">
+    {% for g in lead_groups if view == 'company' %}
+    <option value="{{ g.label }}"></option>
+    {% endfor %}
+    {% for row in leads if view != 'company' %}
+    <option value="{{ row.company }}"></option>
+    {% endfor %}
+  </datalist>
+  <datalist id="filter-products">
+    {% for g in lead_groups if view == 'product' %}
+    <option value="{{ g.label }}"></option>
+    {% endfor %}
+    {% for row in leads if view != 'product' %}
+    <option value="{{ row.product }}"></option>
+    {% endfor %}
+  </datalist>
+
+  <div class="deals-table-scroll">
+    {% if lead_groups %}
+    <table class="deals-table">
+      <thead>
+        <tr>
+          <th class="col-toggle" aria-label="Details"></th>
+          <th>ID#</th>
+          <th>Date</th>
+          {% if view == 'product' %}<th>Company</th>{% else %}<th>Product</th>{% endif %}
+          <th>Status</th>
+          <th>Last activity</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for group in lead_groups %}
+      <tr class="deals-group-row">
+        <td colspan="8">
+          {% if view == 'company' %}
+          <a class="link" href="/customer?name={{ group.label | urlencode }}"><strong>{{ group.label }}</strong></a>
+          {% elif group.product_id %}
+          <a class="link" href="/products/{{ group.product_id }}"><strong>{{ group.label }}</strong></a>
+          {% else %}
+          <strong>{{ group.label }}</strong>
+          {% endif %}
+          <span class="muted"> · {{ group.rows|length }} row{{ 's' if group.rows|length != 1 else '' }}</span>
+        </td>
+      </tr>
+      {% for row in group.rows %}
+      <tr class="deals-summary">
+        <td class="col-toggle">
+          <button type="button" class="icon-btn row-toggle" aria-expanded="false" aria-label="Show details" title="Show details">
+            <svg class="icon-chevron icon-chevron-right" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            <svg class="icon-chevron icon-chevron-down" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </button>
+        </td>
+        <td>{{ row.deal_id or '—' }}</td>
+        <td>{{ row.last_activity_date }}</td>
+        {% if view == 'product' %}
+        <td><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></td>
+        {% else %}
+        <td>{{ row.product }}</td>
+        {% endif %}
+        <td>
+          {% if row.status == 'shipped' %}<span class="badge">Shipped</span>
+          {% elif row.status == 'lost' %}<span class="badge badge-lost">Lost</span>
+          {% elif row.status == 'lead' %}<span class="badge badge-muted">Lead</span>
+          {% else %}<span class="badge badge-open">Open</span>{% endif %}
+        </td>
+        <td class="col-notes">
+          {% if row.activity_count and row.activity_count > 1 %}
+          <span class="muted">{{ row.activity_count }} updates · </span>
+          {% endif %}
+          {{ (row.last_activity or '')[:60] }}{% if (row.last_activity or '')|length > 60 %}…{% endif %}
+        </td>
+        <td class="col-notes">{{ (row.notes or '')[:50] }}{% if (row.notes or '')|length > 50 %}…{% endif %}</td>
+        <td class="col-quick col-actions">
+          <a class="btn btn-primary btn-sm" href="/add?tab=log&company={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% if row.deal_id %}&deal_id={{ row.deal_id }}{% endif %}&return_to=/deals">Log</a>
+          {% if row.deal_id %}
+          <a class="link" href="/deal/{{ row.deal_id }}">View</a>
+          {% else %}
+          <a class="link" href="/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}">View</a>
+          {% endif %}
+        </td>
+      </tr>
+      <tr class="deals-detail" hidden>
+        <td colspan="8">
+          <dl class="deals-detail-grid">
+            {% if view == 'company' %}
+            <div><dt>Company</dt><dd><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></dd></div>
+            {% else %}
+            <div><dt>Product</dt><dd>{{ row.product }}</dd></div>
+            {% endif %}
+            <div><dt>PO #</dt><dd>{{ row.po_number or '—' }}</dd></div>
+            <div><dt>Quantity</dt><dd>{{ row.quantity or '—' }}</dd></div>
+            <div><dt>Price</dt><dd>{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</dd></div>
+          </dl>
+        </td>
+      </tr>
+      {% endfor %}
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No leads with activity in this period. Try a wider date range or log an update.</div>
+    {% endif %}
+  </div>
+</div>
+<script src="/static/deals-rows.js"></script>
+{% endblock %}

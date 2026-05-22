@@ -1,0 +1,50 @@
+{% from "_activity_link_mode.html" import activity_link_mode %}
+{% macro activity_row(a, company_name='', return_to='', company_deals=[]) %}
+{% set back = return_to or ('/customer?name=' + (company_name | urlencode)) %}
+{% set ch = a.channel or a.activity or 'Note' %}
+<tr class="activity-view" data-activity-id="{{ a.id }}">
+  <td>{{ a.activity_date }}</td>
+  <td><span class="badge badge-blue">{{ ch }}</span></td>
+  <td class="activity-detail-text">{{ a.comment or a.description or '—' }}</td>
+  <td class="col-actions">
+    <button type="button" class="btn btn-ghost btn-sm btn-edit-activity">Edit</button>
+    <form method="post" action="/activities/{{ a.id }}/delete" class="inline-form activity-delete-form"
+          onsubmit="return confirm('Delete this timeline entry?')">
+      <input type="hidden" name="next_url" value="{{ back }}" />
+      <button type="submit" class="btn btn-danger btn-sm" title="Delete entry">Delete</button>
+    </form>
+  </td>
+</tr>
+<tr class="activity-edit-row" id="edit-activity-{{ a.id }}" hidden>
+  <td colspan="4">
+    <form method="post" action="/activities/{{ a.id }}/edit" class="activity-edit-form">
+      <input type="hidden" name="next_url" value="{{ back }}" />
+      <div class="activity-edit-grid">
+        {% set link_mode = 'existing' if a.deal_id else 'none' %}
+        {% set prod = a.product if a.product is defined else '' %}
+        {{ activity_link_mode(link_mode, a.deal_id or '', prod, company_deals, a.activity_date) }}
+        <div>
+          <label class="field-label">Date</label>
+          <input type="date" name="activity_date" value="{{ a.activity_date }}" required />
+        </div>
+        <div>
+          <label class="field-label">Type</label>
+          <select name="channel">
+            {% for opt in ['Email','Phone','Meeting','Quote','Sample','PO','Issue','Follow-up','Note'] %}
+            <option value="{{ opt }}" {% if ch == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="full">
+          <label class="field-label">Details</label>
+          <textarea name="comment" rows="3" required>{{ a.comment or a.description or '' }}</textarea>
+        </div>
+        <div class="activity-edit-actions">
+          <button type="submit" class="btn btn-primary btn-sm">Save</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-cancel-edit">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </td>
+</tr>
+{% endmacro %}

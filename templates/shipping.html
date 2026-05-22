@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block title %}Shipping summary{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Shipping summary</h1>
+    <p class="subtitle">Tracking template — one row per deal with company, product, and logistics fields.</p>
+  </div>
+  <a href="/add?tab=log&return_to=/shipping" class="btn btn-primary">+ Log update</a>
+</div>
+
+<div class="card deals-card shipping-card">
+  <form class="deals-toolbar" method="get" action="/shipping">
+    <div class="toolbar-filters">
+      <div>
+        <label class="field-label">Status</label>
+        <select name="status" onchange="this.form.submit()">
+          <option value="all" {% if status == 'all' %}selected{% endif %}>All (excl. archived)</option>
+          <option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
+          <option value="shipped" {% if status == 'shipped' %}selected{% endif %}>Shipped</option>
+          <option value="lost" {% if status == 'lost' %}selected{% endif %}>Lost</option>
+          <option value="archived" {% if status == 'archived' %}selected{% endif %}>Archived</option>
+        </select>
+      </div>
+    </div>
+    <div class="toolbar-search">
+      <input name="company" value="{{ company }}" placeholder="Filter company" />
+      <input name="product" value="{{ product }}" placeholder="Filter product" />
+      <input name="q" value="{{ q }}" placeholder="Search PO, container, vessel…" />
+      <button type="submit" class="btn btn-primary">Apply</button>
+      <a href="/shipping" class="btn btn-ghost">Clear</a>
+    </div>
+  </form>
+
+  <div class="deals-table-scroll shipping-table-scroll">
+    {% if rows %}
+    <table class="deals-table shipping-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Product</th>
+          <th>PO #</th>
+          <th>PO date</th>
+          <th>Quantity</th>
+          <th>Packing</th>
+          <th>GBL invoice</th>
+          <th>GBL inv. date</th>
+          <th>Container #</th>
+          <th>Vessel</th>
+          <th>ETD India</th>
+          <th>Transit</th>
+          <th>Destination</th>
+          <th>ETA</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></td>
+        <td>{{ row.product }}</td>
+        <td>{{ row.po_number or '—' }}</td>
+        <td>{{ row.po_date or '—' }}</td>
+        <td>{{ row.quantity or '—' }}</td>
+        <td>{{ row.packing or '—' }}</td>
+        <td>{{ row.gbl_invoice or '—' }}</td>
+        <td>{{ row.gbl_invoice_date or '—' }}</td>
+        <td>{{ row.container_number or '—' }}</td>
+        <td>{{ row.vessel_name or '—' }}</td>
+        <td>{{ row.etd_india or '—' }}</td>
+        <td>{{ row.transit_time or '—' }}</td>
+        <td>{{ row.destination or '—' }}</td>
+        <td>{{ row.eta or '—' }}</td>
+        <td class="col-quick"><a class="link" href="/deal/{{ row.deal_id }}?from=shipping">Edit</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No deals match these filters.</div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

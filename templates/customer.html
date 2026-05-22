@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+{% from "_activity_row.html" import activity_row %}
+{% block title %}{{ detail.customer.name }}{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{{ detail.customer.name }}{% if detail.product_filter %} — {{ detail.product_filter }}{% endif %}</h1>
+    <p class="subtitle">{% if detail.product_filter %}All logged updates for this product{% else %}Contact profile, deals, and full story by deal{% endif %}</p>
+    {% if detail.deal_counts %}
+    <p class="subtitle deal-stats">
+      {{ detail.deal_counts.open }} open · {{ detail.deal_counts.shipped }} shipped ·
+      {{ detail.deal_counts.lost }} lost
+    </p>
+    {% endif %}
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+    <a href="/add?tab=log&company={{ detail.customer.name | urlencode }}{% if detail.product_filter %}&product={{ detail.product_filter | urlencode }}{% endif %}" class="btn btn-primary">+ Log update</a>
+    <a href="/add?tab=deal&company={{ detail.customer.name | urlencode }}" class="btn btn-ghost">+ Create deal</a>
+    <form method="post" action="/customer/{{ detail.customer.id }}/delete" class="inline-form"
+      onsubmit="return confirm('Delete {{ detail.customer.name }} and all deals, activities, and contact data? This cannot be undone.');">
+      <button type="submit" class="btn btn-danger">Delete company</button>
+    </form>
+  </div>
+</div>
+
+{% if detail.lead %}
+<div class="card">
+  <div class="card-header"><h2>Lead (contact)</h2></div>
+  <form method="post" action="/customer/{{ detail.lead.id }}/edit" class="form-grid">
+    <input type="hidden" name="company" value="{{ detail.customer.name }}" />
+    <div><label>Contact</label><input name="contact" value="{{ detail.lead.contact or '' }}" /></div>
+    <div><label>Email</label><input name="email" type="email" value="{{ detail.lead.email or '' }}" /></div>
+    <div><label>Website</label><input name="website" value="{{ detail.lead.website or '' }}" /></div>
+    <div><label>Phone</label><input name="phone" value="{{ detail.lead.phone or '' }}" /></div>
+    <div class="full"><label>Products interested in</label><input name="products_interested" value="{{ detail.lead.products_interested or '' }}" /></div>
+    <div class="full"><button type="submit" class="btn btn-primary">Save contact</button></div>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-header">
+    <h2>Deals</h2>
+    <a href="/add?tab=deal&company={{ detail.customer.name | urlencode }}" class="btn btn-primary btn-sm">+ Create deal</a>
+  </div>
+  <div class="card-body">
+    {% if detail.deals %}
+    <table>
+      <thead><tr><th>ID#</th><th>Date</th><th>Product</th><th>PO</th><th>Qty</th><th>Price</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {% for d in detail.deals %}
+      <tr>
+        <td>{{ d.id }}</td>
+        <td>{{ d.deal_date }}</td>
+        <td>{{ d.product }}</td>
+        <td>{{ d.po_number or '—' }}</td>
+        <td>{{ d.quantity or '—' }}</td>
+        <td>{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% else %}—{% endif %}</td>
+        <td>
+          {% if d.status == 'shipped' %}<span class="badge">Shipped</span>
+          {% elif d.status == 'lost' %}<span class="badge badge-lost">Lost</span>
+          {% else %}<span class="badge badge-open">Open</span>{% endif %}
+        </td>
+        <td><a class="link" href="/deal/{{ d.id }}">View →</a></td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No deals — <a class="link" href="/add?tab=log&company={{ detail.customer.name | urlencode }}">log update & start deal</a></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Timeline by deal</h2></div>
+  <div class="card-body timeline-wrap">
+    {% if detail.timeline.deal_groups %}
+    {% for group in detail.timeline.deal_groups %}
+    <div class="timeline-group">
+      <div class="timeline-group-head">
+        <a class="link" href="/deal/{{ group.deal_id }}"><strong>{{ group.product }}</strong></a>
+        <span class="muted">{{ group.deal_date }}</span>
+        {% if group.deal_status == 'shipped' %}<span class="badge">Shipped</span>
+        {% elif group.deal_status == 'lost' %}<span class="badge badge-lost">Lost</span>
+        {% else %}<span class="badge badge-open">Open</span>{% endif %}
+        {% if group.po_number %}<span class="muted">PO {{ group.po_number }}</span>{% endif %}
+        <a class="link" href="/add?tab=log&company={{ detail.customer.name | urlencode }}&deal_id={{ group.deal_id }}">+ Add entry</a>
+      </div>
+      {% if group.activities %}
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
+        <tbody>
+        {% for a in group.activities %}
+        {{ activity_row(a, detail.customer.name, '', company_deals) }}
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p class="muted" style="padding:0.5rem 0">No log entries on this deal yet.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if detail.timeline.company_level %}
+    <div class="timeline-group">
+      <div class="timeline-group-head"><strong>Company (not tied to a deal)</strong></div>
+      <table>
+        <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
+        <tbody>
+        {% for a in detail.timeline.company_level %}
+        {{ activity_row(a, detail.customer.name, '', company_deals) }}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+
+    {% if not detail.timeline.deal_groups and not detail.timeline.company_level %}
+    <div class="empty">No activity logged. Use <strong>Log update</strong> to record emails and deal progress.</div>
+    {% endif %}
+  </div>
+</div>
+
+<p><a class="link" href="/leads">← Back to leads</a></p>
+<datalist id="products-datalist">
+  {% for p in all_products %}<option value="{{ p.name }}">{% endfor %}
+</datalist>
+<script src="/static/activity-edit.js"></script>
+{% endblock %}

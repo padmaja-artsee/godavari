@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}{% if product %}Edit{% else %}Add{% endif %} Product{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>{% if product %}Edit product{% else %}Add product{% endif %}</h1>
+    <p class="subtitle">Canonical name is used on deals and leads (e.g. <strong>N-Butyraldehyde</strong>, not “RMQ paperwork”).</p>
+  </div>
+  <a href="/products" class="btn btn-ghost">← Products</a>
+</div>
+
+<div class="card" style="max-width:720px">
+  <form method="post" action="/products/save" class="form-grid">
+    {% if product %}<input type="hidden" name="product_id" value="{{ product.id }}" />{% endif %}
+    <div class="full">
+      <label>Product name *</label>
+      <input name="name" required value="{{ product.name if product else '' }}" placeholder="e.g. N-Butyraldehyde" />
+    </div>
+    <div>
+      <label>Trade name / brand</label>
+      <input name="trade_name" value="{{ product.trade_name if product else '' }}" placeholder="NaturoBG®" />
+    </div>
+    <div>
+      <label>CAS number</label>
+      <input name="cas_number" value="{{ product.cas_number if product else '' }}" placeholder="123-72-8" />
+    </div>
+    <div>
+      <label>Biobased content</label>
+      <input name="biobased_content" value="{{ product.biobased_content if product else '' }}" placeholder="~100%" />
+    </div>
+    <div>
+      <label>Category</label>
+      <input name="category" list="categories" value="{{ product.category if product else '' }}" placeholder="Solvents, Intermediates…" />
+    </div>
+    <div>
+      <label>Status</label>
+      <select name="status">
+        <option value="active" {% if not product or product.status == 'active' %}selected{% endif %}>Active</option>
+        <option value="development" {% if product and product.status == 'development' %}selected{% endif %}>In development</option>
+        <option value="retired" {% if product and product.status == 'retired' %}selected{% endif %}>Retired</option>
+      </select>
+    </div>
+    <div class="full">
+      <label>Certifications</label>
+      <textarea name="certifications" rows="2" placeholder="ISO, REACH, Kosher, etc.">{{ product.certifications if product else '' }}</textarea>
+    </div>
+    <div class="full">
+      <label>Applications</label>
+      <textarea name="applications" rows="2">{{ product.applications if product else '' }}</textarea>
+    </div>
+    <div class="full">
+      <label>Synonyms / old names</label>
+      <input name="synonyms" value="{{ product.synonyms if product else '' }}" placeholder="Comma-separated aliases" />
+    </div>
+    <div class="full">
+      <label>Notes</label>
+      <textarea name="notes" rows="2">{{ product.notes if product else '' }}</textarea>
+    </div>
+    <div class="full">
+      <button type="submit" class="btn btn-primary">Save product</button>
+    </div>
+  </form>
+</div>
+
+{% if product %}
+<div class="card" style="max-width:720px;margin-top:1.25rem">
+  <div class="card-header"><h2>Customers</h2></div>
+  <div class="card-body" style="padding:0">
+    {% if product.customers %}
+    <table class="deals-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Deals</th>
+          <th>Open</th>
+          <th>Activities</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for c in product.customers %}
+      <tr>
+        <td><a class="link" href="/customer?name={{ c.company | urlencode }}"><strong>{{ c.company }}</strong></a></td>
+        <td>{{ c.deals or '—' }}</td>
+        <td>{% if c.open_deals %}<span class="badge badge-open">{{ c.open_deals }}</span>{% else %}—{% endif %}</td>
+        <td>{{ c.activities or '—' }}</td>
+        <td>
+          {% if c.interest_only %}<span class="muted">Interest only</span>
+          {% else %}<a class="link" href="/deals?company={{ c.company | urlencode }}&product={{ product.name | urlencode }}">Deals</a>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty" style="padding:1.25rem">No customers linked yet — add a deal or list this product on a lead’s “products interested in”.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="max-width:720px;margin-top:1.25rem">
+  <div class="card-header"><h2>PDF attachments</h2></div>
+  <div class="card-body" style="padding:1rem 1.25rem">
+    {% if error_msg %}
+    <p class="form-error">{{ error_msg }}</p>
+    {% endif %}
+    <form method="post" action="/products/{{ product.id }}/upload" enctype="multipart/form-data" class="upload-form">
+      <input type="file" name="pdf_file" accept="application/pdf,.pdf" required />
+      <button type="submit" class="btn btn-primary btn-sm">Attach PDF</button>
+    </form>
+    {% if product.files %}
+    <ul class="file-list">
+      {% for f in product.files %}
+      <li>
+        <a class="link" href="/products/files/{{ f.id }}" target="_blank">{{ f.filename }}</a>
+        <span class="muted">{% if f.file_size %}{{ (f.file_size / 1024)|round(1) }} KB · {% endif %}{{ f.created_at[:10] }}</span>
+        <form method="post" action="/products/files/{{ f.id }}/delete" class="inline-form"
+              onsubmit="return confirm('Remove this PDF?')">
+          <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted" style="margin:0.75rem 0 0">No PDFs attached — e.g. catalogue sheets, COA, specs.</p>
+    {% endif %}
+  </div>
+</div>
+{% else %}
+<div class="info-box" style="max-width:720px;margin-top:1.25rem">Save the product first, then you can attach PDFs.</div>
+{% endif %}
+
+{% if product and product.name|lower != 'general' %}
+<div class="card card-danger-zone" style="max-width:720px;margin-top:1.25rem">
+  <div class="card-header"><h2>Delete product</h2></div>
+  <div class="card-body" style="padding:1rem 1.25rem">
+    {% set u = product.usage %}
+    {% if u.deals or u.engagements or u.activities %}
+    <p class="muted">Used in {{ u.deals }} deal(s), {{ u.engagements }} engagement(s), {{ u.activities }} activity note(s). Deleting will move those links to <strong>General</strong>.</p>
+    {% else %}
+    <p class="muted">Not linked to any deals or notes. Safe to remove from the catalogue.</p>
+    {% endif %}
+    <form method="post" action="/products/{{ product.id }}/delete" style="margin-top:0.75rem"
+          onsubmit="return confirm('Delete {{ product.name }}?{% if u.deals or u.activities %} Related records will use General instead.{% endif %} PDFs will be removed.')">
+      <button type="submit" class="btn btn-danger btn-sm">Delete product</button>
+    </form>
+  </div>
+</div>
+{% endif %}
+
+<datalist id="categories">
+  <option value="Solvents"><option value="Intermediates"><option value="Monomers">
+  <option value="Sustainable Materials"><option value="Mining">
+</datalist>
+{% endblock %}

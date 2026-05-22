@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.DS_Store
+
+# Local database and uploaded files (recreated on first run)
+data/leads.db
+data/leads.db-journal
+data/uploads/
+
+.cursor/

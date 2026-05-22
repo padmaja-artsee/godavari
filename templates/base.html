@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Leads{% endblock %} · GBInc</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <div class="brand">GB<span>Inc</span> Leads</div>
+      <nav class="nav">
+        <a href="/" class="{% if page == 'dashboard' %}active{% endif %}">Dashboard</a>
+        <a href="/leads" class="{% if page == 'leads' %}active{% endif %}">Leads</a>
+        <a href="/deals" class="{% if page == 'deals' %}active{% endif %}">Active leads</a>
+        <a href="/shipping" class="{% if page == 'shipping' %}active{% endif %}">Shipping summary</a>
+        <a href="/products" class="{% if page == 'products' %}active{% endif %}">Products</a>
+        <a href="/add?tab=log" class="{% if page == 'add' %}active{% endif %}">Log update</a>
+        <a href="/summary" class="{% if page == 'summary' %}active{% endif %}">Summary</a>
+      </nav>
+      <p class="nav-hint"><strong>Log update</strong> = emails &amp; deal story. <strong>Leads</strong> = contacts. <strong>Active leads</strong> = all logged updates in period.</p>
+    </aside>
+    <main class="main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

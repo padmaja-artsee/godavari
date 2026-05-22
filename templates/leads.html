@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}Leads{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Leads</h1>
+    <p class="subtitle">Contact repository only — company, contact, email, website, products of interest. No PO numbers here.</p>
+  </div>
+  <a href="/add?tab=log" class="btn btn-primary">+ Log update</a>
+</div>
+
+<div class="card">
+  <form class="search-bar" method="get" action="/leads">
+    <div>
+      <label class="field-label">Company</label>
+      <input name="company" value="{{ company }}" placeholder="Company name" />
+    </div>
+    <div>
+      <label class="field-label">Product interest</label>
+      <input name="product" value="{{ product }}" placeholder="Any product listed" />
+    </div>
+    <div>
+      <label class="field-label">Search</label>
+      <input name="q" value="{{ q }}" placeholder="Name, email, website…" />
+    </div>
+    <div class="search-actions">
+      <button type="submit" class="btn btn-primary">Search</button>
+      <a href="/leads" class="btn btn-ghost">Clear</a>
+    </div>
+  </form>
+  <div class="card-body">
+    {% if leads %}
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Contact</th>
+          <th>Email</th>
+          <th>Website</th>
+          <th>Products interested in</th>
+          <th>Phone</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for l in leads %}
+      <tr>
+        <td><a class="link" href="/customer?name={{ l.company | urlencode }}"><strong>{{ l.company }}</strong></a></td>
+        <td>{{ l.contact or '—' }}</td>
+        <td>{% if l.email %}<a class="link" href="mailto:{{ l.email }}">{{ l.email }}</a>{% else %}—{% endif %}</td>
+        <td>{% if l.website %}<a class="link" href="{{ l.website if l.website.startswith('http') else 'https://' + l.website }}" target="_blank" rel="noopener">{{ l.website }}</a>{% else %}—{% endif %}</td>
+        <td>{{ l.products_interested or '—' }}</td>
+        <td>{{ l.phone or '—' }}</td>
+        <td>
+          <a class="link" href="/add?tab=deal&company={{ l.company | urlencode }}">Start deal</a>
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No leads yet. <a class="link" href="/add?tab=lead">Add your first contact</a></div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

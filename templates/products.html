@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Products{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Products</h1>
+    <p class="subtitle">Catalogue from Godavari Biorefineries — CAS, certifications, applications</p>
+  </div>
+  <a href="/products/new" class="btn btn-primary">+ Add product</a>
+</div>
+
+<div class="card">
+  <form class="deals-toolbar" method="get" action="/products">
+    <div class="toolbar-search">
+      <input name="q" value="{{ q }}" placeholder="Search name, CAS, trade name…" />
+      <select name="category">
+        <option value="">All categories</option>
+        {% for c in categories %}
+        <option value="{{ c }}" {% if category == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+      <select name="status">
+        <option value="">All statuses</option>
+        <option value="active" {% if status == 'active' %}selected{% endif %}>Active</option>
+        <option value="development" {% if status == 'development' %}selected{% endif %}>In development</option>
+        <option value="retired" {% if status == 'retired' %}selected{% endif %}>Retired</option>
+      </select>
+      <button type="submit" class="btn btn-primary">Search</button>
+      <a href="/products" class="btn btn-ghost">Clear</a>
+    </div>
+  </form>
+  <div class="deals-table-scroll" style="max-height:calc(100vh - 14rem)">
+    <table class="deals-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Trade name</th>
+          <th>CAS</th>
+          <th>Biobased</th>
+          <th>Category</th>
+          <th>Status</th>
+          <th>Certifications</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for p in products %}
+      <tr>
+        <td><a class="link" href="/products/{{ p.id }}"><strong>{{ p.name }}</strong></a></td>
+        <td>{{ p.trade_name or '—' }}</td>
+        <td>{{ p.cas_number or '—' }}</td>
+        <td>{{ p.biobased_content or '—' }}</td>
+        <td>{{ p.category or '—' }}</td>
+        <td>
+          {% if p.status == 'retired' %}<span class="badge badge-retired">Retired</span>
+          {% elif p.status == 'development' %}<span class="badge badge-muted">In development</span>
+          {% else %}<span class="badge">Active</span>{% endif %}
+        </td>
+        <td>{{ (p.certifications or '—')[:40] }}</td>
+        <td><a class="link" href="/products/{{ p.id }}">Edit</a></td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" class="empty">No products. <a href="/products/new">Add one</a> or restart app to import catalogue.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

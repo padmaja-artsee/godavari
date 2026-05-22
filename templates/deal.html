@@ -1,0 +1,180 @@
+{% extends "base.html" %}
+{% from "_activity_row.html" import activity_row %}
+{% from "_deal_shipping_fields.html" import shipping_inputs %}
+{% block title %}Deal · {{ detail.deal.product }}{% endblock %}
+{% block content %}
+{% set d = detail.deal %}
+<div class="page-header">
+  <div>
+    <h1>{{ d.company }} — <a class="link" href="/products/{{ d.product_id }}">{{ d.product }}</a></h1>
+    <p class="subtitle">
+      <strong>{{ d.id }}</strong> · Deal {{ d.deal_date }}
+      {% if d.po_number %}· PO {{ d.po_number }}{% endif %}
+      {% if d.quantity or d.price %}· {{ d.quantity }}{% if d.quantity and d.price %} · {% endif %}{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% endif %}{% endif %}
+      ·
+      {% if d.status == 'shipped' %}<span class="badge">Shipped {{ d.closed_date or '' }}</span>
+      {% elif d.status == 'lost' %}<span class="badge badge-lost">Lost</span>
+      {% else %}<span class="badge badge-open">Open</span>{% endif %}
+    </p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary">+ Log update</a>
+    <a href="/add?tab=deal&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}" class="btn btn-ghost">+ Create deal</a>
+  </div>
+</div>
+
+{% if product_record and (product_record.cas_number or product_record.certifications) %}
+<div class="card" style="max-width:800px">
+  <div class="card-header"><h2>Product info</h2></div>
+  <div class="card-body" style="padding:1rem 1.25rem;font-size:0.9rem">
+    {% if product_record.cas_number %}<p><strong>CAS:</strong> {{ product_record.cas_number }}</p>{% endif %}
+    {% if product_record.biobased_content %}<p><strong>Biobased:</strong> {{ product_record.biobased_content }}</p>{% endif %}
+    {% if product_record.certifications %}<p><strong>Certifications:</strong> {{ product_record.certifications }}</p>{% endif %}
+    <p>
+      <a class="link" href="/products/{{ d.product_id }}">Edit product catalogue →</a>
+      {% if product_record.files %}
+      · PDFs:
+      {% for f in product_record.files %}
+      <a class="link" href="/products/files/{{ f.id }}" target="_blank">{{ f.filename }}</a>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+      {% endif %}
+    </p>
+  </div>
+</div>
+{% endif %}
+
+<div class="card" style="max-width:720px">
+  <div class="card-header"><h2>Change product on this deal</h2></div>
+  <form method="post" action="/deals/{{ d.id }}/product" class="form-grid" style="padding:1rem 1.25rem">
+    <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+    <div class="full">
+      <label>Product</label>
+      <select name="product_id" required>
+        {% for p in all_products %}
+        <option value="{{ p.id }}" {% if p.id == d.product_id %}selected{% endif %}>{{ p.name }}{% if p.status == 'retired' %} (Retired){% elif p.status == 'development' %} (In dev){% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="full">
+      <button type="submit" class="btn btn-primary btn-sm">Update product</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="max-width:960px">
+  <div class="card-header">
+    <h2>Commercial &amp; shipping</h2>
+    <a class="link" href="/shipping?company={{ d.company | urlencode }}&product={{ d.product | urlencode }}">Shipping summary →</a>
+  </div>
+  <form method="post" action="/deals/{{ d.id }}/meta" class="form-grid deal-edit-form" style="padding:1rem 1.25rem">
+    {% set back_url = '/shipping' if request.query_params.get('from') == 'shipping' else '/deal/' ~ d.id %}
+    <input type="hidden" name="next_url" value="{{ back_url }}" />
+    <div class="full"><h3 class="form-section-title">Commercial</h3></div>
+    <div>
+      <label>PO #</label>
+      <input name="po_number" value="{{ d.po_number or '' }}" placeholder="Customer PO" />
+    </div>
+    <div>
+      <label>Quantity</label>
+      <input name="quantity" value="{{ d.quantity or '' }}" placeholder="e.g. 500 kg, 2 FCL" />
+    </div>
+    <div>
+      <label>Price</label>
+      <input name="price" value="{{ d.price or '' }}" placeholder="e.g. 150" />
+    </div>
+    <div>
+      <label>Price unit</label>
+      <select name="price_unit">
+        {% for u in price_units %}
+        <option value="{{ u }}" {% if (d.price_unit or '/MT') == u %}selected{% endif %}>{{ u }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="full"><h3 class="form-section-title">Shipping / tracking</h3></div>
+    {{ shipping_inputs(d) }}
+    <div class="full">
+      <label>Notes</label>
+      <p class="form-hint muted" style="margin:0 0 0.35rem">Shown on Active leads.</p>
+      <textarea name="notes" rows="2">{{ d.notes or '' }}</textarea>
+    </div>
+    <div class="full">
+      <button type="submit" class="btn btn-primary btn-sm">Save</button>
+    </div>
+  </form>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <h2>Activity log</h2>
+    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary btn-sm">+ Log update</a>
+  </div>
+  <div class="card-body">
+    {% if detail.activities %}
+    <table>
+      <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
+      <tbody>
+      {% for a in detail.activities %}
+      {{ activity_row(a, d.company, '/deal/' ~ d.id, company_deals) }}
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No entries yet. <a class="link" href="/add?tab=log&company={{ d.company | urlencode }}&deal_id={{ d.id }}">Log first email or note</a></div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card" style="max-width:720px">
+  <div class="card-header"><h2>Close this deal</h2></div>
+  <div class="card-body deal-manage" style="padding:1rem 1.25rem">
+    {% if d.archived %}<p><span class="badge badge-muted">Archived</span> — hidden from Active leads.</p>{% endif %}
+    {% if d.status == 'open' %}
+    <form method="post" action="/deals/{{ d.id }}/ship" class="form-grid" style="padding:0;max-width:420px">
+      <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+      <div>
+        <label class="field-label">Completed date</label>
+        <input type="date" name="shipped_date" value="{{ today }}" required />
+      </div>
+      <div class="full">
+        <button type="submit" class="btn btn-primary">Complete deal</button>
+      </div>
+    </form>
+    <form method="post" action="/deals/{{ d.id }}/lost" class="inline-form" style="margin-top:1rem">
+      <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+      <input type="text" name="lost_reason" placeholder="Why lost?" class="lost-reason" />
+      <button type="submit" class="btn btn-ghost btn-sm">Mark lost instead</button>
+    </form>
+    {% elif d.status == 'shipped' %}
+    <p class="muted">Deal completed{% if d.closed_date %} on {{ d.closed_date }}{% endif %}.</p>
+    {% elif d.status == 'lost' %}
+    <p class="muted">Deal marked lost{% if d.closed_date %} on {{ d.closed_date }}{% endif %}.</p>
+    {% endif %}
+    {% if d.archived %}
+    <form method="post" action="/deals/{{ d.id }}/unarchive" class="inline-form">
+      <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+      <button type="submit" class="btn btn-ghost btn-sm">Restore from archive</button>
+    </form>
+    {% else %}
+    <form method="post" action="/deals/{{ d.id }}/archive" class="inline-form"
+          onsubmit="return confirm('Archive this deal? It will be hidden from the dashboard.')">
+      <input type="hidden" name="next_url" value="/deals" />
+      <button type="submit" class="btn btn-ghost btn-sm">Archive</button>
+    </form>
+    {% endif %}
+    <form method="post" action="/deals/{{ d.id }}/delete" class="inline-form"
+          onsubmit="return confirm('Delete this deal permanently?')">
+      <input type="hidden" name="next_url" value="/deals" />
+      <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+    </form>
+  </div>
+</div>
+
+<p>
+  <a class="link" href="/customer?name={{ d.company | urlencode }}">← Company profile</a>
+  · <a class="link" href="/deals">Active leads</a>
+</p>
+<datalist id="products-datalist">
+  {% for p in all_products %}<option value="{{ p.name }}">{% endfor %}
+</datalist>
+<script src="/static/activity-edit.js"></script>
+{% endblock %}

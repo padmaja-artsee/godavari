@@ -1,0 +1,44 @@
+{% macro activity_link_mode(link_mode, deal_id='', product='', company_deals=[], activity_date='') %}
+<div class="full link-mode-row activity-link-mode">
+  <label class="full field-label">Attach this entry to:</label>
+  <label class="radio-card">
+    <input type="radio" name="link_mode" value="existing" {% if link_mode == 'existing' %}checked{% endif %} />
+    <span><strong>Existing deal</strong> — email/quote on a pursuit in progress or closed</span>
+  </label>
+  <label class="radio-card">
+    <input type="radio" name="link_mode" value="new" {% if link_mode == 'new' %}checked{% endif %} />
+    <span><strong>Start new deal</strong> — link entry and open a new deal row</span>
+  </label>
+  <label class="radio-card">
+    <input type="radio" name="link_mode" value="none" {% if link_mode == 'none' %}checked{% endif %} />
+    <span><strong>Company only</strong> — general email, no specific deal</span>
+  </label>
+</div>
+<div data-panel="existing" class="panel full activity-link-panel">
+  <label class="field-label">Which deal?</label>
+  <select name="deal_id">
+    <option value="">— Pick a deal —</option>
+    {% for d in company_deals %}
+    <option value="{{ d.id }}" {% if deal_id|string == d.id|string %}selected{% endif %}>
+      {{ d.label if d.label is defined else d.deal_date }}
+    </option>
+    {% endfor %}
+  </select>
+</div>
+<div data-panel="new" class="panel full activity-link-panel">
+  <div class="activity-edit-grid">
+    <div class="full">
+      <label class="field-label">Product for new deal *</label>
+      <input name="product_new" list="products-datalist" value="{{ product }}" placeholder="Product name" />
+    </div>
+    <div>
+      <label class="field-label">Deal start date *</label>
+      <input name="deal_date" type="date" value="{{ activity_date }}" />
+    </div>
+  </div>
+</div>
+<div data-panel="none" class="panel full activity-link-panel">
+  <label class="field-label">Product mentioned (optional)</label>
+  <input name="product_none" list="products-datalist" value="{{ product if link_mode == 'none' else '' }}" placeholder="e.g. Acetic Acid" />
+</div>
+{% endmacro %}

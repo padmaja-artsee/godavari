@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="subtitle">Overview — contacts in Leads, commercial work in Active leads</p>
+  </div>
+  <a href="/add?tab=log" class="btn btn-primary">+ Log update</a>
+</div>
+
+<div class="filters" style="margin-bottom:1.25rem">
+  {% for p, label in [('week','This week'),('month','This month'),('quarter','This quarter'),('year','This year'),('all','All time')] %}
+  <a href="/?period={{ p }}" class="filter-pill {% if period == p %}active{% endif %}">{{ label }}</a>
+  {% endfor %}
+</div>
+
+<div class="stats">
+  <div class="stat-card"><div class="label">Leads (contacts)</div><div class="value">{{ stats.leads }}</div></div>
+  <div class="stat-card"><div class="label">Open deals</div><div class="value">{{ stats.open_deals }}</div></div>
+  <div class="stat-card"><div class="label">Products</div><div class="value">{{ stats.products }}</div></div>
+  <div class="stat-card"><div class="label">Activities</div><div class="value">{{ stats.activities }}</div></div>
+</div>
+
+<div class="grid-2">
+  <div class="card">
+    <div class="card-header"><h2>Open deals</h2><a href="/deals" class="link">Active leads →</a></div>
+    <div class="card-body">
+      {% if open_deals %}
+      <table>
+        <thead><tr><th>Date</th><th>Company</th><th>Product</th><th>PO</th></tr></thead>
+        <tbody>
+        {% for d in open_deals %}
+        <tr>
+          <td>{{ d.deal_date }}</td>
+          <td><a class="link" href="/customer?name={{ d.company | urlencode }}">{{ d.company }}</a></td>
+          <td>{{ d.product }}</td>
+          <td>{{ d.po_number or '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No open deals.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header"><h2>Recent activity</h2></div>
+    <div class="card-body">
+      {% if recent %}
+      <table>
+        <thead><tr><th>Date</th><th>Customer</th><th>Notes</th></tr></thead>
+        <tbody>
+        {% for a in recent[:8] %}
+        <tr>
+          <td>{{ a.activity_date }}</td>
+          <td><a class="link" href="/customer?name={{ a.customer | urlencode }}">{{ a.customer }}</a></td>
+          <td>{{ (a.comment or '')[:70] }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No activity in this period.</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
