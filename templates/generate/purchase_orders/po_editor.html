@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "generate/purchase_orders/_po_body.html" import po_body %}
+{% block title %}{% if editing %}Edit{% else %}New{% endif %} PO{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/generate.css" />
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+{% endblock %}
+{% block content %}
+<div class="po-shell">
+  <div class="po-action-bar no-print">
+    <a href="/generate" class="btn btn-ghost btn-sm">← Generate</a>
+    <a href="/generate/purchase-orders" class="btn btn-ghost btn-sm">Saved POs</a>
+    <div class="po-action-bar-right">
+      {% if editing and po.id %}
+      <a href="/generate/purchase-orders/{{ po.id }}" class="btn btn-ghost btn-sm">Preview</a>
+      <a href="/generate/purchase-orders/{{ po.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
+      <a href="/generate/purchase-orders/{{ po.id }}/export.pdf" class="btn btn-ghost btn-sm">Export PDF</a>
+      <a href="/generate/purchase-orders/{{ po.id }}/print" class="btn btn-ghost btn-sm" target="_blank">Print</a>
+      {% endif %}
+      <button type="submit" form="po-editor-form" class="btn btn-primary btn-sm">Save</button>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem">
+    {% for e in errors %}<p style="margin:0.25rem 0">{{ e }}</p>{% endfor %}
+  </div>
+  {% endif %}
+  {% if warnings %}
+  <div class="card po-warning no-print" style="margin-bottom:1rem">
+    {% for w in warnings %}<p style="margin:0.25rem 0">{{ w }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" id="po-editor-form" action="{% if editing %}/generate/purchase-orders/{{ po.id }}/edit{% else %}/generate/purchase-orders/new{% endif %}">
+    {% if po.deal_id %}<input type="hidden" name="deal_id" value="{{ po.deal_id }}" />{% endif %}
+    {% if po.customer_id %}<input type="hidden" name="customer_id" value="{{ po.customer_id }}" />{% endif %}
+    {{ po_body(po, readonly=false) }}
+    <p class="po-grand-total no-print">Grand total: <strong id="grand-total">{{ po.total_value|money if po.total_value else '0.00' }} {{ po.currency or 'Euro' }}</strong></p>
+  </form>
+
+  <section class="po-admin-panel no-print card" style="margin-top:1rem;max-width:960px;margin-left:auto;margin-right:auto">
+    <h2 style="margin:0 0 0.75rem;font-size:1rem">Internal Notes <span class="badge">Not printed</span></h2>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div>
+        <label>Status</label>
+        <select name="status" form="po-editor-form">
+          {% for s in ['Draft','Approved','Sent','Cancelled'] %}
+          <option value="{{ s }}" {% if po.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div><label>Prepared By</label><input name="prepared_by" form="po-editor-form" value="{{ po.prepared_by or '' }}" /></div>
+      <div><label>Last Updated By</label><input name="last_updated_by" form="po-editor-form" value="{{ po.last_updated_by or '' }}" /></div>
+      <div class="full"><label>Internal Notes</label><textarea name="internal_notes" form="po-editor-form" rows="3">{{ po.internal_notes or '' }}</textarea></div>
+    </div>
+  </section>
+</div>
+<script src="/static/po_wysiwyg.js"></script>
+{% endblock %}

@@ -372,9 +372,11 @@ def init_db() -> None:
         _upgrade_schema(conn)
     from app.deal_files import upgrade_deal_files_schema
     from app.products import upgrade_products_schema
+    from app.purchase_orders import upgrade_purchase_orders_schema
 
     upgrade_products_schema()
     upgrade_deal_files_schema()
+    upgrade_purchase_orders_schema()
     migrate_to_leads_deals()
 
 

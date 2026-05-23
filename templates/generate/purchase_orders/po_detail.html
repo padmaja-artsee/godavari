@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% from "generate/purchase_orders/_po_body.html" import po_body %}
+{% block title %}PO {{ po.po_number }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/generate.css" />
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+{% endblock %}
+{% block content %}
+<div class="page-header no-print">
+  <div>
+    <h1>PO {{ po.po_number }}</h1>
+    <p class="subtitle"><a class="link" href="/generate/purchase-orders">← Saved POs</a> · <a class="link" href="/generate">Generate</a></p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="/generate/purchase-orders/{{ po.id }}/edit" class="btn btn-primary">Edit</a>
+    <form method="post" action="/generate/purchase-orders/{{ po.id }}/duplicate" style="display:inline"><button type="submit" class="btn btn-ghost">Duplicate</button></form>
+    <a href="/generate/purchase-orders/{{ po.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
+    <a href="/generate/purchase-orders/{{ po.id }}/export.pdf" class="btn btn-ghost">Export PDF</a>
+    <a href="/generate/purchase-orders/{{ po.id }}/print" class="btn btn-ghost" target="_blank">Print</a>
+    <form method="post" action="/generate/purchase-orders/{{ po.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this PO?');"><button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button></form>
+  </div>
+</div>
+
+{% if saved_msg %}<p class="card no-print" style="background:#ecfdf5;border-color:#86efac">{{ saved_msg }}</p>{% endif %}
+{% if warn_msg %}<p class="card po-warning no-print">{{ warn_msg }}</p>{% endif %}
+{% if warnings %}
+<div class="card po-warning no-print">{% for w in warnings %}<p style="margin:0.25rem 0">{{ w }}</p>{% endfor %}</div>
+{% endif %}
+
+<div class="po-shell">
+  {{ po_body(po, readonly=true) }}
+</div>
+{% endblock %}

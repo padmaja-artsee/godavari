@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>PO {{ po.po_number }}</title>
+  <link rel="stylesheet" href="/static/po_wysiwyg.css" />
+  <style>
+    body { font-family: "DM Sans", Arial, sans-serif; margin: 24px; color: #111; }
+    .po-page { box-shadow: none !important; border: none !important; max-width: none !important; margin: 0 !important; }
+  </style>
+</head>
+<body>
+{% from "generate/purchase_orders/_po_body.html" import po_body %}
+{{ po_body(po, readonly=true) }}
+{% if generated_at %}<p style="margin-top:24px;font-size:9pt;color:#666">Generated: {{ generated_at }}</p>{% endif %}
+</body>
+</html>

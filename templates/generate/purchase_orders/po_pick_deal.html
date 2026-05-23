@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}New Purchase Order{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>New Purchase Order</h1>
+    <p class="subtitle"><a class="link" href="/generate/purchase-orders">← Purchase Orders</a></p>
+  </div>
+  <a href="/generate/purchase-orders/new?blank=1" class="btn btn-ghost">Start blank (no deal)</a>
+</div>
+
+<div class="card" style="max-width:680px;padding:1.75rem">
+  <p style="margin:0 0 1.25rem;color:#374151;font-size:0.95rem">
+    Search for a company to prefill the PO from an existing deal, or
+    <a class="link" href="/generate/purchase-orders/new?blank=1">start with a blank form</a>.
+  </p>
+
+  <!-- Step 1: Company search -->
+  <div style="margin-bottom:1.25rem;position:relative">
+    <label class="form-label" for="company-input">Company</label>
+    <input
+      id="company-input"
+      type="text"
+      class="form-input"
+      placeholder="Type company name…"
+      autocomplete="off"
+      style="width:100%"
+    />
+    <ul id="company-suggestions" class="po-pick-list" hidden></ul>
+  </div>
+
+  <!-- Step 2: Deal selector (hidden until company chosen) -->
+  <div id="deal-section" hidden style="margin-bottom:1.25rem">
+    <label class="form-label" for="deal-select">Deal</label>
+    <select id="deal-select" class="form-input" style="width:100%">
+      <option value="">— select a deal —</option>
+    </select>
+    <p id="deal-meta" class="po-pick-meta" hidden></p>
+  </div>
+
+  <!-- Actions -->
+  <div id="pick-actions" style="display:flex;gap:0.75rem;align-items:center">
+    <a id="use-deal-btn" href="#" class="btn btn-primary" hidden>Use this deal →</a>
+    <a href="/generate/purchase-orders/new?blank=1" class="btn btn-ghost">Start blank</a>
+  </div>
+</div>
+
+<style>
+.po-pick-list {
+  position: absolute;
+  top: 100%;
+  left: 0; right: 0;
+  background: #fff;
+  border: 1px solid #c9d2de;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0.25rem 0;
+  z-index: 200;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.po-pick-list li {
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.po-pick-list li:hover,
+.po-pick-list li.active {
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.po-pick-meta {
+  margin: 0.5rem 0 0;
+  font-size: 0.83rem;
+  color: #6b7280;
+  line-height: 1.5;
+}
+</style>
+
+<script>
+(function () {
+  const companyInput = document.getElementById("company-input");
+  const suggestions  = document.getElementById("company-suggestions");
+  const dealSection  = document.getElementById("deal-section");
+  const dealSelect   = document.getElementById("deal-select");
+  const dealMeta     = document.getElementById("deal-meta");
+  const useDealBtn   = document.getElementById("use-deal-btn");
+
+  let allCompanies = [];
+
+  /* ── Load all companies on page load ── */
+  async function initCompanies() {
+    const res  = await fetch("/api/po-companies?q=");
+    const data = await res.json();
+    allCompanies = data.companies;
+    renderSuggestions(allCompanies);   // show full list immediately
+  }
+
+  /* ── Filter client-side as user types ── */
+  companyInput.addEventListener("input", function () {
+    const q = companyInput.value.trim().toLowerCase();
+    const filtered = q
+      ? allCompanies.filter(n => n.toLowerCase().includes(q))
+      : allCompanies;
+    renderSuggestions(filtered);
+  });
+
+  companyInput.addEventListener("focus", function () {
+    if (!suggestions.hidden || allCompanies.length) {
+      const q = companyInput.value.trim().toLowerCase();
+      renderSuggestions(q ? allCompanies.filter(n => n.toLowerCase().includes(q)) : allCompanies);
+    }
+  });
+
+  companyInput.addEventListener("keydown", function (e) {
+    const items = [...suggestions.querySelectorAll("li")];
+    const active = suggestions.querySelector("li.active");
+    const idx    = items.indexOf(active);
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const next = items[idx + 1] || items[0];
+      active && active.classList.remove("active");
+      next && next.classList.add("active");
+      next && next.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const prev = items[idx - 1] || items[items.length - 1];
+      active && active.classList.remove("active");
+      prev && prev.classList.add("active");
+      prev && prev.scrollIntoView({ block: "nearest" });
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (active) active.click();
+    } else if (e.key === "Escape") {
+      suggestions.hidden = true;
+    }
+  });
+
+  document.addEventListener("click", function (e) {
+    if (!companyInput.contains(e.target) && !suggestions.contains(e.target)) {
+      suggestions.hidden = true;
+    }
+  });
+
+  function renderSuggestions(companies) {
+    suggestions.innerHTML = "";
+    if (!companies.length) {
+      const li = document.createElement("li");
+      li.textContent = "No companies found";
+      li.style.color = "#9ca3af";
+      li.style.cursor = "default";
+      suggestions.appendChild(li);
+      suggestions.hidden = false;
+      return;
+    }
+    companies.forEach(function (name) {
+      const li = document.createElement("li");
+      li.textContent = name;
+      li.addEventListener("click", function () {
+        companyInput.value = name;
+        suggestions.hidden = true;
+        loadDeals(name);
+      });
+      suggestions.appendChild(li);
+    });
+    suggestions.hidden = false;
+  }
+
+  /* ── Deal loader ── */
+  async function loadDeals(company) {
+    dealSection.hidden = true;
+    useDealBtn.hidden  = true;
+    dealMeta.hidden    = true;
+
+    const res   = await fetch("/api/po-deals?company=" + encodeURIComponent(company));
+    const data  = await res.json();
+    const deals = data.deals;
+
+    dealSelect.innerHTML = '<option value="">— select a deal —</option>';
+    deals.forEach(function (d) {
+      const opt = document.createElement("option");
+      opt.value = d.id;
+      opt.textContent = d.label;
+      opt.dataset.meta = JSON.stringify(d);
+      dealSelect.appendChild(opt);
+    });
+
+    if (deals.length === 1) {
+      dealSelect.value = deals[0].id;
+      showDealMeta(deals[0]);
+    }
+
+    dealSection.hidden = false;
+  }
+
+  dealSelect.addEventListener("change", function () {
+    const opt = dealSelect.selectedOptions[0];
+    if (!opt || !opt.dataset.meta) { useDealBtn.hidden = true; dealMeta.hidden = true; return; }
+    showDealMeta(JSON.parse(opt.dataset.meta));
+  });
+
+  function showDealMeta(d) {
+    const parts = [];
+    if (d.product)   parts.push("Product: " + d.product);
+    if (d.quantity)  parts.push("Qty: " + d.quantity);
+    if (d.po_number) parts.push("PO ref: " + d.po_number);
+    if (d.date)      parts.push("Date: " + d.date);
+    if (d.status)    parts.push("Status: " + d.status);
+    dealMeta.textContent = parts.join("  ·  ");
+    dealMeta.hidden  = false;
+    useDealBtn.href  = "/generate/purchase-orders/new?deal_id=" + d.id + "&blank=0";
+    useDealBtn.hidden = false;
+  }
+
+  initCompanies();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="56" viewBox="0 0 180 56" role="img" aria-label="Godavari Biorefineries">
+  <rect width="180" height="56" fill="#ffffff"/>
+  <circle cx="28" cy="28" r="22" fill="#1a5632"/>
+  <path d="M28 12c-2 6-8 10-8 16 0 5 4 9 8 9s8-4 8-9c0-6-6-10-8-16z" fill="#7cb342"/>
+  <text x="58" y="24" font-family="Arial, Helvetica, sans-serif" font-size="13" font-weight="700" fill="#1a5632">GODAVARI</text>
+  <text x="58" y="40" font-family="Arial, Helvetica, sans-serif" font-size="10" fill="#555555">Biorefineries B.V.</text>
+</svg>

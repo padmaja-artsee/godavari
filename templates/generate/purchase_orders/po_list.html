@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Purchase Orders{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Purchase Orders</h1>
+    <p class="subtitle"><a class="link" href="/generate">← Back to Generate</a></p>
+  </div>
+  <a href="/generate/purchase-orders/new" class="btn btn-primary">New Purchase Order</a>
+</div>
+
+<div class="table-wrap card" style="padding:0;overflow-x:auto">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>PO Number</th><th>PO Date</th><th>Consignee</th><th>Product</th>
+        <th>Quantity</th><th>Value</th><th>Currency</th><th>Status</th><th>Created</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a class="link" href="/generate/purchase-orders/{{ row.id }}">{{ row.po_number }}</a></td>
+        <td>{{ row.po_date or '—' }}</td>
+        <td>{{ row.consignee_name or row.customer_name or '—' }}</td>
+        <td>{{ row.product or '—' }}</td>
+        <td>{% if row.commercial_quantity %}{{ row.commercial_quantity|num }} {{ row.commercial_unit or 'MT' }}{% else %}—{% endif %}</td>
+        <td>{% if row.total_value %}{{ row.total_value|money }}{% else %}—{% endif %}</td>
+        <td>{{ row.currency or 'Euro' }}</td>
+        <td><span class="badge">{{ row.status or 'Draft' }}</span></td>
+        <td>{{ (row.created_at or '')[:10] }}</td>
+        <td class="action-links">
+          <a class="link" href="/generate/purchase-orders/{{ row.id }}">View</a>
+          <a class="link" href="/generate/purchase-orders/{{ row.id }}/edit">Edit</a>
+          <form method="post" action="/generate/purchase-orders/{{ row.id }}/duplicate" style="display:inline"><button type="submit" class="link-btn">Duplicate</button></form>
+          <a class="link" href="/generate/purchase-orders/{{ row.id }}/export.xlsx">XLSX</a>
+          <a class="link" href="/generate/purchase-orders/{{ row.id }}/export.pdf">PDF</a>
+          <a class="link" href="/generate/purchase-orders/{{ row.id }}/print" target="_blank">Print</a>
+          <form method="post" action="/generate/purchase-orders/{{ row.id }}/delete" style="display:inline" onsubmit="return confirm('Delete PO {{ row.po_number }}?');"><button type="submit" class="link-btn" style="color:var(--danger,#b91c1c)">Delete</button></form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="10" style="text-align:center;color:#666;padding:1.5rem">No purchase orders yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

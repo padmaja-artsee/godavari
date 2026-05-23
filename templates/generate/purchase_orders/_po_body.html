@@ -1,0 +1,284 @@
+{% macro po_body(po, readonly=false) %}
+<div class="po-page po-excel-layout">
+  <div class="po-brand-row">
+    <img src="/static/gbbv-logo.png" alt="Company logo" class="po-logo" />
+    <div class="po-brand-text">
+      {% if readonly %}
+      <div class="po-company-title">{{ po.company_name or '' }}</div>
+      <div class="po-doc-title">{{ po.document_title or 'Purchase Order' }}</div>
+      {% else %}
+      <input class="po-input po-company-title" name="company_name" value="{{ po.company_name or '' }}" />
+      <input class="po-input po-doc-title" name="document_title" value="{{ po.document_title or 'Purchase Order' }}" />
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="po-meta-grid">
+    <div class="po-meta-left">
+      {% if readonly %}
+      <p><strong>{{ po.issuer_name }}</strong></p>
+      <p>{{ po.address_line_1 }}</p>
+      <p>{{ po.address_line_2 }}</p>
+      <p>{{ po.phone_1 }}</p>
+      <p>{{ po.phone_2 }}</p>
+      <p>{{ po.contact_person }}</p>
+      <p>{{ po.email }}</p>
+      {% else %}
+      <input class="po-input" name="issuer_name" value="{{ po.issuer_name or '' }}" />
+      <input class="po-input" name="address_line_1" value="{{ po.address_line_1 or '' }}" />
+      <input class="po-input" name="address_line_2" value="{{ po.address_line_2 or '' }}" />
+      <input class="po-input" name="phone_1" value="{{ po.phone_1 or '' }}" />
+      <input class="po-input" name="phone_2" value="{{ po.phone_2 or '' }}" />
+      <input class="po-input" name="contact_person" value="{{ po.contact_person or '' }}" />
+      <input class="po-input" name="email" value="{{ po.email or '' }}" />
+      {% endif %}
+    </div>
+    <table class="po-order-kv">
+      <tr><th>ORDER NO</th><td>{% if readonly %}{{ po.po_number }}{% else %}<input class="po-inline-input" name="po_number" value="{{ po.po_number or '' }}" required />{% endif %}</td></tr>
+      <tr><th>DATE</th><td>{% if readonly %}{{ po.po_date }}{% else %}<input class="po-inline-input" type="date" name="po_date" value="{{ po.po_date or '' }}" required />{% endif %}</td></tr>
+      <tr><th>Additional Ref</th><td>{% if readonly %}{{ po.additional_ref or '—' }}{% else %}<input class="po-inline-input" name="additional_ref" value="{{ po.additional_ref or '' }}" />{% endif %}</td></tr>
+      <tr><th>Payment terms</th><td>{% if readonly %}{{ po.payment_terms or '—' }}{% else %}<input class="po-inline-input" name="payment_terms" value="{{ po.payment_terms or '' }}" />{% endif %}</td></tr>
+      <tr><th>Port of discharge</th><td>{% if readonly %}{{ po.port_of_discharge or '—' }}{% else %}<input class="po-inline-input" name="port_of_discharge" value="{{ po.port_of_discharge or '' }}" />{% endif %}</td></tr>
+      <tr><th>Terms</th><td>{% if readonly %}{{ po.incoterm_terms or '—' }}{% else %}<input class="po-inline-input" name="incoterm_terms" value="{{ po.incoterm_terms or '' }}" />{% endif %}</td></tr>
+      <tr><th>Shipment</th><td>{% if readonly %}{{ po.shipment_timing or '—' }}{% else %}<input class="po-inline-input" name="shipment_timing" value="{{ po.shipment_timing or '' }}" />{% endif %}</td></tr>
+      <tr><th>Currency</th><td>{{ po.currency or 'Euro' }}</td></tr>
+    </table>
+  </div>
+
+  {% for line in po.line_items %}
+  {% set line_idx = loop.index0 %}
+  {% set batches = line.batches if line.batches else [] %}
+  {% if not batches and not readonly %}
+  {% set batches = [
+    {'batch_name': 'BATCH A', 'batch_quantity': 6, 'batch_unit': 'MT'},
+    {'batch_name': 'BATCH B', 'batch_quantity': 6, 'batch_unit': 'MT'},
+    {'batch_name': 'BATCH C', 'batch_quantity': 6, 'batch_unit': 'MT'}
+  ] %}
+  {% endif %}
+  {# ── Product / Pricing table ── #}
+  <table class="po-grid-table" data-line-section>
+    <thead>
+      <tr>
+        <th>PRODUCT</th>
+        <th colspan="2">QUANTITY</th>
+        <th>RATE</th>
+        <th>VALUE</th>
+        <th>Remark</th>
+      </tr>
+      <tr class="po-grid-subhead">
+        <td></td>
+        <td></td>
+        <td>{% if readonly %}{{ line.commercial_unit or 'MT' }}{% else %}<input class="po-inline-input" name="commercial_unit" value="{{ line.commercial_unit or 'MT' }}" style="width:3.5rem;text-align:center" />{% endif %}</td>
+        <td>{% if readonly %}{{ line.rate_unit or 'Euro / MT' }}{% else %}<input class="po-inline-input" name="rate_unit" value="{{ line.rate_unit or 'Euro / MT' }}" style="width:7rem" />{% endif %}</td>
+        <td>{% if readonly %}{{ po.currency or 'Euro' }}{% else %}<input class="po-inline-input" name="currency" id="po-currency" value="{{ po.currency or 'Euro' }}" style="width:4rem;text-align:center" />{% endif %}</td>
+        <td></td>
+      </tr>
+    </thead>
+    <tbody>
+      <tr class="po-grid-main">
+        <td>{% if readonly %}{{ line.product_description }}{% else %}<input class="po-input" name="product_description" value="{{ line.product_description or '' }}" required />{% endif %}</td>
+        <td>{% if readonly %}{{ line.quantity_display or '' }}{% else %}<input class="po-input" name="quantity_display" value="{{ line.quantity_display or '' }}" placeholder="1 FCL" />{% endif %}</td>
+        <td class="po-num">
+          <span class="calc-pricing-readout">{{ line.pricing_quantity|num }}</span>
+          {% if not readonly %}
+          <input type="hidden" name="pricing_unit" value="{{ line.pricing_unit or 'KG' }}" />
+          <input type="hidden" name="pack_size_unit" value="{{ line.pack_size_unit or 'KG' }}" />
+          <input type="hidden" class="calc-commercial-sync" name="commercial_quantity" value="{{ line.commercial_quantity or '' }}" />
+          {% endif %}
+        </td>
+        <td class="po-num">{% if readonly %}{{ line.rate|num }}{% else %}<input class="po-number-input calc-rate" name="rate" value="{{ line.rate or '' }}" />{% endif %}</td>
+        <td class="po-num po-calculated">{% if readonly %}{{ line.calculated_value|money }}{% else %}<output class="calc-value-readout">{{ line.calculated_value|money }}</output>{% endif %}</td>
+        <td>{% if readonly %}{{ line.remark or '—' }}{% else %}<input class="po-input" name="remark" value="{{ line.remark or '' }}" />{% endif %}</td>
+      </tr>
+      <tr class="po-grid-sub">
+        <td></td>
+        <td>pack size :</td>
+        <td class="po-num">{% if readonly %}{{ line.pack_size|num }}{% else %}<input class="po-number-input calc-pack-size" name="pack_size" value="{{ line.pack_size or '' }}" />{% endif %}</td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr class="po-grid-sub">
+        <td></td>
+        <td>Number of pack</td>
+        <td class="po-num">{% if readonly %}{{ line.number_of_packs|num }}{% else %}<input class="po-number-input calc-num-packs" name="number_of_packs" value="{{ line.number_of_packs or '' }}" />{% endif %}</td>
+        <td>{% if readonly %}{{ line.incoterm_delivery_term or po.incoterm_terms or '—' }}{% else %}<input class="po-input calc-incoterm" name="incoterm_delivery_term" value="{{ line.incoterm_delivery_term or po.incoterm_terms or '' }}" />{% endif %}</td>
+        <td class="po-num po-calculated">{% if readonly %}{{ line.calculated_value|money }}{% else %}<output class="calc-value-readout-secondary">{{ line.calculated_value|money }}</output>{% endif %}</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# ── Batch Details section ── #}
+  <div class="po-sub-section">
+    <div class="po-sub-section-title">Batch Details</div>
+    <table class="po-batch-table">
+      <thead>
+        <tr>
+          <th>Batch Name</th>
+          <th>Quantity</th>
+          <th>Unit</th>
+          {% if not readonly %}<th class="no-print"></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody class="batch-rows" data-batch-rows data-line-index="{{ line_idx }}">
+        {% for batch in batches %}
+        <tr class="batch-row">
+          <td>{% if readonly %}{{ batch.batch_name }}{% else %}<input class="po-input" name="batch_name_{{ line_idx }}" value="{{ batch.batch_name or '' }}" placeholder="BATCH A" />{% endif %}</td>
+          <td class="po-num">{% if readonly %}{{ batch.batch_quantity|num }}{% else %}<input class="po-number-input calc-batch-qty" name="batch_quantity_{{ line_idx }}" value="{{ batch.batch_quantity or '' }}" />{% endif %}</td>
+          <td>{% if readonly %}{{ batch.batch_unit or 'MT' }}{% else %}<input class="po-unit-input" name="batch_unit_{{ line_idx }}" value="{{ batch.batch_unit or 'MT' }}" />{% endif %}</td>
+          {% if not readonly %}<td class="no-print"><button type="button" class="btn btn-ghost btn-sm remove-batch-btn">×</button></td>{% endif %}
+        </tr>
+        {% endfor %}
+        {% if not batches and readonly %}<tr><td colspan="3" class="po-empty">—</td></tr>{% endif %}
+      </tbody>
+    </table>
+    {% if not readonly %}
+    <div class="po-batch-footer no-print">
+      <button type="button" class="btn btn-ghost btn-sm add-batch-btn">+ Add Batch</button>
+      <p class="po-warning line-warnings" data-line-warnings hidden></p>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+
+  <div class="po-consign-row">
+    {# ── Consignee ── #}
+    <div class="po-consign-box">
+      <p class="po-consign-head">Express BL : Consignee</p>
+      {% if readonly %}
+      <p class="po-consign-name">{{ po.consignee_name }}</p>
+      <p>{{ po.consignee_address }}</p>
+      <p>Contact : {{ po.consignee_contact }}</p>
+      <p>Ph : {{ po.consignee_phone }}</p>
+      {% else %}
+      <input class="po-mkinput po-consign-name-input" name="consignee_name" value="{{ po.consignee_name or '' }}" placeholder="e.g. Connect Chemicals GmbH" />
+      <input class="po-mkinput" name="consignee_address" value="{{ po.consignee_address or '' }}" placeholder="e.g. Kokkolastrasse 2, 40882 Ratinggen, Germany" />
+      <div class="po-consign-inline">
+        <span class="po-consign-sublabel">Contact</span>
+        <input class="po-mkinput" name="consignee_contact" value="{{ po.consignee_contact or '' }}" placeholder="e.g. Torsten Dunkel" />
+      </div>
+      <div class="po-consign-inline">
+        <span class="po-consign-sublabel">Ph</span>
+        <input class="po-mkinput" name="consignee_phone" value="{{ po.consignee_phone or '' }}" placeholder="e.g. +492102 2077-17" />
+      </div>
+      {% endif %}
+    </div>
+
+    {# ── Notify ── #}
+    <div class="po-consign-box">
+      <p class="po-consign-head">Notify</p>
+      {% if readonly %}
+      <p class="po-consign-name">{{ po.notify_party }}</p>
+      <p>Contact : {{ po.notify_contact }}</p>
+      <p>{{ po.notify_address }}</p>
+      {% else %}
+      <input class="po-mkinput po-consign-name-input" name="notify_party" value="{{ po.notify_party or '' }}" placeholder="e.g. COMETRANS" />
+      <div class="po-consign-inline">
+        <span class="po-consign-sublabel">Contact</span>
+        <input class="po-mkinput" name="notify_contact" value="{{ po.notify_contact or '' }}" placeholder="e.g. Jean Philippe Bataille" />
+      </div>
+      <input class="po-mkinput" name="notify_address" value="{{ po.notify_address or '' }}" placeholder="e.g. 18 Rue Des Forts, F59960 Neuville En Ferrain, France" />
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── HS code + Credit note ── #}
+  <div class="po-hs-row">
+    <div class="po-hs-item">
+      <span class="po-hs-label">HS code</span>
+      {% if readonly %}{{ po.hs_code or '—' }}{% else %}<input class="po-mkinput" name="hs_code" value="{{ po.hs_code or '' }}" placeholder="e.g. 2905-39" />{% endif %}
+    </div>
+    <div class="po-hs-item">
+      <span class="po-hs-label">Credit note : remark</span>
+      {% if readonly %}{{ po.credit_note_remark or '—' }}{% else %}<input class="po-mkinput" name="credit_note_remark" value="{{ po.credit_note_remark or '' }}" placeholder="e.g. 25 euro per MT CN to be issued to GBL / GB Inc" />{% endif %}
+    </div>
+  </div>
+
+  {# ── Marking + Documents ── #}
+  {% set docs = [] %}
+  {% for d in (po.documents_required or '').split('\n') if d.strip() %}{% set _ = docs.append(d.strip()) %}{% endfor %}
+
+  <div class="po-mkdoc-wrap">
+    <div class="po-mkdoc-left">
+      <p class="po-mkdoc-section-head">Marking :</p>
+      <div class="po-mkrow"><span class="po-mkrow-label">Name of Buyer</span><span class="po-mkrow-val">{% if readonly %}{{ po.marking_buyer_name or '' }}{% else %}<input class="po-mkinput" name="marking_buyer_name" value="{{ po.marking_buyer_name or '' }}" placeholder="e.g. Connect Chemicals GmbH" />{% endif %}</span></div>
+      <div class="po-mkrow"><span class="po-mkrow-label">Name of product + Brand Name</span><span class="po-mkrow-val">{% if readonly %}{{ po.marking_product_brand or '' }}{% else %}<input class="po-mkinput" name="marking_product_brand" value="{{ po.marking_product_brand or '' }}" placeholder="e.g. 1,3 Butylene Glycol Naturo BG" />{% endif %}</span></div>
+      <div class="po-mkrow"><span class="po-mkrow-label">PO DE / Ref</span><span class="po-mkrow-val po-mkrow-auto">{{ po.additional_ref or po.po_number or '' }} <span class="po-hint">(from Additional Ref)</span></span></div>
+      <div class="po-mkrow"><span class="po-mkrow-label">Batch No</span><span class="po-mkrow-val">{% if readonly %}{{ po.marking_batch_no or '' }}{% else %}<input class="po-mkinput" name="marking_batch_no" value="{{ po.marking_batch_no or '' }}" placeholder="e.g. BATCH A / B / C" />{% endif %}</span></div>
+      <div class="po-mkrow"><span class="po-mkrow-label">Gross Weight</span><span class="po-mkrow-val">{% if readonly %}{{ po.marking_gross_weight or '' }}{% else %}<input class="po-mkinput" name="marking_gross_weight" value="{{ po.marking_gross_weight or '' }}" placeholder="e.g. 21 600 kg" />{% endif %}</span></div>
+      <div class="po-mkrow"><span class="po-mkrow-label">Net Weight</span><span class="po-mkrow-val">{% if readonly %}{{ po.marking_net_weight or '' }}{% else %}<input class="po-mkinput" name="marking_net_weight" value="{{ po.marking_net_weight or '' }}" placeholder="e.g. 18 000 kg" />{% endif %}</span></div>
+      <div class="po-mkrow"><span class="po-mkrow-label">Tare weight</span><span class="po-mkrow-val">{% if readonly %}{{ po.marking_tare_weight or '' }}{% else %}<input class="po-mkinput" name="marking_tare_weight" value="{{ po.marking_tare_weight or '' }}" placeholder="e.g. 3 600 kg" />{% endif %}</span></div>
+      <div class="po-mkrow"><span class="po-mkrow-label">Made in India</span><span class="po-mkrow-val">{% if readonly %}{{ po.marking_made_in or '' }}{% else %}<input class="po-mkinput" name="marking_made_in" value="{{ po.marking_made_in or 'Made in India' }}" placeholder="Made in India" />{% endif %}</span></div>
+    </div>
+    <div class="po-mkdoc-right">
+      <p class="po-mkdoc-section-head">Documents required</p>
+      {% if readonly %}
+        {% for doc in docs %}<p class="po-mkdoc-docrow">{{ doc }}</p>{% endfor %}
+      {% else %}
+        {% set doc_placeholders = [
+          'Copy BL (Express released)',
+          '1 Original Signed Commercial invoice + 1 copy',
+          '1+1 Original Packing list',
+          'COA',
+          'Shippers declaration of origin',
+          'Original Form A',
+          'Fumigation certificate',
+          'Additional document'
+        ] %}
+        {% for i in range(8) %}
+        <div class="po-mkdoc-docrow"><input class="po-mkinput" name="doc_{{ i }}" value="{{ docs[i] if docs|length > i else '' }}" placeholder="{{ doc_placeholders[i] }}" /></div>
+        {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Full-width notes below both boxes ── #}
+  <div class="po-notes-strip">
+    <div class="po-note-row">{% if readonly %}{{ po.marking_batch_on_docs or '' }}{% else %}<input class="po-mkinput" name="marking_batch_on_docs" value="{{ po.marking_batch_on_docs or '' }}" placeholder="Batch number to be shown on all documents" />{% endif %}</div>
+    <div class="po-note-row">{% if readonly %}{{ po.marking_compliance_remark or '' }}{% else %}<input class="po-mkinput" name="marking_compliance_remark" value="{{ po.marking_compliance_remark or '' }}" placeholder="Remark: Standard REACH/SVHC compliance mandatory." />{% endif %}</div>
+    <div class="po-note-row">{% if readonly %}{{ po.marking_loading_remark or '' }}{% else %}<input class="po-mkinput" name="marking_loading_remark" value="{{ po.marking_loading_remark or '' }}" placeholder="Please correctly load in the container, please send pictures to connect chemicals prior to shipment." />{% endif %}</div>
+    <div class="po-note-row">{% if readonly %}{{ po.marking_inform_remark or '' }}{% else %}<input class="po-mkinput" name="marking_inform_remark" value="{{ po.marking_inform_remark or '' }}" placeholder="Prior to shipment - please inform connect chemicals, about any changes in the shipment schedule." />{% endif %}</div>
+    <div class="po-note-row">{% if readonly %}{{ po.marking_pallets or '' }}{% else %}<input class="po-mkinput" name="marking_pallets" value="{{ po.marking_pallets or '' }}" placeholder="Pallets : ISPM 3" />{% endif %}</div>
+  </div>
+
+  {# assemble documents_required from doc_0..doc_7 on submit #}
+  {% if not readonly %}
+  <input type="hidden" name="documents_required" value="{{ po.documents_required or '' }}" />
+  <script>
+  (function(){
+    const form = document.getElementById("po-editor-form");
+    if (!form) return;
+    form.addEventListener("submit", function(){
+      const lines = [];
+      for (let i = 0; i < 8; i++) {
+        const el = form.querySelector('[name="doc_' + i + '"]');
+        if (el && el.value.trim()) lines.push(el.value.trim());
+      }
+      const ta = form.querySelector('[name="documents_required"]');
+      if (ta) ta.value = lines.join("\n");
+    });
+  })();
+  </script>
+  {% endif %}
+
+  {# ── Signature + Footer ── #}
+  <div class="po-footer">
+    <div class="po-sig-block">
+      <p class="po-sig-for">For Godavari Biorefineries B.V.</p>
+      <div class="po-sig-line"></div>
+      <p class="po-sig-label">Authorised Signatory</p>
+    </div>
+    <div class="po-footer-company">
+      <img src="/static/footer logo.png" alt="Footer logo" class="po-footer-logo" />
+      <div class="po-footer-details">
+        <p>Commercial Register Number 34325188</p>
+        <p>VAT : NL8203.86.157.B.01</p>
+        <p>Bank : Rabobank - Haarlem / IBAN NL83RABO 0311323650 / BIC : RABONL2U</p>
+        <p>Address : Opaallaan 1180, &nbsp; 2132 LN &nbsp; Hoofddorp. &nbsp; The Netherlands.</p>
+        <p>Tel : +31 6 11 12 61 66</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endmacro %}

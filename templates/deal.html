@@ -19,6 +19,7 @@
     </p>
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="/generate/purchase-orders/new?deal_id={{ d.id }}" class="btn btn-ghost">Generate Purchase Order</a>
     <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary">+ Log update</a>
     <a href="/add?tab=deal&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}" class="btn btn-ghost">+ Create deal</a>
   </div>

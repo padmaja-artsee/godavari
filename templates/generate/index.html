@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Generate{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Generate</h1>
+    <p class="subtitle">Create printable and exportable business documents from your local GBInc data.</p>
+  </div>
+</div>
+
+<p class="generate-note">All generated documents are stored locally in your SQLite database. Exported files are saved under <code>data/exports/</code>.</p>
+
+<div class="generate-grid">
+  {% for doc in documents %}
+  <article class="generate-card">
+    <h2 class="generate-card-title">{{ doc.title }}</h2>
+    <p class="generate-card-description">{{ doc.description }}</p>
+    <div class="generate-card-actions">
+      <a href="{{ doc.create_url }}" class="btn btn-primary">Create {{ doc.title }}</a>
+      <a href="{{ doc.list_url }}" class="btn btn-ghost">View Saved {{ doc.title }}s</a>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endblock %}

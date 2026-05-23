@@ -10,5 +10,6 @@ venv/
 data/leads.db
 data/leads.db-journal
 data/uploads/
+data/exports/
 
 .cursor/

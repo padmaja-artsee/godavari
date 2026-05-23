@@ -36,3 +36,20 @@ git push -u origin main
 ```
 
 `data/leads.db` and `data/uploads/` are gitignored; the app seeds from `data/seed.json` on first run.
+
+## Generate module
+
+Open **Generate** in the sidebar (`/generate`) to create business documents locally.
+
+### Purchase Orders
+
+- **Create from scratch:** Generate → Purchase Order → Create
+- **Create from a deal:** On any deal page, click **Generate Purchase Order**
+- **Edit / duplicate / delete:** From the saved PO list at `/generate/purchase-orders`
+- **Export Excel:** Saves to `data/exports/purchase_orders/xlsx/` and downloads
+- **Export PDF:** Saves to `data/exports/purchase_orders/pdf/` (uses reportlab; install optional WeasyPrint for richer layout)
+- **Print:** Use Print view; if PDF export is unavailable, use browser Print → Save as PDF
+
+PO data is stored in the same SQLite database (`data/leads.db`) in `purchase_orders`, `purchase_order_line_items`, and `purchase_order_batches` tables, linked via `generated_documents`.
+
+Internal notes (status, prepared by, etc.) are saved but not included in print, PDF, or Excel exports.

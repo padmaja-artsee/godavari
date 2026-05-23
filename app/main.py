@@ -85,12 +85,48 @@ from app.products import (
     save_product,
     update_deal_product,
 )
+from app.generate import GENERATE_DOCUMENTS
+from app.po_exports import export_po_pdf, export_po_xlsx
+from app.purchase_orders import (
+    DEFAULT_PO,
+    calculate_po_totals,
+    create_purchase_order,
+    create_purchase_order_from_deal,
+    delete_purchase_order,
+    duplicate_purchase_order,
+    get_purchase_order,
+    get_purchase_order_for_export,
+    list_purchase_orders,
+    parse_po_form,
+    update_purchase_order,
+    validate_purchase_order,
+    validation_warnings,
+)
 from app.seed import load_seed
 
 BASE = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 templates.env.filters["qty_display"] = format_quantity_display
 templates.env.filters["iso_date"] = iso_date_input
+
+
+def _money_filter(value):
+    try:
+        return f"{float(value):,.2f}"
+    except (TypeError, ValueError):
+        return value or "—"
+
+
+def _num_filter(value):
+    try:
+        n = float(value)
+        return f"{n:g}" if n == int(n) else f"{n:,.2f}"
+    except (TypeError, ValueError):
+        return value or "—"
+
+
+templates.env.filters["money"] = _money_filter
+templates.env.filters["num"] = _num_filter
 
 
 def _timeline_deal_ids(timeline: dict) -> set[int]:
@@ -990,4 +1026,234 @@ async def summary(
             rows=rows,
             stats=dashboard_stats(period),
         ),
+    )
+
+
+# --- Generate module ---
+
+
+@app.get("/generate", response_class=HTMLResponse)
+async def generate_index(request: Request):
+    return templates.TemplateResponse(
+        "generate/index.html",
+        ctx(request, page="generate", documents=GENERATE_DOCUMENTS),
+    )
+
+
+@app.get("/generate/purchase-orders", response_class=HTMLResponse)
+async def po_list_page(request: Request):
+    return templates.TemplateResponse(
+        "generate/purchase_orders/po_list.html",
+        ctx(request, page="generate", rows=list_purchase_orders()),
+    )
+
+
+@app.get("/api/po-companies")
+async def api_po_companies(q: str = Query("")):
+    """Companies that have at least one deal, filtered by q."""
+    from app.database import get_db
+    q = q.strip()
+    with get_db() as conn:
+        if q:
+            rows = conn.execute(
+                """SELECT DISTINCT c.name FROM deals d
+                   JOIN customers c ON c.id = d.customer_id
+                   WHERE d.deleted_at IS NULL AND d.archived = 0
+                     AND c.name LIKE ? COLLATE NOCASE
+                   ORDER BY c.name LIMIT 50""",
+                (f"%{q}%",),
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                """SELECT DISTINCT c.name FROM deals d
+                   JOIN customers c ON c.id = d.customer_id
+                   WHERE d.deleted_at IS NULL AND d.archived = 0
+                   ORDER BY c.name LIMIT 50""",
+            ).fetchall()
+    return {"companies": [r[0] for r in rows]}
+
+
+@app.get("/api/po-deals")
+async def api_po_deals(company: str = Query("")):
+    """All deals for a given company."""
+    company = company.strip()
+    if not company:
+        return {"deals": []}
+    deals = list_deals_for_company(company, active_only=False)
+    return {"deals": [
+        {
+            "id": d["id"],
+            "label": f"{(d.get('po_number') or '—')}  ·  {d.get('product') or '—'}  ·  {d.get('quantity','') or ''} {d.get('quantity_unit','') or ''}  [{d.get('status','—')}]",
+            "product": d.get("product") or "",
+            "po_number": d.get("po_number") or "",
+            "quantity": f"{d.get('quantity','')} {d.get('quantity_unit','')}".strip(),
+            "date": (d.get("deal_date") or d.get("po_date") or "")[:10],
+            "status": d.get("status") or "",
+        }
+        for d in deals
+    ]}
+
+
+@app.get("/generate/purchase-orders/new", response_class=HTMLResponse)
+async def po_new_page(
+    request: Request,
+    deal_id: int = Query(0),
+    pick: int = Query(0),
+    q: str = Query(""),
+):
+    if pick or (not deal_id and request.query_params.get("blank") != "1"):
+        return templates.TemplateResponse(
+            "generate/purchase_orders/po_pick_deal.html",
+            {"request": request},
+        )
+    if deal_id:
+        po = create_purchase_order_from_deal(deal_id)
+        if not po:
+            return RedirectResponse("/generate/purchase-orders/new", status_code=303)
+    else:
+        po = dict(DEFAULT_PO)
+        calc = calculate_po_totals(po["line_items"])
+        po["line_items"] = calc["line_items"]
+        po["total_value"] = calc["total_value"]
+    return templates.TemplateResponse(
+        "generate/purchase_orders/po_editor.html",
+        ctx(request, page="generate", po=po, editing=False, errors=[], warnings=[]),
+    )
+
+
+@app.post("/generate/purchase-orders/new")
+async def po_new_save(request: Request):
+    form = await request.form()
+    data, line_items = parse_po_form(form)
+    errors = validate_purchase_order(data, line_items)
+    warnings = validation_warnings(data, line_items)
+    if errors:
+        po = {**data, "line_items": line_items, "total_value": calculate_po_totals(line_items)["total_value"]}
+        return templates.TemplateResponse(
+            "generate/purchase_orders/po_editor.html",
+            ctx(request, page="generate", po=po, editing=False, errors=errors, warnings=warnings),
+            status_code=400,
+        )
+    deal_id = int(form.get("deal_id") or 0) or None
+    customer_id = int(form.get("customer_id") or 0) or None
+    po_id = create_purchase_order(
+        data, line_items,
+        source_type="deal" if deal_id else None,
+        source_id=deal_id,
+        deal_id=deal_id,
+        customer_id=customer_id,
+    )
+    q = "saved=1"
+    if warnings:
+        q += "&warn=" + quote(warnings[0][:120])
+    return RedirectResponse(f"/generate/purchase-orders/{po_id}?{q}", status_code=303)
+
+
+@app.get("/generate/purchase-orders/{po_id}", response_class=HTMLResponse)
+async def po_detail_page(request: Request, po_id: int, saved: str = Query(""), warn: str = Query("")):
+    po = get_purchase_order(po_id)
+    if not po:
+        return RedirectResponse("/generate/purchase-orders", status_code=303)
+    return templates.TemplateResponse(
+        "generate/purchase_orders/po_detail.html",
+        ctx(
+            request, page="generate", po=po,
+            warnings=validation_warnings(po, po.get("line_items") or []),
+            saved_msg="Saved." if saved else "",
+            warn_msg=warn,
+        ),
+    )
+
+
+@app.get("/generate/purchase-orders/{po_id}/edit", response_class=HTMLResponse)
+async def po_edit_page(request: Request, po_id: int):
+    po = get_purchase_order(po_id)
+    if not po:
+        return RedirectResponse("/generate/purchase-orders", status_code=303)
+    return templates.TemplateResponse(
+        "generate/purchase_orders/po_editor.html",
+        ctx(
+            request, page="generate", po=po, editing=True,
+            errors=[], warnings=validation_warnings(po, po.get("line_items") or []),
+        ),
+    )
+
+
+@app.post("/generate/purchase-orders/{po_id}/edit")
+async def po_edit_save(request: Request, po_id: int):
+    form = await request.form()
+    data, line_items = parse_po_form(form)
+    errors = validate_purchase_order(data, line_items)
+    warnings = validation_warnings(data, line_items)
+    if errors:
+        po = {**data, "id": po_id, "line_items": line_items}
+        po["total_value"] = calculate_po_totals(line_items)["total_value"]
+        return templates.TemplateResponse(
+            "generate/purchase_orders/po_editor.html",
+            ctx(request, page="generate", po=po, editing=True, errors=errors, warnings=warnings),
+            status_code=400,
+        )
+    update_purchase_order(po_id, data, line_items)
+    q = "saved=1"
+    if warnings:
+        q += "&warn=" + quote(warnings[0][:120])
+    return RedirectResponse(f"/generate/purchase-orders/{po_id}?{q}", status_code=303)
+
+
+@app.post("/generate/purchase-orders/{po_id}/delete")
+async def po_delete_route(po_id: int):
+    delete_purchase_order(po_id)
+    return RedirectResponse("/generate/purchase-orders", status_code=303)
+
+
+@app.post("/generate/purchase-orders/{po_id}/duplicate")
+async def po_duplicate_route(po_id: int):
+    new_id = duplicate_purchase_order(po_id)
+    if not new_id:
+        return RedirectResponse("/generate/purchase-orders", status_code=303)
+    return RedirectResponse(f"/generate/purchase-orders/{new_id}/edit", status_code=303)
+
+
+@app.get("/generate/purchase-orders/{po_id}/print", response_class=HTMLResponse)
+async def po_print_page(request: Request, po_id: int):
+    po = get_purchase_order_for_export(po_id)
+    if not po:
+        return RedirectResponse("/generate/purchase-orders", status_code=303)
+    return templates.TemplateResponse(
+        "generate/purchase_orders/po_print.html",
+        ctx(request, page="generate", po=po, hide_nav=True),
+    )
+
+
+@app.get("/generate/purchase-orders/{po_id}/export.xlsx")
+async def po_export_xlsx_route(po_id: int):
+    po = get_purchase_order_for_export(po_id)
+    if not po:
+        return RedirectResponse("/generate/purchase-orders", status_code=303)
+    content, fname = export_po_xlsx(po)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@app.get("/generate/purchase-orders/{po_id}/export.pdf")
+async def po_export_pdf_route(request: Request, po_id: int):
+    po = get_purchase_order_for_export(po_id)
+    if not po:
+        return RedirectResponse("/generate/purchase-orders", status_code=303)
+    html = templates.get_template("generate/purchase_orders/po_pdf.html").render(
+        request=request, po=po, generated_at=datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC"),
+    )
+    result = export_po_pdf(po, html)
+    if not result:
+        return RedirectResponse(
+            f"/generate/purchase-orders/{po_id}/print?pdf_fallback=1", status_code=303
+        )
+    content, fname = result
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )

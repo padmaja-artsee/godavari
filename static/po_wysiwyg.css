@@ -1,0 +1,555 @@
+.po-shell {
+  background: #e8edf2;
+  padding: 1.25rem 1rem 2rem;
+  min-height: calc(100vh - 4rem);
+}
+.po-action-bar {
+  max-width: 960px;
+  margin: 0 auto 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.po-action-bar-right {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+.po-page {
+  max-width: 960px;
+  margin: 0 auto;
+  background: white;
+  padding: 28px 32px;
+  border: 1px solid #333;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  font-family: Arial, Calibri, sans-serif;
+  font-size: 0.9rem;
+  color: #111;
+}
+.po-excel-layout .po-brand-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 2px solid #111;
+  padding-bottom: 0.6rem;
+}
+.po-logo {
+  width: auto;
+  height: 52px;
+  max-width: 72px;
+  flex-shrink: 0;
+  object-fit: contain;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+}
+.po-brand-text {
+  flex: 1;
+  min-width: 0;
+}
+.po-excel-layout .po-company-title {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 700;
+  border: none;
+  width: 100%;
+  background: transparent;
+  padding: 0;
+  margin: 0 0 0.1rem;
+}
+.po-excel-layout .po-doc-title {
+  display: block;
+  font-size: 0.95rem;
+  font-weight: 700;
+  border: none;
+  width: 100%;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  letter-spacing: 0.03em;
+  color: #333;
+  text-align: center;
+}
+.po-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 0.75rem;
+}
+.po-meta-left p,
+.po-meta-left .po-input {
+  margin: 0 0 0.15rem;
+  line-height: 1.35;
+}
+.po-order-kv {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.po-order-kv th {
+  text-align: left;
+  font-weight: 700;
+  padding: 0.12rem 0.35rem 0.12rem 0;
+  vertical-align: top;
+  width: 42%;
+}
+.po-order-kv td {
+  padding: 0.12rem 0;
+}
+.po-grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.35rem;
+}
+.po-grid-table th,
+.po-grid-table td {
+  border: 1px solid #333;
+  padding: 0.25rem 0.4rem;
+  vertical-align: top;
+}
+.po-grid-table th {
+  text-align: center;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.po-grid-subhead td {
+  text-align: center;
+  font-size: 0.82rem;
+}
+.po-grid-main td,
+.po-grid-sub td {
+  min-height: 1.4rem;
+}
+.po-num {
+  text-align: right;
+}
+.po-batch-cell {
+  min-width: 9rem;
+}
+.po-batch-inline {
+  display: flex;
+  gap: 0.25rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.po-unit-input {
+  width: 2.5rem !important;
+}
+.po-block-text {
+  margin: 0.85rem 0;
+  line-height: 1.45;
+}
+.po-block-text p {
+  margin: 0.25rem 0;
+}
+.po-marking-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  margin-top: 0.75rem;
+}
+.po-marking-head {
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+}
+.po-marking-col p {
+  margin: 0.15rem 0;
+  line-height: 1.35;
+}
+.po-docs-list {
+  min-height: 10rem;
+  font-family: inherit;
+}
+.po-wide {
+  min-width: 12rem;
+}
+.po-line-tools {
+  margin-bottom: 1rem;
+}
+.po-sub-section {
+  margin-top: 0.75rem;
+  margin-bottom: 1rem;
+}
+.po-sub-section-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: #eef2f7;
+  border: 1px solid #c9d2de;
+  padding: 0.25rem 0.5rem;
+  margin-bottom: 0;
+}
+.po-batch-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+.po-batch-table th,
+.po-batch-table td {
+  border: 1px solid #c9d2de;
+  padding: 0.28rem 0.45rem;
+  vertical-align: middle;
+}
+.po-batch-table th {
+  background: #f3f6fa;
+  font-weight: 600;
+  text-align: left;
+}
+.po-batch-table td.po-num {
+  text-align: right;
+}
+.po-batch-footer {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.po-empty {
+  color: #94a3b8;
+  font-style: italic;
+}
+/* ── Consignee + Notify side by side ── */
+.po-consign-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin: 0.75rem 0 0;
+  border: 1px solid #bfc8d4;
+  font-size: 0.88rem;
+}
+.po-consign-box {
+  padding: 0.5rem 0.65rem;
+}
+.po-consign-box:first-child {
+  border-right: 1px solid #bfc8d4;
+}
+.po-consign-box p {
+  margin: 0.1rem 0;
+  line-height: 1.45;
+}
+.po-consign-head {
+  font-weight: 700;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #374151;
+  margin-bottom: 0.3rem !important;
+}
+.po-consign-name {
+  font-weight: 600;
+}
+.po-consign-name-input {
+  font-weight: 600;
+}
+.po-consign-inline {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+.po-consign-sublabel {
+  font-size: 0.8rem;
+  color: #6b7280;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── HS code + Credit note ── */
+.po-hs-row {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0;
+  border: 1px solid #bfc8d4;
+  border-top: none;
+  font-size: 0.88rem;
+  margin-bottom: 0.75rem;
+}
+.po-hs-item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.3rem 0.65rem;
+}
+.po-hs-item:first-child {
+  border-right: 1px solid #bfc8d4;
+}
+.po-hs-label {
+  font-weight: 600;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+@media print {
+  .po-consign-row,
+  .po-hs-row { border-color: #999; }
+}
+
+/* ── Marking + Documents ── */
+.po-mkdoc-wrap {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+  margin-top: 0.75rem;
+  border: 1px solid #333;
+}
+.po-mkdoc-left {
+  border-right: 1px solid #333;
+  padding: 0.4rem 0.6rem;
+}
+.po-mkdoc-right {
+  padding: 0.4rem 0.6rem;
+}
+.po-mkdoc-section-head {
+  font-weight: 700;
+  margin: 0 0 0.35rem;
+  font-size: 0.9rem;
+}
+/* label + value rows */
+.po-mkrow {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  line-height: 1.5;
+  font-size: 0.88rem;
+}
+.po-mkrow-label {
+  flex: 0 0 46%;
+  font-weight: 600;
+  color: #111;
+}
+.po-mkrow-val {
+  flex: 1;
+  min-width: 0;
+}
+.po-mkrow-auto {
+  color: #374151;
+}
+/* long note rows — full width, no label */
+.po-mknote {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  padding: 0.05rem 0;
+}
+/* document list rows */
+.po-mkdoc-docrow {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  margin: 0;
+}
+/* fillable input — transparent/no border by default, visible border in edit mode */
+.po-mkinput {
+  display: block;
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  padding: 0;
+  box-sizing: border-box;
+  line-height: inherit;
+}
+/* show border only in edit/screen mode, not print */
+@media screen {
+  .po-mkinput {
+    border-bottom: 1px solid #bfcad4;
+  }
+  .po-mkinput:focus {
+    border-bottom: 2px solid #2563eb;
+    background: #f0f6ff;
+    outline: none;
+  }
+}
+@media screen {
+  .po-mkinput::placeholder {
+    color: #9ca3af;
+    font-style: italic;
+  }
+}
+@media print {
+  .po-mkinput {
+    border: none;
+    background: transparent;
+  }
+  .po-mkinput::placeholder {
+    color: transparent;
+  }
+  .po-hint {
+    display: none;
+  }
+}
+
+/* ── Full-width notes strip below marking/docs ── */
+.po-notes-strip {
+  margin-top: 0.35rem;
+  font-size: 0.88rem;
+}
+.po-note-row {
+  padding: 0.12rem 0;
+  line-height: 1.5;
+}
+
+/* ── Signature + Footer ── */
+.po-footer {
+  margin-top: 1.5rem;
+  border-top: 1px solid #333;
+  padding-top: 1rem;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+.po-sig-block {
+  padding-right: 1rem;
+}
+.po-sig-for {
+  font-weight: 700;
+  margin: 0 0 2.5rem;
+}
+.po-sig-line {
+  border-bottom: 1px solid #333;
+  width: 80%;
+  margin-bottom: 0.25rem;
+}
+.po-sig-label {
+  font-size: 0.85rem;
+  color: #555;
+  margin: 0;
+}
+.po-footer-company {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  border: 1px solid #333;
+  padding: 0.5rem 0.75rem;
+}
+.po-footer-logo {
+  width: 80px;
+  height: auto;
+  flex-shrink: 0;
+}
+.po-footer-details p {
+  margin: 0.1rem 0;
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+@media (max-width: 800px) {
+  .po-mkdoc-wrap,
+  .po-footer { grid-template-columns: 1fr; }
+}
+.po-input,
+.po-inline-input,
+.po-number-input,
+.po-textarea,
+.po-table input,
+.po-table textarea {
+  border: 1px solid transparent;
+  background: transparent;
+  font: inherit;
+  width: 100%;
+  padding: 3px 4px;
+  box-sizing: border-box;
+}
+.po-number-input {
+  text-align: right;
+  max-width: 6rem;
+}
+.po-inline-input {
+  display: inline-block;
+  width: auto;
+  min-width: 4rem;
+}
+.po-input:focus,
+.po-inline-input:focus,
+.po-number-input:focus,
+.po-textarea:focus,
+.po-table input:focus {
+  border-color: #2563eb;
+  background: #fff;
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.12);
+}
+.po-calculated,
+.calc-value-readout,
+.calc-packed-readout {
+  font-weight: 700;
+  text-align: right;
+}
+.po-hint {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+  margin-top: 0.2rem;
+}
+.po-warning {
+  background: #fff7ed;
+  border: 1px solid #fdba74;
+  color: #9a3412;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.po-grand-total {
+  max-width: 960px;
+  margin: 0.75rem auto 0;
+  text-align: right;
+  font-size: 1rem;
+}
+.po-admin-panel label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+.po-admin-panel input,
+.po-admin-panel select,
+.po-admin-panel textarea {
+  width: 100%;
+}
+
+@media (max-width: 800px) {
+  .po-meta-grid,
+  .po-marking-grid { grid-template-columns: 1fr; }
+  .po-page { padding: 1rem; }
+}
+
+@media print {
+  @page { margin: 12mm 14mm; size: A4; }
+
+  .sidebar,
+  .po-action-bar,
+  .page-header,
+  .no-print,
+  .po-admin-panel,
+  .po-grand-total {
+    display: none !important;
+  }
+  body { background: white !important; font-size: 10pt; }
+  .main { padding: 0 !important; }
+  .po-shell {
+    background: white;
+    padding: 0;
+  }
+  .po-page {
+    box-shadow: none;
+    border: none;
+    margin: 0;
+    width: 100%;
+    max-width: none;
+    padding: 0;
+    font-size: 9pt;
+  }
+  /* keep grids intact on print */
+  .po-meta-grid,
+  .po-marking-grid,
+  .po-footer { grid-template-columns: 1fr 1fr; }
+  .po-mkdoc-wrap { grid-template-columns: 1fr 1fr; }
+  /* make sure brand row stays horizontal */
+  .po-excel-layout .po-brand-row { flex-direction: row; }
+  /* tables full width */
+  .po-grid-table,
+  .po-batch-table,
+  .po-order-kv { width: 100%; }
+}

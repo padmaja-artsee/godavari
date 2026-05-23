@@ -7,10 +7,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/static/style.css" />
+  {% block extra_css %}{% endblock %}
 </head>
 <body>
   <div class="layout">
-    <aside class="sidebar">
+    {% if not hide_nav %}
+    <aside class="sidebar no-print">
       <div class="brand">GB<span>Inc</span> Leads</div>
       <nav class="nav">
         <a href="/" class="{% if page == 'dashboard' %}active{% endif %}">Dashboard</a>
@@ -18,11 +20,13 @@
         <a href="/deals" class="{% if page == 'deals' %}active{% endif %}">Active leads</a>
         <a href="/shipping" class="{% if page == 'shipping' %}active{% endif %}">Shipping summary</a>
         <a href="/products" class="{% if page == 'products' %}active{% endif %}">Products</a>
+        <a href="/generate" class="{% if page == 'generate' %}active{% endif %}">Generate</a>
         <a href="/add?tab=log" class="{% if page == 'add' %}active{% endif %}">Log update</a>
         <a href="/summary" class="{% if page == 'summary' %}active{% endif %}">Summary</a>
       </nav>
       <p class="nav-hint"><strong>Log update</strong> = emails &amp; deal story. <strong>Leads</strong> = contacts. <strong>Active leads</strong> = all logged updates in period.</p>
     </aside>
+    {% endif %}
     <main class="main">
       {% block content %}{% endblock %}
     </main>
