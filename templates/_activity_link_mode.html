@@ -20,7 +20,7 @@
     <option value="">— Pick a deal —</option>
     {% for d in company_deals %}
     <option value="{{ d.id }}" {% if deal_id|string == d.id|string %}selected{% endif %}>
-      {{ d.label if d.label is defined else d.deal_date }}
+      {{ d.label }}
     </option>
     {% endfor %}
   </select>
@@ -33,7 +33,7 @@
     </div>
     <div>
       <label class="field-label">Deal start date *</label>
-      <input name="deal_date" type="date" value="{{ activity_date }}" />
+      <input name="deal_date" type="date" value="{{ activity_date | iso_date }}" />
     </div>
   </div>
 </div>

@@ -46,7 +46,12 @@
       {% for l in leads %}
       <tr>
         <td><a class="link" href="/customer?name={{ l.company | urlencode }}"><strong>{{ l.company }}</strong></a></td>
-        <td>{{ l.contact or '—' }}</td>
+        <td>
+          {{ l.contact or '—' }}
+          {% if l.contact_count and l.contact_count > 1 %}
+          <span class="muted"> (+{{ l.contact_count - 1 }})</span>
+          {% endif %}
+        </td>
         <td>{% if l.email %}<a class="link" href="mailto:{{ l.email }}">{{ l.email }}</a>{% else %}—{% endif %}</td>
         <td>{% if l.website %}<a class="link" href="{{ l.website if l.website.startswith('http') else 'https://' + l.website }}" target="_blank" rel="noopener">{{ l.website }}</a>{% else %}—{% endif %}</td>
         <td>{{ l.products_interested or '—' }}</td>

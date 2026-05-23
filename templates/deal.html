@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_activity_row.html" import activity_row %}
 {% from "_deal_shipping_fields.html" import shipping_inputs %}
+{% from "_quantity_fields.html" import quantity_fields %}
 {% block title %}Deal · {{ detail.deal.product }}{% endblock %}
 {% block content %}
 {% set d = detail.deal %}
@@ -10,7 +11,7 @@
     <p class="subtitle">
       <strong>{{ d.id }}</strong> · Deal {{ d.deal_date }}
       {% if d.po_number %}· PO {{ d.po_number }}{% endif %}
-      {% if d.quantity or d.price %}· {{ d.quantity }}{% if d.quantity and d.price %} · {% endif %}{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% endif %}{% endif %}
+      {% if d.quantity or d.price %}· {{ d.quantity|qty_display(d.quantity_unit or 'MT') }}{% if d.quantity and d.price %} · {% endif %}{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% endif %}{% endif %}
       ·
       {% if d.status == 'shipped' %}<span class="badge">Shipped {{ d.closed_date or '' }}</span>
       {% elif d.status == 'lost' %}<span class="badge badge-lost">Lost</span>
@@ -74,10 +75,7 @@
       <label>PO #</label>
       <input name="po_number" value="{{ d.po_number or '' }}" placeholder="Customer PO" />
     </div>
-    <div>
-      <label>Quantity</label>
-      <input name="quantity" value="{{ d.quantity or '' }}" placeholder="e.g. 500 kg, 2 FCL" />
-    </div>
+    {{ quantity_fields(d.quantity or '', d.quantity_unit or 'MT', '', units=quantity_units) }}
     <div>
       <label>Price</label>
       <input name="price" value="{{ d.price or '' }}" placeholder="e.g. 150" />
@@ -103,6 +101,37 @@
   </form>
 </div>
 
+<div class="card" style="max-width:720px">
+  <div class="card-header"><h2>Documents</h2></div>
+  <div class="card-body" style="padding:1rem 1.25rem">
+    {% if deal_file_error %}
+    <p class="form-error">{{ deal_file_error }}</p>
+    {% endif %}
+    <form method="post" action="/deals/{{ d.id }}/upload" enctype="multipart/form-data" class="upload-form">
+      <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+      <input type="file" name="pdf_file" accept="application/pdf,.pdf" required />
+      <button type="submit" class="btn btn-primary btn-sm">Attach PDF</button>
+    </form>
+    {% if deal_files %}
+    <ul class="file-list">
+      {% for f in deal_files %}
+      <li>
+        <a class="link" href="/deals/files/{{ f.id }}" target="_blank">{{ f.filename }}</a>
+        <span class="muted">{% if f.file_size %}{{ (f.file_size / 1024)|round(1) }} KB · {% endif %}{{ f.created_at[:10] }}</span>
+        <form method="post" action="/deals/files/{{ f.id }}/delete" class="inline-form"
+              onsubmit="return confirm('Remove this PDF?')">
+          <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+          <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted" style="margin:0.75rem 0 0">No documents yet — PO copies, BL, invoices, specs, etc.</p>
+    {% endif %}
+  </div>
+</div>
+
 <div class="card">
   <div class="card-header">
     <h2>Activity log</h2>
@@ -119,7 +148,33 @@
       </tbody>
     </table>
     {% else %}
-    <div class="empty">No entries yet. <a class="link" href="/add?tab=log&company={{ d.company | urlencode }}&deal_id={{ d.id }}">Log first email or note</a></div>
+    <div class="empty">No entries on this deal yet. <a class="link" href="/add?tab=log&company={{ d.company | urlencode }}&deal_id={{ d.id }}">Log first email or note</a></div>
+    {% endif %}
+
+    {% if detail.unlinked_activities %}
+    <div class="unlinked-activities" style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border)">
+      <p class="form-hint muted" style="margin:0 0 0.75rem">
+        These updates are for <strong>{{ d.product }}</strong> but not linked to a deal yet. Attach them to this deal (PO {{ d.po_number or '—' }}) if they belong here.
+      </p>
+      <table>
+        <thead><tr><th>Date</th><th>Details</th><th></th></tr></thead>
+        <tbody>
+        {% for a in detail.unlinked_activities %}
+        <tr>
+          <td>{{ a.activity_date }}</td>
+          <td>{{ (a.comment or a.description or '')[:80] }}</td>
+          <td>
+            <form method="post" action="/activities/{{ a.id }}/attach" class="inline-form">
+              <input type="hidden" name="deal_id" value="{{ d.id }}" />
+              <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+              <button type="submit" class="btn btn-ghost btn-sm">Attach to this deal</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
     {% endif %}
   </div>
 </div>
@@ -176,5 +231,9 @@
 <datalist id="products-datalist">
   {% for p in all_products %}<option value="{{ p.name }}">{% endfor %}
 </datalist>
+<datalist id="quantity-unit-suggestions">
+  {% for u in quantity_units if u not in ['MT', 'FCL', 'Other'] %}<option value="{{ u }}">{% endfor %}
+</datalist>
+<script src="/static/qty-unit.js"></script>
 <script src="/static/activity-edit.js"></script>
 {% endblock %}

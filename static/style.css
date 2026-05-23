@@ -80,6 +80,14 @@ body {
   letter-spacing: -0.03em;
 }
 
+.page-header-actions,
+.export-links {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
 .subtitle { color: var(--muted); margin: 0.25rem 0 0; font-size: 0.95rem; }
 
 .stats {
@@ -222,6 +230,23 @@ tr:hover td { background: #f8fafc; }
 }
 
 .form-grid .full { grid-column: 1 / -1; }
+
+.qty-with-unit-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+.qty-with-unit-row .qty-amount {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+.qty-with-unit-row .qty-unit-select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 5.25rem;
+  max-width: 7rem;
+}
 
 .form-grid label {
   display: block;
@@ -647,6 +672,66 @@ tr:hover td { background: #f8fafc; }
 
 .deal-edit-form .full:first-child .form-section-title {
   margin-top: 0;
+}
+
+.contacts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.contact-card {
+  padding: 0.85rem 1rem;
+  background: #f8fafc;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  grid-template-columns: 1fr 1fr 1fr auto;
+  align-items: end;
+  margin: 0;
+}
+
+.contact-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.primary-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.primary-check input {
+  width: auto;
+  margin: 0;
+}
+
+.contact-card-wrap {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
+}
+
+.contact-card-wrap:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.contact-card-btns {
+  display: flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.add-contact-panel {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
 }
 
 .main:has(.deals-card) {

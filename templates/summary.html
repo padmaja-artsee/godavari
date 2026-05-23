@@ -6,7 +6,10 @@
     <h1>Summary</h1>
     <p class="subtitle">Roll-up by product or customer for the selected period</p>
   </div>
-  <a href="/shipping" class="btn btn-ghost">Shipping summary →</a>
+  <div class="page-header-actions">
+    <a href="/summary/export.xlsx?period={{ period }}&group={{ group }}&sheet=all" class="btn btn-ghost btn-sm">Download all (XLS)</a>
+    <a href="/shipping" class="btn btn-ghost">Shipping summary →</a>
+  </div>
 </div>
 
 <div class="filters" style="margin-bottom:1rem">
@@ -29,6 +32,10 @@
 <div class="card">
   <div class="card-header">
     <h2>{% if group == 'product' %}Product summary{% else %}Customer summary{% endif %}</h2>
+    <div class="export-links">
+      <a class="btn btn-ghost btn-sm" href="/summary/export.csv?period={{ period }}&group={{ group }}&sheet=rollup">CSV</a>
+      <a class="btn btn-ghost btn-sm" href="/summary/export.xlsx?period={{ period }}&group={{ group }}&sheet=rollup">XLS</a>
+    </div>
   </div>
   <div class="card-body">
     {% if rows %}
@@ -75,7 +82,11 @@
 <div class="card shipping-card" style="margin-top:1.25rem">
   <div class="card-header">
     <h2>Shipping summary</h2>
-    <a href="/shipping" class="link">Full sheet →</a>
+    <div class="export-links">
+      <a class="btn btn-ghost btn-sm" href="/summary/export.csv?period={{ period }}&sheet=shipping">CSV</a>
+      <a class="btn btn-ghost btn-sm" href="/summary/export.xlsx?period={{ period }}&sheet=shipping">XLS</a>
+      <a href="/shipping" class="link">Full sheet →</a>
+    </div>
   </div>
   <div class="card-body shipping-table-scroll">
     {% if shipping_rows %}
@@ -99,7 +110,7 @@
         <td>{{ row.company }}</td>
         <td>{{ row.product }}</td>
         <td>{{ row.po_number or '—' }}</td>
-        <td>{{ row.quantity or '—' }}</td>
+        <td>{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</td>
         <td>{{ row.container_number or '—' }}</td>
         <td>{{ row.vessel_name or '—' }}</td>
         <td>{{ row.etd_india or '—' }}</td>

@@ -25,7 +25,7 @@
         {{ activity_link_mode(link_mode, a.deal_id or '', prod, company_deals, a.activity_date) }}
         <div>
           <label class="field-label">Date</label>
-          <input type="date" name="activity_date" value="{{ a.activity_date }}" required />
+          <input type="date" name="activity_date" value="{{ a.activity_date | iso_date }}" required />
         </div>
         <div>
           <label class="field-label">Type</label>

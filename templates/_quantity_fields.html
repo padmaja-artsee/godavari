@@ -1,0 +1,21 @@
+{% macro quantity_fields(qty='', unit='MT', unit_other='', qty_name='quantity', unit_name='quantity_unit', other_name='quantity_unit_other', units=None) %}
+{% set qty_unit_options = units if units else ['MT', 'FCL', 'Other'] %}
+<div class="qty-with-unit">
+  <label>Quantity</label>
+  <div class="qty-with-unit-row">
+    <input class="qty-amount" name="{{ qty_name }}" value="{{ qty }}" placeholder="e.g. 500 or 2" />
+    <select name="{{ unit_name }}" class="qty-unit-select" data-other-wrap="qty-other-{{ unit_name }}" aria-label="Quantity unit">
+      {% for u in qty_unit_options %}
+      <option value="{{ u }}" {% if unit == u %}selected{% endif %}>{{ u }}</option>
+      {% endfor %}
+      {% if unit and unit not in qty_unit_options %}
+      <option value="{{ unit }}" selected>{{ unit }}</option>
+      {% endif %}
+    </select>
+  </div>
+</div>
+<div id="qty-other-{{ unit_name }}" class="qty-unit-other full" style="{% if unit != 'Other' %}display:none{% endif %}">
+  <label>Other unit (saved for future)</label>
+  <input name="{{ other_name }}" value="{{ unit_other }}" placeholder="e.g. kg, drums, pallets" list="quantity-unit-suggestions" />
+</div>
+{% endmacro %}

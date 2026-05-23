@@ -5,7 +5,13 @@ from urllib.parse import quote
 from typing import List
 
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    RedirectResponse,
+    Response,
+)
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -14,6 +20,7 @@ from app.database import (
     create_lead,
     customer_detail,
     delete_activity,
+    attach_activity_to_deal,
     delete_customer,
     update_activity,
     dashboard_stats,
@@ -25,6 +32,8 @@ from app.database import (
     group_active_leads,
     list_shipping_summary,
     list_deals,
+    deals_for_activity_edit,
+    iso_date_input,
     list_deals_for_company,
     list_products,
     log_update,
@@ -36,12 +45,33 @@ from app.database import (
     unarchive_deal,
     update_deal_fields,
     PRICE_UNITS,
+    format_quantity_display,
+    list_quantity_unit_options,
+    normalize_quantity_unit,
     migrate_to_leads_deals,
     recent_activities,
     search_leads_contacts,
     summary_by_customer,
     summary_by_product,
     update_lead,
+    update_company_profile,
+    create_contact,
+    update_contact,
+    delete_contact,
+)
+from app.exports import (
+    SHIPPING_COLUMNS,
+    export_filename,
+    rollup_columns,
+    rollup_sheet_name,
+    to_csv_bytes,
+    to_xlsx_bytes,
+)
+from app.deal_files import (
+    add_deal_file,
+    delete_deal_file,
+    get_deal_file,
+    list_deal_files,
 )
 from app.products import (
     add_product_file,
@@ -59,6 +89,22 @@ from app.seed import load_seed
 
 BASE = Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
+templates.env.filters["qty_display"] = format_quantity_display
+templates.env.filters["iso_date"] = iso_date_input
+
+
+def _timeline_deal_ids(timeline: dict) -> set[int]:
+    ids: set[int] = set()
+    for group in timeline.get("deal_groups") or []:
+        if group.get("deal_id"):
+            ids.add(int(group["deal_id"]))
+        for act in group.get("activities") or []:
+            if act.get("deal_id"):
+                ids.add(int(act["deal_id"]))
+    for act in timeline.get("company_level") or []:
+        if act.get("deal_id"):
+            ids.add(int(act["deal_id"]))
+    return ids
 
 app = FastAPI(title="GBInc Leads Dashboard")
 app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
@@ -74,7 +120,12 @@ def startup() -> None:
 
 
 def ctx(request: Request, **extra):
-    return {"request": request, "price_units": PRICE_UNITS, **extra}
+    return {
+        "request": request,
+        "price_units": PRICE_UNITS,
+        "quantity_units": list_quantity_unit_options(),
+        **extra,
+    }
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -239,6 +290,8 @@ async def deal_update_meta(
     po_number: str = Form(""),
     quote_ref: str = Form(""),
     quantity: str = Form(""),
+    quantity_unit: str = Form("MT"),
+    quantity_unit_other: str = Form(""),
     price: str = Form(""),
     price_unit: str = Form("/MT"),
     po_date: str = Form(""),
@@ -259,6 +312,8 @@ async def deal_update_meta(
         po_number,
         quote_ref,
         quantity,
+        quantity_unit,
+        quantity_unit_other,
         price,
         price_unit,
         po_date,
@@ -350,7 +405,7 @@ async def active_leads_page(
 
 @app.get("/api/company-deals")
 async def api_company_deals(company: str = Query(...)):
-    return JSONResponse(list_deals_for_company(company))
+    return JSONResponse(list_deals_for_company(company, active_only=False))
 
 
 @app.get("/add", response_class=HTMLResponse)
@@ -362,7 +417,9 @@ async def add_page(
     tab: str = Query("log"),
     return_to: str = Query(""),
 ):
-    company_deals = list_deals_for_company(company) if company else []
+    company_deals = (
+        list_deals_for_company(company, active_only=False) if company else []
+    )
     return templates.TemplateResponse(
         "add.html",
         ctx(
@@ -382,7 +439,11 @@ async def add_page(
 
 
 @app.get("/deal/{deal_id}", response_class=HTMLResponse)
-async def deal_page(request: Request, deal_id: int):
+async def deal_page(
+    request: Request,
+    deal_id: int,
+    error: str = Query(""),
+):
     detail = get_deal_detail(deal_id)
     if not detail:
         return RedirectResponse("/deals", status_code=303)
@@ -390,6 +451,11 @@ async def deal_page(request: Request, deal_id: int):
     product_record = get_product(pid) if pid else None
     company = detail["deal"]["company"]
     today = datetime.utcnow().date().isoformat()
+    err_msg = ""
+    if error == "pdf_only":
+        err_msg = "Only PDF files can be attached."
+    elif error == "invalid_file":
+        err_msg = "Could not attach that file."
     return templates.TemplateResponse(
         "deal.html",
         ctx(
@@ -397,11 +463,57 @@ async def deal_page(request: Request, deal_id: int):
             page="deals",
             detail=detail,
             product_record=product_record,
+            deal_files=list_deal_files(deal_id),
+            deal_file_error=err_msg,
             all_products=list_products(),
-            company_deals=list_deals_for_company(company, active_only=False),
+            company_deals=deals_for_activity_edit(
+                company,
+                {deal_id, *(a.get("deal_id") for a in detail.get("activities", []))},
+            ),
             today=today,
         ),
     )
+
+
+@app.post("/deals/{deal_id}/upload")
+async def deal_upload_pdf(
+    deal_id: int,
+    pdf_file: UploadFile = File(...),
+    next_url: str = Form(""),
+):
+    if not pdf_file.filename or not pdf_file.filename.lower().endswith(".pdf"):
+        dest = next_url or f"/deal/{deal_id}"
+        return RedirectResponse(f"{dest}?error=pdf_only", status_code=303)
+    content = await pdf_file.read()
+    try:
+        add_deal_file(deal_id, pdf_file.filename, content)
+    except ValueError:
+        dest = next_url or f"/deal/{deal_id}"
+        return RedirectResponse(f"{dest}?error=invalid_file", status_code=303)
+    return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
+
+
+@app.get("/deals/files/{file_id}")
+async def deal_download_pdf(file_id: int):
+    info = get_deal_file(file_id)
+    if not info:
+        return RedirectResponse("/deals", status_code=303)
+    return FileResponse(
+        info["absolute_path"],
+        media_type="application/pdf",
+        filename=info["filename"],
+    )
+
+
+@app.post("/deals/files/{file_id}/delete")
+async def deal_delete_pdf_route(
+    file_id: int,
+    next_url: str = Form(""),
+):
+    deal_id = delete_deal_file(file_id)
+    if deal_id:
+        return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
+    return RedirectResponse("/deals", status_code=303)
 
 
 @app.post("/add/contact")
@@ -436,6 +548,8 @@ async def post_deal(
     po_number: str = Form(""),
     quote_ref: str = Form(""),
     quantity: str = Form(""),
+    quantity_unit: str = Form("MT"),
+    quantity_unit_other: str = Form(""),
     price: str = Form(""),
     price_unit: str = Form("/MT"),
     notes: str = Form(""),
@@ -448,6 +562,9 @@ async def post_deal(
             "po_number": po_number,
             "quote_ref": quote_ref,
             "quantity": quantity,
+            "quantity_unit": normalize_quantity_unit(
+                quantity_unit, quantity_unit_other
+            ),
             "price": price,
             "price_unit": price_unit,
             "notes": notes,
@@ -468,9 +585,13 @@ async def post_log(
     deal_date: str = Form(""),
     po_number: str = Form(""),
     quantity: str = Form(""),
+    quantity_unit: str = Form("MT"),
+    quantity_unit_other: str = Form(""),
     price: str = Form(""),
     price_unit: str = Form("/MT"),
     deal_quantity: str = Form(""),
+    deal_quantity_unit: str = Form("MT"),
+    deal_quantity_unit_other: str = Form(""),
     deal_price: str = Form(""),
     deal_price_unit: str = Form("/MT"),
     deal_notes: str = Form(""),
@@ -498,12 +619,16 @@ async def post_log(
                 "deal_date": deal_date or activity_date,
                 "po_number": po_number,
                 "quantity": quantity or deal_quantity,
+                "quantity_unit": quantity_unit or deal_quantity_unit,
+                "quantity_unit_other": quantity_unit_other or deal_quantity_unit_other,
                 "price": price or deal_price,
                 "price_unit": price_unit if price or quantity else deal_price_unit,
                 "deal_notes": deal_notes,
                 "deal_po_number": deal_po_number,
                 "quote_ref": quote_ref,
                 "deal_quantity": deal_quantity,
+                "deal_quantity_unit": deal_quantity_unit,
+                "deal_quantity_unit_other": deal_quantity_unit_other,
                 "deal_price": deal_price,
                 "deal_price_unit": deal_price_unit,
                 "deal_notes_append": deal_notes_append,
@@ -613,12 +738,23 @@ async def edit_activity_route(
     except ValueError as e:
         base = next_url if next_url.startswith("/") else "/leads"
         sep = "&" if "?" in base else "?"
-        return RedirectResponse(f"{base}{sep}error={quote(str(e))}", status_code=303)
+        code = "pick_deal" if "Pick a deal" in str(e) else quote(str(e))
+        return RedirectResponse(f"{base}{sep}error={code}", status_code=303)
     if next_url.startswith("/"):
         return RedirectResponse(next_url, status_code=303)
     if company:
         return RedirectResponse(f"/customer?name={quote(company)}", status_code=303)
     return RedirectResponse("/leads", status_code=303)
+
+
+@app.post("/activities/{activity_id}/attach")
+async def attach_activity_route(
+    activity_id: int,
+    deal_id: int = Form(...),
+    next_url: str = Form(""),
+):
+    attach_activity_to_deal(activity_id, deal_id)
+    return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
 
 
 @app.post("/activities/{activity_id}/delete")
@@ -636,11 +772,19 @@ async def delete_activity_route(
 
 @app.get("/customer", response_class=HTMLResponse)
 async def customer_page(
-    request: Request, name: str = Query(...), product: str = Query("")
+    request: Request,
+    name: str = Query(...),
+    product: str = Query(""),
+    error: str = Query(""),
 ):
     detail = customer_detail(name, product)
     if not detail:
         return RedirectResponse("/leads", status_code=303)
+    err_msg = ""
+    if error == "pick_deal":
+        err_msg = "Pick a deal to attach this entry to, or switch to Company only."
+    elif error:
+        err_msg = error.replace("+", " ")
     return templates.TemplateResponse(
         "customer.html",
         ctx(
@@ -648,7 +792,10 @@ async def customer_page(
             page="leads",
             detail=detail,
             product_filter=product,
-            company_deals=list_deals_for_company(name, active_only=False),
+            company_deals=deals_for_activity_edit(
+                name, _timeline_deal_ids(detail["timeline"])
+            ),
+            activity_error=err_msg,
             all_products=list_products(),
         ),
     )
@@ -662,29 +809,166 @@ async def delete_customer_route(customer_id: int):
     return RedirectResponse("/leads", status_code=303)
 
 
-@app.post("/customer/{lead_id}/edit")
-async def edit_lead(
-    lead_id: int,
-    contact: str = Form(""),
-    email: str = Form(""),
+@app.post("/customer/{customer_id}/profile")
+async def edit_company_profile_route(
+    customer_id: int,
     website: str = Form(""),
-    phone: str = Form(""),
     products_interested: str = Form(""),
     notes: str = Form(""),
     company: str = Form(""),
 ):
-    update_lead(
-        lead_id,
+    update_company_profile(
+        customer_id,
         {
-            "contact": contact,
-            "email": email,
             "website": website,
-            "phone": phone,
             "products_interested": products_interested,
             "notes": notes,
         },
     )
     return RedirectResponse(f"/customer?name={quote(company)}", status_code=303)
+
+
+@app.post("/customer/{customer_id}/contacts")
+async def add_contact(
+    customer_id: int,
+    contact: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+    is_primary: str = Form(""),
+    company: str = Form(""),
+):
+    create_contact(
+        customer_id,
+        {"contact": contact, "email": email, "phone": phone},
+        is_primary=bool(is_primary),
+    )
+    return RedirectResponse(f"/customer?name={quote(company)}", status_code=303)
+
+
+@app.post("/contacts/{contact_id}/update")
+async def edit_contact(
+    contact_id: int,
+    contact: str = Form(""),
+    email: str = Form(""),
+    phone: str = Form(""),
+    is_primary: str = Form(""),
+    company: str = Form(""),
+):
+    update_contact(
+        contact_id,
+        {
+            "contact": contact,
+            "email": email,
+            "phone": phone,
+            "is_primary": bool(is_primary),
+        },
+    )
+    return RedirectResponse(f"/customer?name={quote(company)}", status_code=303)
+
+
+@app.post("/contacts/{contact_id}/delete")
+async def remove_contact(
+    contact_id: int,
+    company: str = Form(""),
+):
+    delete_contact(contact_id)
+    return RedirectResponse(f"/customer?name={quote(company)}", status_code=303)
+
+
+def _download_response(content: bytes, filename: str, media_type: str) -> Response:
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/summary/export.csv")
+async def summary_export_csv(
+    period: str = Query("month"),
+    group: str = Query("product"),
+    sheet: str = Query("rollup"),
+):
+    if sheet == "shipping":
+        rows = list_shipping_summary(status="open")
+        cols = SHIPPING_COLUMNS
+        fname = export_filename("gbinc-shipping-summary", period, "csv")
+    else:
+        rows = (
+            summary_by_product(period)
+            if group == "product"
+            else summary_by_customer(period)
+        )
+        cols = rollup_columns(group)
+        fname = export_filename("gbinc-summary", period, "csv", group)
+    return _download_response(
+        to_csv_bytes(rows, cols),
+        fname,
+        "text/csv; charset=utf-8",
+    )
+
+
+@app.get("/summary/export.xlsx")
+async def summary_export_xlsx(
+    period: str = Query("month"),
+    group: str = Query("product"),
+    sheet: str = Query("all"),
+):
+    rollup_rows = (
+        summary_by_product(period)
+        if group == "product"
+        else summary_by_customer(period)
+    )
+    shipping_rows = list_shipping_summary(status="open")
+    if sheet == "rollup":
+        sheets = [(rollup_sheet_name(group), rollup_rows, rollup_columns(group))]
+        fname = export_filename("gbinc-summary", period, "xlsx", group)
+    elif sheet == "shipping":
+        sheets = [("Shipping", shipping_rows, SHIPPING_COLUMNS)]
+        fname = export_filename("gbinc-shipping-summary", period, "xlsx")
+    else:
+        sheets = [
+            (rollup_sheet_name(group), rollup_rows, rollup_columns(group)),
+            ("Shipping", shipping_rows, SHIPPING_COLUMNS),
+        ]
+        fname = export_filename("gbinc-summary-all", period, "xlsx", group)
+    return _download_response(
+        to_xlsx_bytes(sheets),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/shipping/export.csv")
+async def shipping_export_csv(
+    company: str = Query(""),
+    product: str = Query(""),
+    status: str = Query("all"),
+    q: str = Query(""),
+):
+    rows = list_shipping_summary(company, product, status, q)
+    fname = export_filename("gbinc-shipping", status if status != "all" else "", "csv")
+    return _download_response(
+        to_csv_bytes(rows, SHIPPING_COLUMNS),
+        fname,
+        "text/csv; charset=utf-8",
+    )
+
+
+@app.get("/shipping/export.xlsx")
+async def shipping_export_xlsx(
+    company: str = Query(""),
+    product: str = Query(""),
+    status: str = Query("all"),
+    q: str = Query(""),
+):
+    rows = list_shipping_summary(company, product, status, q)
+    fname = export_filename("gbinc-shipping", status if status != "all" else "", "xlsx")
+    return _download_response(
+        to_xlsx_bytes([("Shipping", rows, SHIPPING_COLUMNS)]),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 @app.get("/summary", response_class=HTMLResponse)

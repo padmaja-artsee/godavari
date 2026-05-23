@@ -1,8 +1,9 @@
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "leads.db"
 
@@ -11,7 +12,85 @@ def now_iso() -> str:
     return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def normalize_activity_date(value: str) -> str:
+    """Store activity dates as YYYY-MM-DD."""
+    raw = (value or "").strip()
+    if not raw:
+        raise ValueError("Date is required")
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", raw):
+        return raw
+    m = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", raw)
+    if m:
+        month, day, year = m.groups()
+        return f"{year}-{int(month):02d}-{int(day):02d}"
+    m = re.match(r"^(\d{4})[/\-](\d{1,2})[/\-](\d{1,2})$", raw)
+    if m:
+        year, month, day = m.groups()
+        return f"{year}-{int(month):02d}-{int(day):02d}"
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%Y/%m/%d"):
+        try:
+            return datetime.strptime(raw[:10], fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            continue
+    raise ValueError("Use a valid date (YYYY-MM-DD or MM/DD/YYYY)")
+
+
+def iso_date_input(value: str = "") -> str:
+    """Format a stored date for HTML date inputs."""
+    if not value:
+        return ""
+    try:
+        return normalize_activity_date(str(value)[:10])
+    except ValueError:
+        return str(value)[:10]
+
+
 PRICE_UNITS = ("/MT", "/kg", "/lb", "/unit", "Other")
+QUANTITY_UNITS = ("MT", "FCL", "Other")
+
+
+def normalize_quantity_unit(unit: str = "", other: str = "") -> str:
+    u = (unit or "MT").strip()
+    if u == "Other":
+        custom = (other or "").strip()
+        return custom if custom else "Other"
+    return u or "MT"
+
+
+def list_quantity_unit_options() -> list[str]:
+    """MT, FCL, Other, plus custom units used on past deals."""
+    base = list(QUANTITY_UNITS)
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT quantity_unit FROM deals
+            WHERE quantity_unit IS NOT NULL AND trim(quantity_unit) != ''
+              AND quantity_unit NOT IN ('MT', 'FCL', 'Other')
+            ORDER BY quantity_unit COLLATE NOCASE
+            """
+        ).fetchall()
+    seen = set(base)
+    out = list(base)
+    for r in rows:
+        u = (r["quantity_unit"] or "").strip()
+        if u and u not in seen:
+            out.append(u)
+            seen.add(u)
+    return out
+
+
+def format_quantity_display(quantity: str = "", quantity_unit: str = "MT") -> str:
+    q = (quantity or "").strip()
+    u = (quantity_unit or "MT").strip() or "MT"
+    if not q:
+        return ""
+    if u in ("", "Other"):
+        return q
+    q_low = q.lower()
+    u_low = u.lower()
+    if q_low.endswith(u_low) or q_low.endswith(f" {u_low}"):
+        return q
+    return f"{q} {u}"
 
 SHIPPING_FIELDS = (
     "po_date",
@@ -31,9 +110,10 @@ def format_deal_value(
     quantity: str = "",
     price: str = "",
     price_unit: str = "/MT",
+    quantity_unit: str = "MT",
 ) -> str:
     """Legacy single-line value from structured commercial fields."""
-    q = (quantity or "").strip()
+    q = format_quantity_display(quantity, quantity_unit)
     p = (price or "").strip()
     u = (price_unit or "/MT").strip() or "/MT"
     if not q and not p:
@@ -89,6 +169,7 @@ def deal_picker_label(deal: dict) -> str:
             deal.get("quantity") or "",
             deal.get("price") or "",
             deal.get("price_unit") or "/MT",
+            deal.get("quantity_unit") or "MT",
         )
         if comm:
             parts.append(comm)
@@ -103,6 +184,12 @@ def commercial_from_data(data: dict[str, Any]) -> dict[str, str]:
         or data.get("deal_price_unit")
         or "/MT"
     ).strip() or "/MT"
+    qty_unit = normalize_quantity_unit(
+        data.get("quantity_unit")
+        or data.get("deal_quantity_unit")
+        or "MT",
+        data.get("quantity_unit_other") or data.get("deal_quantity_unit_other") or "",
+    )
     qty = (data.get("quantity") or data.get("deal_quantity") or "").strip()
     price = (data.get("price") or data.get("deal_price") or "").strip()
     if not qty and not price and data.get("deal_value"):
@@ -110,6 +197,7 @@ def commercial_from_data(data: dict[str, Any]) -> dict[str, str]:
         return {
             "po_number": (data.get("po_number") or data.get("deal_po_number") or "").strip(),
             "quantity": legacy,
+            "quantity_unit": qty_unit,
             "price": "",
             "price_unit": unit,
             "value": legacy,
@@ -118,9 +206,10 @@ def commercial_from_data(data: dict[str, Any]) -> dict[str, str]:
     return {
         "po_number": po,
         "quantity": qty,
+        "quantity_unit": qty_unit,
         "price": price,
         "price_unit": unit,
-        "value": format_deal_value(qty, price, unit),
+        "value": format_deal_value(qty, price, unit, qty_unit),
     }
 
 
@@ -137,9 +226,23 @@ def patch_deal_commercial(
         sets.append("po_number = ?")
         params.append(comm["po_number"])
     if comm["quantity"] or comm["price"]:
-        sets.extend(["quantity = ?", "price = ?", "price_unit = ?", "value = ?"])
+        sets.extend(
+            [
+                "quantity = ?",
+                "quantity_unit = ?",
+                "price = ?",
+                "price_unit = ?",
+                "value = ?",
+            ]
+        )
         params.extend(
-            [comm["quantity"], comm["price"], comm["price_unit"], comm["value"]]
+            [
+                comm["quantity"],
+                comm["quantity_unit"],
+                comm["price"],
+                comm["price_unit"],
+                comm["value"],
+            ]
         )
     if not sets:
         return
@@ -202,6 +305,7 @@ def init_db() -> None:
                 po_number TEXT,
                 quote_ref TEXT,
                 quantity TEXT,
+                quantity_unit TEXT DEFAULT 'MT',
                 price TEXT,
                 price_unit TEXT DEFAULT '/MT',
                 deal_date TEXT NOT NULL,
@@ -266,9 +370,11 @@ def init_db() -> None:
             """
         )
         _upgrade_schema(conn)
+    from app.deal_files import upgrade_deal_files_schema
     from app.products import upgrade_products_schema
 
     upgrade_products_schema()
+    upgrade_deal_files_schema()
     migrate_to_leads_deals()
 
 
@@ -285,6 +391,10 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE deals ADD COLUMN deleted_at TEXT")
     if "quantity" not in cols:
         conn.execute("ALTER TABLE deals ADD COLUMN quantity TEXT")
+    if "quantity_unit" not in cols:
+        conn.execute(
+            "ALTER TABLE deals ADD COLUMN quantity_unit TEXT DEFAULT 'MT'"
+        )
     if "price" not in cols:
         conn.execute("ALTER TABLE deals ADD COLUMN price TEXT")
     if "price_unit" not in cols:
@@ -306,6 +416,25 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
     for col in SHIPPING_FIELDS:
         if col not in cols:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            customer_id INTEGER NOT NULL,
+            contact TEXT,
+            email TEXT,
+            phone TEXT,
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY (customer_id) REFERENCES customers(id)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_contacts_customer ON contacts(customer_id)"
+    )
+    _migrate_contacts_from_leads(conn)
     act_cols = {r[1] for r in conn.execute("PRAGMA table_info(activities)").fetchall()}
     for col, typ in [
         ("lead_id", "INTEGER"),
@@ -317,30 +446,58 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
     ]:
         if col not in act_cols:
             conn.execute(f"ALTER TABLE activities ADD COLUMN {col} {typ}")
-    conn.execute(
-        """
-        UPDATE activities SET deal_id = (
-            SELECT d.id FROM deals d
-            WHERE d.customer_id = activities.customer_id
-              AND d.product_id = activities.product_id
-            ORDER BY d.deal_date DESC LIMIT 1
-        )
-        WHERE deal_id IS NULL
-          AND customer_id IS NOT NULL
-          AND product_id IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM deals d
-            WHERE d.customer_id = activities.customer_id
-              AND d.product_id = activities.product_id
-          )
-        """
-    )
+    _migrate_activity_deal_links(conn)
     conn.execute(
         """
         UPDATE activities SET product_id = (
             SELECT d.product_id FROM deals d WHERE d.id = activities.deal_id
         )
         WHERE deal_id IS NOT NULL
+        """
+    )
+
+
+def _migrate_activity_deal_links(conn: sqlite3.Connection) -> None:
+    """Link orphan activities to a deal only when exactly one deal matches."""
+    conn.execute(
+        """
+        UPDATE activities SET deal_id = (
+            SELECT d.id FROM deals d
+            WHERE d.customer_id = activities.customer_id
+              AND d.product_id = activities.product_id
+              AND d.deleted_at IS NULL
+            ORDER BY d.deal_date DESC, d.id DESC LIMIT 1
+        )
+        WHERE deal_id IS NULL
+          AND customer_id IS NOT NULL
+          AND product_id IS NOT NULL
+          AND (
+            SELECT COUNT(*) FROM deals d
+            WHERE d.customer_id = activities.customer_id
+              AND d.product_id = activities.product_id
+              AND d.deleted_at IS NULL
+          ) = 1
+        """
+    )
+    conn.execute(
+        """
+        UPDATE activities SET deal_id = NULL
+        WHERE deal_id IS NOT NULL
+          AND customer_id IS NOT NULL
+          AND product_id IS NOT NULL
+          AND (
+            SELECT COUNT(*) FROM deals d
+            WHERE d.customer_id = activities.customer_id
+              AND d.product_id = activities.product_id
+              AND d.deleted_at IS NULL
+          ) > 1
+          AND deal_id = (
+            SELECT d.id FROM deals d
+            WHERE d.customer_id = activities.customer_id
+              AND d.product_id = activities.product_id
+              AND d.deleted_at IS NULL
+            ORDER BY d.deal_date DESC, d.id DESC LIMIT 1
+          )
         """
     )
 
@@ -592,6 +749,197 @@ def _merge_products(existing: str, new_product: str) -> str:
     return ", ".join(parts)
 
 
+def _migrate_contacts_from_leads(conn: sqlite3.Connection) -> None:
+    """One-time: copy legacy lead contact fields into contacts table."""
+    has_any = conn.execute("SELECT 1 FROM contacts LIMIT 1").fetchone()
+    if has_any:
+        return
+    for row in conn.execute(
+        "SELECT customer_id, contact, email, phone, created_at, updated_at FROM leads"
+    ).fetchall():
+        if not (row["contact"] or row["email"] or row["phone"]):
+            continue
+        conn.execute(
+            """
+            INSERT INTO contacts (
+                customer_id, contact, email, phone, is_primary, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, 1, ?, ?)
+            """,
+            (
+                row["customer_id"],
+                row["contact"] or "",
+                row["email"] or "",
+                row["phone"] or "",
+                row["created_at"],
+                row["updated_at"],
+            ),
+        )
+
+
+def _ensure_company_lead(conn: sqlite3.Connection, customer_id: int) -> int:
+    row = conn.execute(
+        "SELECT id FROM leads WHERE customer_id = ?", (customer_id,)
+    ).fetchone()
+    if row:
+        return row["id"]
+    ts = now_iso()
+    cur = conn.execute(
+        """
+        INSERT INTO leads (
+            customer_id, contact, email, website, phone,
+            products_interested, notes, created_at, updated_at
+        ) VALUES (?, '', '', '', '', '', '', ?, ?)
+        """,
+        (customer_id, ts, ts),
+    )
+    return cur.lastrowid
+
+
+def _sync_lead_from_primary(conn: sqlite3.Connection, customer_id: int) -> None:
+    primary = conn.execute(
+        """
+        SELECT contact, email, phone FROM contacts
+        WHERE customer_id = ? AND is_primary = 1
+        ORDER BY id LIMIT 1
+        """,
+        (customer_id,),
+    ).fetchone()
+    lead_id = _ensure_company_lead(conn, customer_id)
+    ts = now_iso()
+    if primary:
+        conn.execute(
+            """
+            UPDATE leads SET contact = ?, email = ?, phone = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                primary["contact"] or "",
+                primary["email"] or "",
+                primary["phone"] or "",
+                ts,
+                lead_id,
+            ),
+        )
+    else:
+        conn.execute(
+            "UPDATE leads SET contact = '', email = '', phone = ?, updated_at = ? WHERE id = ?",
+            ("", ts, lead_id),
+        )
+
+
+def list_contacts(customer_id: int) -> list[dict]:
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT id, customer_id, contact, email, phone, is_primary,
+                   created_at, updated_at
+            FROM contacts
+            WHERE customer_id = ?
+            ORDER BY is_primary DESC, contact COLLATE NOCASE, id
+            """,
+            (customer_id,),
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def create_contact(customer_id: int, data: dict[str, Any], is_primary: bool = False) -> int:
+    with get_db() as conn:
+        _ensure_company_lead(conn, customer_id)
+        ts = now_iso()
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM contacts WHERE customer_id = ?",
+            (customer_id,),
+        ).fetchone()["n"]
+        make_primary = is_primary or n == 0
+        if make_primary:
+            conn.execute(
+                "UPDATE contacts SET is_primary = 0 WHERE customer_id = ?",
+                (customer_id,),
+            )
+        cur = conn.execute(
+            """
+            INSERT INTO contacts (
+                customer_id, contact, email, phone, is_primary, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                customer_id,
+                data.get("contact", "").strip(),
+                data.get("email", "").strip(),
+                data.get("phone", "").strip(),
+                1 if make_primary else 0,
+                ts,
+                ts,
+            ),
+        )
+        contact_id = cur.lastrowid
+        if make_primary:
+            _sync_lead_from_primary(conn, customer_id)
+        return contact_id
+
+
+def update_contact(contact_id: int, data: dict[str, Any]) -> Optional[int]:
+    """Update contact; returns customer_id."""
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT customer_id FROM contacts WHERE id = ?", (contact_id,)
+        ).fetchone()
+        if not row:
+            return None
+        cid = row["customer_id"]
+        ts = now_iso()
+        conn.execute(
+            """
+            UPDATE contacts SET contact = ?, email = ?, phone = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                data.get("contact", "").strip(),
+                data.get("email", "").strip(),
+                data.get("phone", "").strip(),
+                ts,
+                contact_id,
+            ),
+        )
+        if data.get("is_primary"):
+            conn.execute(
+                "UPDATE contacts SET is_primary = 0 WHERE customer_id = ?",
+                (cid,),
+            )
+            conn.execute(
+                "UPDATE contacts SET is_primary = 1 WHERE id = ?", (contact_id,)
+            )
+            _sync_lead_from_primary(conn, cid)
+        return cid
+
+
+def delete_contact(contact_id: int) -> Optional[int]:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT customer_id, is_primary FROM contacts WHERE id = ?",
+            (contact_id,),
+        ).fetchone()
+        if not row:
+            return None
+        cid = row["customer_id"]
+        was_primary = row["is_primary"]
+        conn.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+        if was_primary:
+            other = conn.execute(
+                """
+                SELECT id FROM contacts WHERE customer_id = ?
+                ORDER BY id LIMIT 1
+                """,
+                (cid,),
+            ).fetchone()
+            if other:
+                conn.execute(
+                    "UPDATE contacts SET is_primary = 1 WHERE id = ?", (other["id"],)
+                )
+            _sync_lead_from_primary(conn, cid)
+        return cid
+
+
 def create_lead(data: dict[str, Any]) -> int:
     with get_db() as conn:
         cid = upsert_customer(conn, data["company"])
@@ -604,62 +952,75 @@ def create_lead(data: dict[str, Any]) -> int:
             products = _merge_products(existing["products_interested"], products)
             conn.execute(
                 """
-                UPDATE leads SET contact = COALESCE(NULLIF(?, ''), contact),
-                    email = COALESCE(NULLIF(?, ''), email),
-                    website = COALESCE(NULLIF(?, ''), website),
-                    phone = COALESCE(NULLIF(?, ''), phone),
+                UPDATE leads SET website = COALESCE(NULLIF(?, ''), website),
                     products_interested = ?, notes = COALESCE(NULLIF(?, ''), notes),
                     updated_at = ?
                 WHERE id = ?
                 """,
                 (
-                    data.get("contact", ""),
-                    data.get("email", ""),
                     data.get("website", ""),
-                    data.get("phone", ""),
                     products,
                     data.get("notes", ""),
                     ts,
                     existing["id"],
                 ),
             )
-            return existing["id"]
-        cur = conn.execute(
-            """
-            INSERT INTO leads (
-                customer_id, contact, email, website, phone,
-                products_interested, notes, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """,
-            (
-                cid,
-                data.get("contact", ""),
-                data.get("email", ""),
-                data.get("website", ""),
-                data.get("phone", ""),
-                products,
-                data.get("notes", ""),
-                ts,
-                ts,
-            ),
-        )
-        return cur.lastrowid
+            lead_id = existing["id"]
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO leads (
+                    customer_id, contact, email, website, phone,
+                    products_interested, notes, created_at, updated_at
+                ) VALUES (?, '', '', ?, '', ?, ?, ?, ?)
+                """,
+                (
+                    cid,
+                    data.get("website", ""),
+                    products,
+                    data.get("notes", ""),
+                    ts,
+                    ts,
+                ),
+            )
+            lead_id = cur.lastrowid
+        if data.get("contact") or data.get("email") or data.get("phone"):
+            n = conn.execute(
+                "SELECT COUNT(*) AS n FROM contacts WHERE customer_id = ?", (cid,)
+            ).fetchone()["n"]
+            if n == 0:
+                create_contact(
+                    cid,
+                    {
+                        "contact": data.get("contact", ""),
+                        "email": data.get("email", ""),
+                        "phone": data.get("phone", ""),
+                    },
+                    is_primary=True,
+                )
+            else:
+                _sync_lead_from_primary(conn, cid)
+        return lead_id
+
+
+def update_company_profile(customer_id: int, data: dict[str, Any]) -> None:
+    with get_db() as conn:
+        lead_id = _ensure_company_lead(conn, customer_id)
+    update_lead(lead_id, data)
 
 
 def update_lead(lead_id: int, data: dict[str, Any]) -> None:
+    """Update company-level lead fields (website, products, notes)."""
     ts = now_iso()
     with get_db() as conn:
         conn.execute(
             """
-            UPDATE leads SET contact = ?, email = ?, website = ?, phone = ?,
-                products_interested = ?, notes = ?, updated_at = ?
+            UPDATE leads SET website = ?, products_interested = ?, notes = ?,
+                updated_at = ?
             WHERE id = ?
             """,
             (
-                data.get("contact", ""),
-                data.get("email", ""),
                 data.get("website", ""),
-                data.get("phone", ""),
                 data.get("products_interested", ""),
                 data.get("notes", ""),
                 ts,
@@ -684,18 +1045,30 @@ def search_leads_contacts(
     if q:
         clauses.append(
             """(
-                c.name LIKE ? OR l.contact LIKE ? OR l.email LIKE ?
-                OR l.website LIKE ? OR l.phone LIKE ? OR l.products_interested LIKE ?
+                c.name LIKE ? OR l.website LIKE ? OR l.products_interested LIKE ?
                 OR l.notes LIKE ?
+                OR COALESCE(pc.contact, l.contact) LIKE ?
+                OR COALESCE(pc.email, l.email) LIKE ?
+                OR COALESCE(pc.phone, l.phone) LIKE ?
+                OR EXISTS (
+                    SELECT 1 FROM contacts ct
+                    WHERE ct.customer_id = l.customer_id
+                      AND (ct.contact LIKE ? OR ct.email LIKE ? OR ct.phone LIKE ?)
+                )
             )"""
         )
-        params.extend([f"%{q}%"] * 7)
+        params.extend([f"%{q}%"] * 10)
     sql = f"""
-        SELECT l.id, l.contact, l.email, l.website, l.phone,
+        SELECT l.id,
+               COALESCE(pc.contact, l.contact) AS contact,
+               COALESCE(pc.email, l.email) AS email,
+               l.website, COALESCE(pc.phone, l.phone) AS phone,
                l.products_interested, l.notes, l.updated_at,
-               c.name AS company
+               c.name AS company, c.id AS customer_id,
+               (SELECT COUNT(*) FROM contacts ct WHERE ct.customer_id = c.id) AS contact_count
         FROM leads l
         JOIN customers c ON c.id = l.customer_id
+        LEFT JOIN contacts pc ON pc.customer_id = c.id AND pc.is_primary = 1
         WHERE {' AND '.join(clauses)}
         ORDER BY c.name COLLATE NOCASE
     """
@@ -753,9 +1126,9 @@ def create_deal(data: dict[str, Any]) -> int:
             """
             INSERT INTO deals (
                 lead_id, customer_id, product_id, po_number, quote_ref,
-                quantity, price, price_unit, deal_date, status, value, notes,
+                quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
             """,
             (
                 lead_id,
@@ -764,6 +1137,10 @@ def create_deal(data: dict[str, Any]) -> int:
                 data.get("po_number") or None,
                 qref,
                 data.get("quantity", "").strip(),
+                normalize_quantity_unit(
+                    data.get("quantity_unit", "MT"),
+                    data.get("quantity_unit_other", ""),
+                ),
                 data.get("price", "").strip(),
                 (data.get("price_unit") or "/MT").strip(),
                 data["deal_date"],
@@ -771,6 +1148,10 @@ def create_deal(data: dict[str, Any]) -> int:
                     data.get("quantity", ""),
                     data.get("price", ""),
                     data.get("price_unit", "/MT"),
+                    normalize_quantity_unit(
+                        data.get("quantity_unit", "MT"),
+                        data.get("quantity_unit_other", ""),
+                    ),
                 )
                 or data.get("value", ""),
                 data.get("notes", ""),
@@ -789,6 +1170,8 @@ def update_deal_fields(
     po_number: str = "",
     quote_ref: str = "",
     quantity: str = "",
+    quantity_unit: str = "MT",
+    quantity_unit_other: str = "",
     price: str = "",
     price_unit: str = "/MT",
     po_date: str = "",
@@ -803,7 +1186,8 @@ def update_deal_fields(
     eta: str = "",
 ) -> None:
     unit = (price_unit or "/MT").strip() or "/MT"
-    value = format_deal_value(quantity, price, unit)
+    qty_unit = normalize_quantity_unit(quantity_unit, quantity_unit_other)
+    value = format_deal_value(quantity, price, unit, qty_unit)
     shipping_vals = {
         "po_date": po_date.strip(),
         "packing": packing.strip(),
@@ -820,7 +1204,8 @@ def update_deal_fields(
         conn.execute(
             """
             UPDATE deals SET
-                po_number = ?, quote_ref = ?, quantity = ?, price = ?, price_unit = ?,
+                po_number = ?, quote_ref = ?, quantity = ?, quantity_unit = ?,
+                price = ?, price_unit = ?,
                 value = ?, notes = ?,
                 po_date = ?, packing = ?, gbl_invoice = ?, gbl_invoice_date = ?,
                 container_number = ?, vessel_name = ?, etd_india = ?, transit_time = ?,
@@ -832,6 +1217,7 @@ def update_deal_fields(
                 po_number.strip() or None,
                 quote_ref.strip(),
                 quantity.strip(),
+                qty_unit,
                 price.strip(),
                 unit,
                 value,
@@ -891,7 +1277,7 @@ def list_shipping_summary(
         params.extend([f"%{q}%"] * 13)
 
     sql = f"""
-        SELECT d.id AS deal_id, d.status, d.po_number, d.po_date, d.quantity, d.packing,
+        SELECT d.id AS deal_id, d.status, d.po_number, d.po_date, d.quantity, d.quantity_unit, d.packing,
                d.gbl_invoice, d.gbl_invoice_date, d.container_number, d.vessel_name,
                d.etd_india, d.transit_time, d.destination, d.eta,
                c.name AS company, p.name AS product, p.id AS product_id
@@ -922,6 +1308,9 @@ def unarchive_deal(deal_id: int) -> None:
 
 
 def delete_deal(deal_id: int) -> None:
+    from app.deal_files import delete_all_deal_files
+
+    delete_all_deal_files(deal_id)
     with get_db() as conn:
         conn.execute(
             "UPDATE deals SET deleted_at = ?, updated_at = ? WHERE id = ?",
@@ -961,11 +1350,7 @@ def _activity_period_clause(start: str) -> tuple[str, list[Any]]:
         (
             EXISTS (
                 SELECT 1 FROM activities a
-                WHERE a.activity_date >= ?
-                  AND (
-                    a.deal_id = d.id
-                    OR (a.customer_id = d.customer_id AND a.product_id = d.product_id)
-                  )
+                WHERE a.deal_id = d.id AND a.activity_date >= ?
             )
             OR (d.closed_date IS NOT NULL AND d.closed_date >= ?)
         )
@@ -987,7 +1372,8 @@ def list_active_leads(
 
     deal_clauses = ["d.deleted_at IS NULL"]
     deal_params: list[Any] = []
-    if start:
+    # Open / all: show every matching deal; period only filters activity summary columns.
+    if start and status not in ("open", "all"):
         deal_clauses.append(
             """EXISTS (
                 SELECT 1 FROM activities a
@@ -1028,11 +1414,14 @@ def list_active_leads(
     act_params = [start] if start else []
     deal_sql = f"""
         SELECT d.id AS deal_id, d.deal_date, d.status, d.archived, d.po_number, d.quote_ref,
-               d.quantity, d.price, d.price_unit, d.value, d.notes, d.closed_date,
+               d.quantity, d.quantity_unit, d.price, d.price_unit, d.value, d.notes, d.closed_date,
                c.name AS company, p.name AS product, d.customer_id, d.product_id,
-               (
-                   SELECT MAX(a.activity_date) FROM activities a
-                   WHERE a.deal_id = d.id{period_act}
+               COALESCE(
+                   (
+                       SELECT MAX(a.activity_date) FROM activities a
+                       WHERE a.deal_id = d.id{period_act}
+                   ),
+                   d.deal_date
                ) AS last_activity_date,
                (
                    SELECT COUNT(*) FROM activities a
@@ -1056,7 +1445,17 @@ def list_active_leads(
             result.append(dict(row))
 
         if status in ("all", "open"):
-            lead_clauses = ["a.deal_id IS NULL"]
+            lead_clauses = [
+                "a.deal_id IS NULL",
+                """NOT EXISTS (
+                    SELECT 1 FROM deals d
+                    WHERE d.customer_id = a.customer_id
+                      AND d.product_id = a.product_id
+                      AND d.deleted_at IS NULL
+                      AND d.archived = 0
+                      AND d.status = 'open'
+                )""",
+            ]
             lead_params: list[Any] = []
             if start:
                 lead_clauses.append("a.activity_date >= ?")
@@ -1105,6 +1504,7 @@ def list_active_leads(
                 item["quote_ref"] = ""
                 item["po_number"] = None
                 item["quantity"] = ""
+                item["quantity_unit"] = "MT"
                 item["price"] = ""
                 item["price_unit"] = "/MT"
                 item["notes"] = ""
@@ -1208,34 +1608,22 @@ def list_deals(
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     activity_start = start or "1900-01-01"
     sql = f"""
-        SELECT d.id, d.po_number, d.quantity, d.price, d.price_unit,
+        SELECT d.id, d.po_number, d.quantity, d.quantity_unit, d.price, d.price_unit,
                d.deal_date, d.status, d.archived,
                d.shipped_date, d.closed_date, d.value, d.notes, d.updated_at,
                c.name AS company, p.name AS product,
                (
                    SELECT MAX(a.activity_date) FROM activities a
-                   WHERE a.activity_date >= ?
-                     AND (
-                       a.deal_id = d.id
-                       OR (a.customer_id = d.customer_id AND a.product_id = d.product_id)
-                     )
+                   WHERE a.deal_id = d.id AND a.activity_date >= ?
                ) AS last_activity_date,
                (
                    SELECT COUNT(*) FROM activities a
-                   WHERE a.activity_date >= ?
-                     AND (
-                       a.deal_id = d.id
-                       OR (a.customer_id = d.customer_id AND a.product_id = d.product_id)
-                     )
+                   WHERE a.deal_id = d.id AND a.activity_date >= ?
                ) AS activity_count,
                (
                    SELECT COALESCE(a.comment, a.description, a.activity, '')
                    FROM activities a
-                   WHERE a.activity_date >= ?
-                     AND (
-                       a.deal_id = d.id
-                       OR (a.customer_id = d.customer_id AND a.product_id = d.product_id)
-                     )
+                   WHERE a.deal_id = d.id AND a.activity_date >= ?
                    ORDER BY a.activity_date DESC, a.id DESC
                    LIMIT 1
                ) AS last_activity
@@ -1329,7 +1717,7 @@ def list_deals_for_company(company: str, active_only: bool = True) -> list[dict]
         rows = conn.execute(
             f"""
             SELECT d.id, d.deal_date, d.status, d.po_number, d.quote_ref, d.closed_date,
-                   d.quantity, d.price, d.price_unit, p.name AS product
+                   d.quantity, d.quantity_unit, d.price, d.price_unit, p.name AS product
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
             JOIN products p ON p.id = d.product_id
@@ -1344,6 +1732,42 @@ def list_deals_for_company(company: str, active_only: bool = True) -> list[dict]
         d["label"] = deal_picker_label(d)
         out.append(d)
     return out
+
+
+def deals_for_activity_edit(
+    company: str,
+    include_deal_ids: Iterable[int] = (),
+) -> list[dict]:
+    """Deal picker options, including soft-deleted deals already linked to activities."""
+    by_id = {d["id"]: d for d in list_deals_for_company(company, active_only=False)}
+    extra_ids = {int(did) for did in include_deal_ids if did}
+    missing = extra_ids - set(by_id)
+    if missing:
+        with get_db() as conn:
+            for did in missing:
+                row = conn.execute(
+                    """
+                    SELECT d.id, d.deal_date, d.status, d.po_number, d.quote_ref,
+                           d.closed_date, d.quantity, d.quantity_unit, d.price,
+                           d.price_unit, d.deleted_at, p.name AS product
+                    FROM deals d
+                    JOIN customers c ON c.id = d.customer_id
+                    JOIN products p ON p.id = d.product_id
+                    WHERE d.id = ? AND c.name = ? COLLATE NOCASE
+                    """,
+                    (did, company.strip()),
+                ).fetchone()
+                if row:
+                    d = dict(row)
+                    d["label"] = deal_picker_label(d)
+                    if d.get("deleted_at"):
+                        d["label"] = f"{d['label']} (removed deal)"
+                    by_id[did] = d
+    return sorted(
+        by_id.values(),
+        key=lambda x: (x.get("deal_date") or "", x["id"]),
+        reverse=True,
+    )
 
 
 def _format_activity_description(data: dict[str, Any]) -> str:
@@ -1488,9 +1912,9 @@ def log_update(data: dict[str, Any]) -> dict:
                 """
                 INSERT INTO deals (
                     lead_id, customer_id, product_id, po_number, quote_ref,
-                    quantity, price, price_unit, deal_date, status, value, notes,
+                    quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
                 """,
                 (
                     lead_id,
@@ -1499,6 +1923,7 @@ def log_update(data: dict[str, Any]) -> dict:
                     comm["po_number"] or None,
                     qref,
                     comm["quantity"],
+                    comm["quantity_unit"],
                     comm["price"],
                     comm["price_unit"],
                     data["deal_date"],
@@ -1581,8 +2006,6 @@ def get_deal_detail(deal_id: int) -> Optional[dict]:
         ).fetchone()
         if not deal:
             return None
-        pid = deal["product_id"]
-        cid = deal["customer_id"]
         activities = conn.execute(
             """
             SELECT a.id, a.activity_date, a.channel, a.activity, a.type,
@@ -1590,14 +2013,25 @@ def get_deal_detail(deal_id: int) -> Optional[dict]:
                    a.value, a.deal_id, p.name AS product
             FROM activities a
             JOIN products p ON p.id = a.product_id
-            LEFT JOIN deals d ON d.id = a.deal_id
-            WHERE a.customer_id = ?
-              AND COALESCE(d.product_id, a.product_id) = ?
+            WHERE a.deal_id = ?
             ORDER BY a.activity_date DESC, a.id DESC
             """,
-            (cid, pid),
+            (deal_id,),
         ).fetchall()
-    return {"deal": dict(deal), "activities": [dict(a) for a in activities]}
+        unlinked = conn.execute(
+            """
+            SELECT a.id, a.activity_date, a.channel, a.comment, a.description
+            FROM activities a
+            WHERE a.customer_id = ? AND a.product_id = ? AND a.deal_id IS NULL
+            ORDER BY a.activity_date DESC, a.id DESC
+            """,
+            (deal["customer_id"], deal["product_id"]),
+        ).fetchall()
+    return {
+        "deal": dict(deal),
+        "activities": [dict(a) for a in activities],
+        "unlinked_activities": [dict(a) for a in unlinked],
+    }
 
 
 def _activities_grouped(customer_id: int, product: str = "") -> dict:
@@ -1653,6 +2087,7 @@ def _resolve_activity_link(
     conn: sqlite3.Connection,
     customer_id: int,
     data: dict[str, Any],
+    allow_deleted_deal_id: Optional[int] = None,
 ) -> tuple[Optional[int], int, Optional[int]]:
     """Returns deal_id, product_id, lead_id for an activity after link_mode change."""
     link_mode = data.get("link_mode", "none")
@@ -1664,14 +2099,15 @@ def _resolve_activity_link(
         if not data.get("deal_id"):
             raise ValueError("Pick a deal to attach this entry to")
         deal_id = int(data["deal_id"])
-        drow = conn.execute(
-            """
+        allow_deleted = allow_deleted_deal_id is not None and deal_id == allow_deleted_deal_id
+        sql = """
             SELECT d.product_id, d.lead_id
             FROM deals d
-            WHERE d.id = ? AND d.customer_id = ? AND d.deleted_at IS NULL
-            """,
-            (deal_id, customer_id),
-        ).fetchone()
+            WHERE d.id = ? AND d.customer_id = ?
+        """
+        if not allow_deleted:
+            sql += " AND d.deleted_at IS NULL"
+        drow = conn.execute(sql, (deal_id, customer_id)).fetchone()
         if not drow:
             raise ValueError("Deal not found for this company")
         pid = drow["product_id"]
@@ -1713,9 +2149,9 @@ def _resolve_activity_link(
             """
             INSERT INTO deals (
                 lead_id, customer_id, product_id, po_number, quote_ref,
-                quantity, price, price_unit, deal_date, status, value, notes,
+                quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
             """,
             (
                 lead_id,
@@ -1724,6 +2160,7 @@ def _resolve_activity_link(
                 comm["po_number"] or None,
                 qref,
                 comm["quantity"],
+                comm["quantity_unit"],
                 comm["price"],
                 comm["price_unit"],
                 deal_date,
@@ -1743,6 +2180,8 @@ def _resolve_activity_link(
 
 def update_activity(activity_id: int, data: dict[str, Any]) -> Optional[str]:
     """Update activity fields and entry type (deal link); returns company name."""
+    data = dict(data)
+    data["activity_date"] = normalize_activity_date(data.get("activity_date", ""))
     with get_db() as conn:
         row = conn.execute(
             """
@@ -1755,9 +2194,18 @@ def update_activity(activity_id: int, data: dict[str, Any]) -> Optional[str]:
         ).fetchone()
         if not row:
             return None
+        existing_deal_id = row["deal_id"]
         if "link_mode" not in data:
-            data["link_mode"] = "existing" if row["deal_id"] else "none"
-        deal_id, pid, lead_id = _resolve_activity_link(conn, row["customer_id"], data)
+            data["link_mode"] = "existing" if existing_deal_id else "none"
+        if data.get("link_mode") == "existing" and not (data.get("deal_id") or "").strip():
+            if existing_deal_id:
+                data["deal_id"] = str(existing_deal_id)
+        deal_id, pid, lead_id = _resolve_activity_link(
+            conn,
+            row["customer_id"],
+            data,
+            allow_deleted_deal_id=existing_deal_id,
+        )
         channel = data.get("channel", "Note").strip() or "Note"
         comment = data.get("comment", "").strip()
         ts = now_iso()
@@ -1798,6 +2246,37 @@ def update_activity(activity_id: int, data: dict[str, Any]) -> Optional[str]:
         return row["company"]
 
 
+def attach_activity_to_deal(activity_id: int, deal_id: int) -> bool:
+    """Link an unassigned activity to a specific deal (same company + product)."""
+    with get_db() as conn:
+        deal = conn.execute(
+            """
+            SELECT customer_id, product_id FROM deals
+            WHERE id = ? AND deleted_at IS NULL
+            """,
+            (deal_id,),
+        ).fetchone()
+        act = conn.execute(
+            "SELECT customer_id, product_id, deal_id FROM activities WHERE id = ?",
+            (activity_id,),
+        ).fetchone()
+        if not deal or not act:
+            return False
+        if act["deal_id"] is not None:
+            return False
+        if deal["customer_id"] != act["customer_id"]:
+            return False
+        if deal["product_id"] != act["product_id"]:
+            return False
+        conn.execute(
+            "UPDATE activities SET deal_id = ? WHERE id = ?", (deal_id, activity_id)
+        )
+        conn.execute(
+            "UPDATE deals SET updated_at = ? WHERE id = ?", (now_iso(), deal_id)
+        )
+        return True
+
+
 def delete_activity(activity_id: int) -> Optional[str]:
     """Delete activity; returns company name for redirect."""
     with get_db() as conn:
@@ -1825,9 +2304,20 @@ def delete_customer(customer_id: int) -> Optional[str]:
             return None
         cid = row["id"]
         name = row["name"]
+        from app.deal_files import delete_all_deal_files
+
+        deal_ids = [
+            r["id"]
+            for r in conn.execute(
+                "SELECT id FROM deals WHERE customer_id = ?", (cid,)
+            ).fetchall()
+        ]
+        for did in deal_ids:
+            delete_all_deal_files(did)
         conn.execute("DELETE FROM activities WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM deals WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM engagements WHERE customer_id = ?", (cid,))
+        conn.execute("DELETE FROM contacts WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM leads WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM customers WHERE id = ?", (cid,))
         return name
@@ -1953,7 +2443,7 @@ def customer_detail(name: str, product: str = "") -> Optional[dict]:
             cid = cust["id"]
             deals = conn.execute(
                 """
-                SELECT d.id, d.po_number, d.quantity, d.price, d.price_unit,
+                SELECT d.id, d.po_number, d.quantity, d.quantity_unit, d.price, d.price_unit,
                        d.deal_date, d.status, d.shipped_date,
                        d.closed_date, d.value, d.notes, p.name AS product
                 FROM deals d
@@ -1978,6 +2468,7 @@ def customer_detail(name: str, product: str = "") -> Optional[dict]:
             return {
                 "lead": None,
                 "customer": dict(cust),
+                "contacts": list_contacts(cid),
                 "deals": deal_list,
                 "deal_counts": deal_counts_for_customer(cid),
                 "timeline": timeline,
@@ -1985,7 +2476,7 @@ def customer_detail(name: str, product: str = "") -> Optional[dict]:
             }
         deals = conn.execute(
             """
-            SELECT d.id, d.po_number, d.quantity, d.price, d.price_unit,
+            SELECT d.id, d.po_number, d.quantity, d.quantity_unit, d.price, d.price_unit,
                    d.deal_date, d.status, d.shipped_date,
                    d.closed_date, d.value, d.notes, p.name AS product
             FROM deals d
@@ -2008,11 +2499,13 @@ def customer_detail(name: str, product: str = "") -> Optional[dict]:
         ]
 
     timeline = _activities_grouped(lead["customer_id"], product)
+    cid = lead["customer_id"]
     return {
         "lead": dict(lead),
-        "customer": {"id": lead["customer_id"], "name": lead["company"]},
+        "customer": {"id": cid, "name": lead["company"]},
+        "contacts": list_contacts(cid),
         "deals": deal_list,
-        "deal_counts": deal_counts_for_customer(lead["customer_id"]),
+        "deal_counts": deal_counts_for_customer(cid),
         "timeline": timeline,
         "product_filter": product,
     }

@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_quantity_fields.html" import quantity_fields %}
 {% block title %}Add / Update{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -18,12 +19,6 @@
 <div class="card log-portal">
   <div class="card-header"><h2>Log update — complete portal</h2></div>
   <form method="post" action="/add/log{% if return_to %}?return_to={{ return_to | urlencode }}{% endif %}" class="form-grid" id="log-form">
-    <div class="full">
-      <label>Company *</label>
-      <input id="log-company" name="company" required list="customers"
-             value="{{ preset_company }}" placeholder="Start typing company name" />
-    </div>
-
     <div class="full link-mode-row">
       <label class="full">Attach this entry to:</label>
       <label class="radio-card">
@@ -40,8 +35,15 @@
       </label>
     </div>
 
+    <div class="full log-company-row">
+      <label>Company *</label>
+      <input id="log-company" name="company" required list="customers"
+             value="{{ preset_company }}" placeholder="Start typing company name" />
+    </div>
+
     <div id="panel-existing" class="panel full">
       <label>Which deal?</label>
+      <p class="form-hint muted" style="margin:0 0 0.35rem">Deals for this company load below (e.g. PO 6713 vs TBD).</p>
       <select id="log-deal-id" name="deal_id" data-preset="{{ preset_deal_id }}">
         {% if company_deals %}
         <option value="">— Pick a deal —</option>
@@ -51,7 +53,7 @@
         </option>
         {% endfor %}
         {% else %}
-        <option value="">— Enter company or create new deal —</option>
+        <option value="">— Enter company name above first —</option>
         {% endif %}
       </select>
       <div class="form-grid" style="padding:0.75rem 0 0">
@@ -59,10 +61,7 @@
           <label>PO # (update)</label>
           <input name="deal_po_number" placeholder="Leave blank to keep unchanged" />
         </div>
-        <div>
-          <label>Quantity (update)</label>
-          <input name="deal_quantity" placeholder="Leave blank to keep unchanged" />
-        </div>
+        {{ quantity_fields('', 'MT', '', 'deal_quantity', 'deal_quantity_unit', 'deal_quantity_unit_other', units=quantity_units) }}
         <div>
           <label>Price (update)</label>
           <input name="deal_price" placeholder="e.g. 150" />
@@ -96,10 +95,7 @@
           <label>PO #</label>
           <input name="po_number" placeholder="Optional" />
         </div>
-        <div>
-          <label>Quantity</label>
-          <input name="quantity" placeholder="e.g. 500 kg, 2 FCL" />
-        </div>
+        {{ quantity_fields('', 'MT', '', units=quantity_units) }}
         <div>
           <label>Price</label>
           <input name="price" placeholder="e.g. 150" />
@@ -186,7 +182,7 @@
     <div class="full"><label>Product *</label><input name="product" required list="products" value="{{ preset_product }}" /></div>
     <div><label>Deal date *</label><input name="deal_date" type="date" required /></div>
     <div><label>PO #</label><input name="po_number" /></div>
-    <div><label>Quantity</label><input name="quantity" placeholder="e.g. 500 kg" /></div>
+    {{ quantity_fields('', 'MT', '', units=quantity_units) }}
     <div><label>Price</label><input name="price" placeholder="e.g. 150" /></div>
     <div><label>Price unit</label>
       <select name="price_unit">
@@ -203,4 +199,8 @@
 
 <datalist id="customers">{% for c in customers %}<option value="{{ c.name }}">{% endfor %}</datalist>
 <datalist id="products">{% for p in products %}<option value="{{ p.name }}">{% endfor %}</datalist>
+<datalist id="quantity-unit-suggestions">
+  {% for u in quantity_units if u not in ['MT', 'FCL', 'Other'] %}<option value="{{ u }}">{% endfor %}
+</datalist>
+<script src="/static/qty-unit.js"></script>
 {% endblock %}

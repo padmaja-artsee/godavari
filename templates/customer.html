@@ -5,7 +5,7 @@
 <div class="page-header">
   <div>
     <h1>{{ detail.customer.name }}{% if detail.product_filter %} — {{ detail.product_filter }}{% endif %}</h1>
-    <p class="subtitle">{% if detail.product_filter %}All logged updates for this product{% else %}Contact profile, deals, and full story by deal{% endif %}</p>
+    <p class="subtitle">{% if detail.product_filter %}All logged updates for this product{% else %}Company profile, contacts, deals, and activity{% endif %}</p>
     {% if detail.deal_counts %}
     <p class="subtitle deal-stats">
       {{ detail.deal_counts.open }} open · {{ detail.deal_counts.shipped }} shipped ·
@@ -23,20 +23,100 @@
   </div>
 </div>
 
-{% if detail.lead %}
 <div class="card">
-  <div class="card-header"><h2>Lead (contact)</h2></div>
-  <form method="post" action="/customer/{{ detail.lead.id }}/edit" class="form-grid">
+  <div class="card-header">
+    <h2>Contacts</h2>
+    <button type="button" class="btn btn-primary btn-sm" id="toggle-add-contact">+ Add contact</button>
+  </div>
+  <div class="card-body">
+    {% if detail.contacts %}
+    <div class="contacts-list">
+      {% for c in detail.contacts %}
+      <div class="contact-card-wrap">
+        <form method="post" action="/contacts/{{ c.id }}/update" class="contact-card form-grid">
+          <input type="hidden" name="company" value="{{ detail.customer.name }}" />
+          <div>
+            <label>Name</label>
+            <input name="contact" value="{{ c.contact or '' }}" placeholder="Contact name" />
+          </div>
+          <div>
+            <label>Email</label>
+            <input name="email" type="email" value="{{ c.email or '' }}" />
+          </div>
+          <div>
+            <label>Phone</label>
+            <input name="phone" value="{{ c.phone or '' }}" />
+          </div>
+          <div class="contact-card-actions">
+            <label class="primary-check">
+              <input type="checkbox" name="is_primary" value="1" {% if c.is_primary %}checked{% endif %} />
+              Primary
+            </label>
+            <div class="contact-card-btns">
+              <button type="submit" class="btn btn-primary btn-sm">Save</button>
+              <button type="submit" formaction="/contacts/{{ c.id }}/delete" formmethod="post" class="btn btn-ghost btn-sm"
+                onclick="return confirm('Remove this contact?');">Remove</button>
+            </div>
+          </div>
+        </form>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="muted">No contacts yet. Add one below.</p>
+    {% endif %}
+
+    <div id="add-contact-panel" class="add-contact-panel" {% if detail.contacts %}hidden{% endif %}>
+      <h3 class="form-section-title">New contact</h3>
+      <form method="post" action="/customer/{{ detail.customer.id }}/contacts" class="form-grid">
+        <input type="hidden" name="company" value="{{ detail.customer.name }}" />
+        <div>
+          <label>Name</label>
+          <input name="contact" placeholder="Contact name" />
+        </div>
+        <div>
+          <label>Email</label>
+          <input name="email" type="email" />
+        </div>
+        <div>
+          <label>Phone</label>
+          <input name="phone" />
+        </div>
+        <div class="full">
+          <label class="primary-check">
+            <input type="checkbox" name="is_primary" value="1" {% if not detail.contacts %}checked{% endif %} />
+            Primary contact
+          </label>
+        </div>
+        <div class="full">
+          <button type="submit" class="btn btn-primary btn-sm">Add contact</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header"><h2>Company</h2></div>
+  <form method="post" action="/customer/{{ detail.customer.id }}/profile" class="form-grid" style="padding:1rem 1.25rem">
     <input type="hidden" name="company" value="{{ detail.customer.name }}" />
-    <div><label>Contact</label><input name="contact" value="{{ detail.lead.contact or '' }}" /></div>
-    <div><label>Email</label><input name="email" type="email" value="{{ detail.lead.email or '' }}" /></div>
-    <div><label>Website</label><input name="website" value="{{ detail.lead.website or '' }}" /></div>
-    <div><label>Phone</label><input name="phone" value="{{ detail.lead.phone or '' }}" /></div>
-    <div class="full"><label>Products interested in</label><input name="products_interested" value="{{ detail.lead.products_interested or '' }}" /></div>
-    <div class="full"><button type="submit" class="btn btn-primary">Save contact</button></div>
+    <div>
+      <label>Website</label>
+      <input name="website" value="{{ detail.lead.website if detail.lead else '' }}" />
+    </div>
+    <div class="full">
+      <label>Products interested in</label>
+      <input name="products_interested" value="{{ detail.lead.products_interested if detail.lead else '' }}" />
+    </div>
+    <div class="full">
+      <label>Company notes</label>
+      <textarea name="notes" rows="2">{{ detail.lead.notes if detail.lead else '' }}</textarea>
+    </div>
+    <div class="full">
+      <button type="submit" class="btn btn-primary btn-sm">Save company</button>
+    </div>
   </form>
 </div>
-{% endif %}
 
 <div class="card">
   <div class="card-header">
@@ -54,7 +134,7 @@
         <td>{{ d.deal_date }}</td>
         <td>{{ d.product }}</td>
         <td>{{ d.po_number or '—' }}</td>
-        <td>{{ d.quantity or '—' }}</td>
+        <td>{{ (d.quantity|qty_display(d.quantity_unit or 'MT')) if d.quantity else '—' }}</td>
         <td>{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% else %}—{% endif %}</td>
         <td>
           {% if d.status == 'shipped' %}<span class="badge">Shipped</span>
@@ -75,6 +155,9 @@
 <div class="card">
   <div class="card-header"><h2>Timeline by deal</h2></div>
   <div class="card-body timeline-wrap">
+    {% if activity_error %}
+    <p class="form-error" style="padding:0.75rem 1.25rem;margin:0">{{ activity_error }}</p>
+    {% endif %}
     {% if detail.timeline.deal_groups %}
     {% for group in detail.timeline.deal_groups %}
     <div class="timeline-group">
@@ -128,4 +211,16 @@
   {% for p in all_products %}<option value="{{ p.name }}">{% endfor %}
 </datalist>
 <script src="/static/activity-edit.js"></script>
+<script>
+(function () {
+  const btn = document.getElementById("toggle-add-contact");
+  const panel = document.getElementById("add-contact-panel");
+  if (btn && panel) {
+    btn.addEventListener("click", function () {
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) panel.querySelector("input[name=contact]")?.focus();
+    });
+  }
+})();
+</script>
 {% endblock %}

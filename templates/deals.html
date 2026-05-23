@@ -75,6 +75,7 @@
         <tr>
           <th class="col-toggle" aria-label="Details"></th>
           <th>ID#</th>
+          <th>PO #</th>
           <th>Date</th>
           {% if view == 'product' %}<th>Company</th>{% else %}<th>Product</th>{% endif %}
           <th>Status</th>
@@ -86,7 +87,7 @@
       <tbody>
       {% for group in lead_groups %}
       <tr class="deals-group-row">
-        <td colspan="8">
+        <td colspan="9">
           {% if view == 'company' %}
           <a class="link" href="/customer?name={{ group.label | urlencode }}"><strong>{{ group.label }}</strong></a>
           {% elif group.product_id %}
@@ -106,7 +107,8 @@
           </button>
         </td>
         <td>{{ row.deal_id or '—' }}</td>
-        <td>{{ row.last_activity_date }}</td>
+        <td>{{ row.po_number or '—' }}</td>
+        <td>{{ row.last_activity_date or row.deal_date or '—' }}</td>
         {% if view == 'product' %}
         <td><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></td>
         {% else %}
@@ -135,15 +137,14 @@
         </td>
       </tr>
       <tr class="deals-detail" hidden>
-        <td colspan="8">
+        <td colspan="9">
           <dl class="deals-detail-grid">
             {% if view == 'company' %}
             <div><dt>Company</dt><dd><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></dd></div>
             {% else %}
             <div><dt>Product</dt><dd>{{ row.product }}</dd></div>
             {% endif %}
-            <div><dt>PO #</dt><dd>{{ row.po_number or '—' }}</dd></div>
-            <div><dt>Quantity</dt><dd>{{ row.quantity or '—' }}</dd></div>
+            <div><dt>Quantity</dt><dd>{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</dd></div>
             <div><dt>Price</dt><dd>{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</dd></div>
           </dl>
         </td>
