@@ -20,7 +20,7 @@
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     <a href="/generate/purchase-orders/new?deal_id={{ d.id }}" class="btn btn-ghost">Generate Purchase Order</a>
-    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary">+ Add or update</a>
+    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary">+ Log update</a>
     <a href="/add?tab=deal&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}" class="btn btn-ghost">+ Create deal</a>
   </div>
 </div>
@@ -136,7 +136,7 @@
 <div class="card">
   <div class="card-header">
     <h2>Activity log</h2>
-    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary btn-sm">+ Add or update</a>
+    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary btn-sm">+ Log update</a>
   </div>
   <div class="card-body">
     {% if detail.activities %}

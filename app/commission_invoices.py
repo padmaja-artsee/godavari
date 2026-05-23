@@ -418,36 +418,61 @@ def duplicate_commission_invoice(ci_id: int) -> int | None:
     )
 
 
-def create_ci_from_deal(deal_id: int) -> dict[str, Any] | None:
-    """Prefill a Commission Invoice from an existing deal."""
-    with get_db() as conn:
-        row = conn.execute(
-            """
-            SELECT d.*, c.name AS company, p.name AS product
-            FROM deals d
-            JOIN customers c ON c.id = d.customer_id
-            JOIN products p  ON p.id = d.product_id
-            WHERE d.id = ? AND d.deleted_at IS NULL
-            """,
-            (deal_id,),
-        ).fetchone()
-    if not row:
-        return None
-    d  = dict(row)
-    ci = deepcopy(DEFAULT_CI)
-    ci["deal_id"]     = deal_id
-    ci["customer_id"] = d.get("customer_id")
-    ci["invoice_date"] = (d.get("po_date") or d.get("deal_date") or ci["invoice_date"])[:10]
-    ci["customer_order_no"] = d.get("po_number") or ""
-    ci["transaction_description"] = (
-        f"Commission For Sales of {d.get('product') or ''} to {d.get('company') or ''}"
-    )
+def _deal_to_ci_line(d: dict) -> dict:
+    """Build a single CI line item from a deal row dict."""
     price    = _float(d.get("price"))
     qty_raw  = d.get("quantity") or ""
     qty_nums = re.findall(r"\d+\.?\d*", qty_raw.replace(",", ""))
     qty      = float(qty_nums[0]) if qty_nums else 0.0
-    line     = ci["line_items"][0]
+    line = deepcopy(DEFAULT_CI["line_items"][0])
     line["product_description"] = d.get("product") or ""
     line["quantity"]    = qty
     line["fob_value"]   = round(price * qty, 2) if price and qty else 0.0
+    return line
+
+
+def create_ci_from_deal(deal_id: int) -> dict[str, Any] | None:
+    """Prefill a Commission Invoice from a single deal (backwards-compat wrapper)."""
+    return create_ci_from_deals([deal_id])
+
+
+def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
+    """Prefill a Commission Invoice from one or more deals.
+
+    Each deal becomes one line item. Header fields are taken from the first deal.
+    """
+    if not deal_ids:
+        return None
+    placeholders = ",".join("?" for _ in deal_ids)
+    with get_db() as conn:
+        rows = conn.execute(
+            f"""
+            SELECT d.*, c.name AS company, p.name AS product
+            FROM deals d
+            JOIN customers c ON c.id = d.customer_id
+            JOIN products p  ON p.id = d.product_id
+            WHERE d.id IN ({placeholders}) AND d.deleted_at IS NULL
+            ORDER BY d.deal_date, d.id
+            """,
+            deal_ids,
+        ).fetchall()
+    if not rows:
+        return None
+
+    ci = deepcopy(DEFAULT_CI)
+    first = dict(rows[0])
+
+    # Header from first deal
+    ci["deal_id"]      = first["id"]
+    ci["customer_id"]  = first.get("customer_id")
+    ci["invoice_date"] = (first.get("po_date") or first.get("deal_date") or ci["invoice_date"])[:10]
+    ci["customer_order_no"] = first.get("po_number") or ""
+
+    # Build one line item per deal
+    companies = list(dict.fromkeys(dict(r)["company"] for r in rows))  # unique, ordered
+    products  = list(dict.fromkeys(dict(r)["product"]  for r in rows))
+    ci["transaction_description"] = (
+        f"Commission For Sales of {', '.join(products)} to {', '.join(companies)}"
+    )
+    ci["line_items"] = [_deal_to_ci_line(dict(r)) for r in rows]
     return ci

@@ -461,6 +461,13 @@
   width: auto;
   min-width: 4rem;
 }
+select.po-inline-input {
+  font: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+select.po-inline-input:focus { border-color: #2563eb; outline: none; }
 .po-input:focus,
 .po-inline-input:focus,
 .po-number-input:focus,

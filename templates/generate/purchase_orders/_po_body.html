@@ -1,4 +1,5 @@
 {% macro po_body(po, readonly=false) %}
+{% set CURRENCIES = ['Euro','USD','GBP','JPY','CHF','CAD','AUD','CNY','INR','SGD'] %}
 <div class="po-page po-excel-layout">
   <div class="po-brand-row">
     <img src="/static/gbbv-logo.png" alt="Company logo" class="po-logo" />
@@ -41,7 +42,17 @@
       <tr><th>Port of discharge</th><td>{% if readonly %}{{ po.port_of_discharge or '—' }}{% else %}<input class="po-inline-input" name="port_of_discharge" value="{{ po.port_of_discharge or '' }}" />{% endif %}</td></tr>
       <tr><th>Terms</th><td>{% if readonly %}{{ po.incoterm_terms or '—' }}{% else %}<input class="po-inline-input" name="incoterm_terms" value="{{ po.incoterm_terms or '' }}" />{% endif %}</td></tr>
       <tr><th>Shipment</th><td>{% if readonly %}{{ po.shipment_timing or '—' }}{% else %}<input class="po-inline-input" name="shipment_timing" value="{{ po.shipment_timing or '' }}" />{% endif %}</td></tr>
-      <tr><th>Currency</th><td>{{ po.currency or 'Euro' }}</td></tr>
+      <tr><th>Currency</th><td>
+        {% if readonly %}{{ po.currency or 'Euro' }}{% else %}
+        <select class="po-inline-input" name="currency" id="po-currency-kv" style="width:6rem">
+          {% set _cur = po.currency or 'Euro' %}
+          {% for c in CURRENCIES %}
+          <option value="{{ c }}" {% if _cur == c %}selected{% endif %}>{{ c }}</option>
+          {% endfor %}
+          {% if _cur not in CURRENCIES %}<option value="{{ _cur }}" selected>{{ _cur }}</option>{% endif %}
+        </select>
+        {% endif %}
+      </td></tr>
     </table>
   </div>
 
@@ -68,9 +79,36 @@
       <tr class="po-grid-subhead">
         <td></td>
         <td></td>
-        <td>{% if readonly %}{{ line.commercial_unit or 'MT' }}{% else %}<input class="po-inline-input" name="commercial_unit" value="{{ line.commercial_unit or 'MT' }}" style="width:3.5rem;text-align:center" />{% endif %}</td>
-        <td>{% if readonly %}{{ line.rate_unit or 'Euro / MT' }}{% else %}<input class="po-inline-input" name="rate_unit" value="{{ line.rate_unit or 'Euro / MT' }}" style="width:7rem" />{% endif %}</td>
-        <td>{% if readonly %}{{ po.currency or 'Euro' }}{% else %}<input class="po-inline-input" name="currency" id="po-currency" value="{{ po.currency or 'Euro' }}" style="width:4rem;text-align:center" />{% endif %}</td>
+        <td>{% if readonly %}{{ line.commercial_unit or 'MT' }}{% else %}
+          {% set _cu = line.commercial_unit or 'MT' %}
+          <select class="po-inline-input" name="commercial_unit" style="width:4.2rem;padding:.1rem .2rem;text-align:center">
+            <option value="MT"  {% if _cu == 'MT'  %}selected{% endif %}>MT</option>
+            <option value="FCL" {% if _cu == 'FCL' %}selected{% endif %}>FCL</option>
+            <option value="KG"  {% if _cu == 'KG'  %}selected{% endif %}>KG</option>
+          </select>
+        {% endif %}</td>
+        <td>
+          {% if readonly %}{{ line.rate_unit or 'Euro / MT' }}{% else %}
+          {% set _ru = (line.rate_unit or 'Euro / MT').split(' / ') %}
+          {% set _ru_cur = _ru[0] if _ru|length > 0 else 'Euro' %}
+          {% set _ru_per = _ru[1] if _ru|length > 1 else 'MT' %}
+          <span style="display:inline-flex;align-items:center;gap:.2rem">
+            <select name="rate_unit_currency" class="po-inline-input" style="width:4.8rem;padding:.1rem .2rem">
+              {% for c in CURRENCIES %}
+              <option value="{{ c }}" {% if _ru_cur == c %}selected{% endif %}>{{ c }}</option>
+              {% endfor %}
+              {% if _ru_cur not in CURRENCIES %}<option value="{{ _ru_cur }}" selected>{{ _ru_cur }}</option>{% endif %}
+            </select>
+            <span style="color:#666">/</span>
+            <select name="rate_unit_per" class="po-inline-input" style="width:3.6rem;padding:.1rem .2rem">
+              <option value="MT"  {% if _ru_per == 'MT'  %}selected{% endif %}>MT</option>
+              <option value="FCL" {% if _ru_per == 'FCL' %}selected{% endif %}>FCL</option>
+              <option value="KG"  {% if _ru_per == 'KG'  %}selected{% endif %}>KG</option>
+            </select>
+          </span>
+          {% endif %}
+        </td>
+        <td>{{ po.currency or 'Euro' }}</td>
         <td></td>
       </tr>
     </thead>
@@ -116,6 +154,7 @@
       <thead>
         <tr>
           <th>Batch Name</th>
+          <th>Batch Number</th>
           <th>Quantity</th>
           <th>Unit</th>
           {% if not readonly %}<th class="no-print"></th>{% endif %}
@@ -125,12 +164,13 @@
         {% for batch in batches %}
         <tr class="batch-row">
           <td>{% if readonly %}{{ batch.batch_name }}{% else %}<input class="po-input" name="batch_name_{{ line_idx }}" value="{{ batch.batch_name or '' }}" placeholder="BATCH A" />{% endif %}</td>
+          <td>{% if readonly %}{{ batch.batch_number or '—' }}{% else %}<input class="po-input" name="batch_number_{{ line_idx }}" value="{{ batch.batch_number or '' }}" placeholder="e.g. 2026001" />{% endif %}</td>
           <td class="po-num">{% if readonly %}{{ batch.batch_quantity|num }}{% else %}<input class="po-number-input calc-batch-qty" name="batch_quantity_{{ line_idx }}" value="{{ batch.batch_quantity or '' }}" />{% endif %}</td>
           <td>{% if readonly %}{{ batch.batch_unit or 'MT' }}{% else %}<input class="po-unit-input" name="batch_unit_{{ line_idx }}" value="{{ batch.batch_unit or 'MT' }}" />{% endif %}</td>
           {% if not readonly %}<td class="no-print"><button type="button" class="btn btn-ghost btn-sm remove-batch-btn">×</button></td>{% endif %}
         </tr>
         {% endfor %}
-        {% if not batches and readonly %}<tr><td colspan="3" class="po-empty">—</td></tr>{% endif %}
+        {% if not batches and readonly %}<tr><td colspan="4" class="po-empty">—</td></tr>{% endif %}
       </tbody>
     </table>
     {% if not readonly %}

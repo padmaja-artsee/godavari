@@ -91,6 +91,7 @@ from app.po_exports import export_po_pdf, export_po_xlsx
 from app.commission_invoices import (
     DEFAULT_CI,
     create_ci_from_deal,
+    create_ci_from_deals,
     create_commission_invoice,
     delete_commission_invoice,
     duplicate_commission_invoice,
@@ -1304,16 +1305,22 @@ async def ci_list_page(request: Request):
 async def ci_new_page(
     request: Request,
     deal_id: int = Query(0),
+    deal_ids: str = Query(""),   # comma-separated list, e.g. "3,7,12"
     blank: str = Query(""),
 ):
-    if not deal_id and blank != "1":
+    if not deal_id and not deal_ids and blank != "1":
         return templates.TemplateResponse(
             "generate/commission_invoices/ci_pick_deal.html",
             {"request": request},
         )
     from copy import deepcopy
-    if deal_id:
-        ci = create_ci_from_deal(deal_id) or deepcopy(DEFAULT_CI)
+    ids: list[int] = []
+    if deal_ids:
+        ids = [int(x) for x in deal_ids.split(",") if x.strip().isdigit()]
+    elif deal_id:
+        ids = [deal_id]
+    if ids:
+        ci = create_ci_from_deals(ids) or deepcopy(DEFAULT_CI)
     else:
         ci = deepcopy(DEFAULT_CI)
     return templates.TemplateResponse(

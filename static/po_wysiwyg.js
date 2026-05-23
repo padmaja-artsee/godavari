@@ -97,6 +97,7 @@
       tr.className = "batch-row";
       tr.innerHTML =
         '<td><input class="po-input" name="batch_name_' + idx + '" placeholder="BATCH" /></td>' +
+        '<td><input class="po-input" name="batch_number_' + idx + '" placeholder="e.g. 2026001" /></td>' +
         '<td class="po-num"><input class="po-number-input calc-batch-qty" name="batch_quantity_' + idx + '" /></td>' +
         '<td><input class="po-unit-input" name="batch_unit_' + idx + '" value="MT" /></td>' +
         '<td class="no-print"><button type="button" class="btn btn-ghost btn-sm remove-batch-btn">×</button></td>';

@@ -98,9 +98,9 @@ DEFAULT_PO: dict[str, Any] = {
             "total_packed_quantity": 18000,
             "total_packed_unit": "KG",
             "batches": [
-                {"batch_name": "BATCH A", "batch_quantity": 6, "batch_unit": "MT"},
-                {"batch_name": "BATCH B", "batch_quantity": 6, "batch_unit": "MT"},
-                {"batch_name": "BATCH C", "batch_quantity": 6, "batch_unit": "MT"},
+                {"batch_name": "BATCH A", "batch_number": "", "batch_quantity": 6, "batch_unit": "MT"},
+                {"batch_name": "BATCH B", "batch_number": "", "batch_quantity": 6, "batch_unit": "MT"},
+                {"batch_name": "BATCH C", "batch_number": "", "batch_quantity": 6, "batch_unit": "MT"},
             ],
         }
     ],
@@ -193,6 +193,7 @@ def upgrade_purchase_orders_schema() -> None:
                 purchase_order_id INTEGER NOT NULL,
                 line_item_id INTEGER NOT NULL,
                 batch_name TEXT,
+                batch_number TEXT,
                 batch_quantity REAL,
                 batch_unit TEXT,
                 sort_order INTEGER DEFAULT 0,
@@ -220,6 +221,9 @@ def _upgrade_po_extra_columns(conn) -> None:
     for col in PO_EXTRA_FIELDS:
         if col not in cols:
             conn.execute(f"ALTER TABLE purchase_orders ADD COLUMN {col} TEXT")
+    batch_cols = {r[1] for r in conn.execute("PRAGMA table_info(purchase_order_batches)").fetchall()}
+    if "batch_number" not in batch_cols:
+        conn.execute("ALTER TABLE purchase_order_batches ADD COLUMN batch_number TEXT")
 
 
 def kg_from_commercial(qty: float, unit: str) -> float | None:
@@ -347,7 +351,8 @@ def parse_po_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
     products = form_getlist(form, "product_description")
     text_fields = [
-        "quantity_display", "commercial_unit", "pricing_unit", "rate_unit",
+        "quantity_display", "commercial_unit", "pricing_unit",
+        "rate_unit_currency", "rate_unit_per",
         "incoterm_delivery_term", "remark", "pack_size_unit",
     ]
     numeric_fields = {"commercial_quantity", "pack_size", "number_of_packs", "rate"}
@@ -363,18 +368,24 @@ def parse_po_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         for nf in numeric_fields:
             vals = form_getlist(form, nf)
             line[nf] = _float(vals[i] if i < len(vals) else 0)
+        # Combine split rate-unit fields back into "Euro / MT" style string
+        r_cur = line.pop("rate_unit_currency", "").strip() or "Euro"
+        r_per = line.pop("rate_unit_per", "").strip() or "MT"
+        line["rate_unit"] = f"{r_cur} / {r_per}"
         line["currency"] = data.get("currency") or "Euro"
         batches = []
-        for bname, bqty, bunit in zip(
+        bnums = form_getlist(form, f"batch_number_{i}")
+        for j, (bname, bqty, bunit) in enumerate(zip(
             form_getlist(form, f"batch_name_{i}"),
             form_getlist(form, f"batch_quantity_{i}"),
             form_getlist(form, f"batch_unit_{i}"),
-        ):
+        )):
             bname = bname.strip()
             if not bname:
                 continue
             batches.append({
                 "batch_name": bname,
+                "batch_number": (bnums[j] if j < len(bnums) else "").strip(),
                 "batch_quantity": _float(bqty),
                 "batch_unit": (bunit or "MT").strip() or "MT",
             })
@@ -474,12 +485,12 @@ def _save_lines(conn, po_id: int, line_items: list[dict[str, Any]]) -> None:
             conn.execute(
                 """
                 INSERT INTO purchase_order_batches (
-                    purchase_order_id, line_item_id, batch_name,
+                    purchase_order_id, line_item_id, batch_name, batch_number,
                     batch_quantity, batch_unit, sort_order
-                ) VALUES (?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    po_id, line_id, batch.get("batch_name"),
+                    po_id, line_id, batch.get("batch_name"), batch.get("batch_number"),
                     batch.get("batch_quantity"), batch.get("batch_unit"), bsort,
                 ),
             )

@@ -2416,10 +2416,23 @@ def dashboard_stats(period: str = "all") -> dict:
         activities = conn.execute(
             f"SELECT COUNT(*) AS n FROM activities {date_clause}", params
         ).fetchone()["n"]
+        shipped_clause = ""
+        shipped_params: list[Any] = []
+        if start:
+            shipped_clause = "AND closed_date >= ?"
+            shipped_params = [start]
+        shipped_deals = conn.execute(
+            f"""
+            SELECT COUNT(*) AS n FROM deals
+            WHERE status = 'shipped' AND deleted_at IS NULL {shipped_clause}
+            """,
+            shipped_params,
+        ).fetchone()["n"]
     return {
         "leads": leads_n,
         "products": products,
         "open_deals": open_deals,
+        "shipped_deals": shipped_deals,
         "activities": activities,
     }
 
