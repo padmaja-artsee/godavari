@@ -4,21 +4,100 @@
  * but adds no rules to those selectors.
  */
 
-/* ── Document title ───────────────────────────────────────────────── */
-.ci-doc-title {
+/* ── Header row (logo + company name only, no border) ────────────── */
+.ci-header-row {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding-bottom: .35rem;
+}
+
+.ci-company-name {
+  font-weight: 700;
+  font-size: .95rem;
+  color: #111;
+}
+
+.ci-company-input {
+  font-weight: 700 !important;
+  font-size: .95rem !important;
+  width: 320px;
+}
+
+/* ── Document title — single green underline, full width ─────────── */
+.ci-title-row {
+  border-bottom: 2px solid #1a5632;
+  text-align: center;
+  padding: 4px 0 5px;
+  margin-bottom: .6rem;
+}
+
+.ci-doc-title-text {
   font-size: 1.05rem;
   font-weight: 700;
-  letter-spacing: .05em;
-  color: var(--primary, #1a5632);
+  letter-spacing: .06em;
+  color: #1a5632;
+}
+
+.ci-doc-title-input {
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  letter-spacing: .06em;
+  color: #1a5632 !important;
   text-align: center;
-  border-bottom: 2px solid var(--primary, #1a5632);
-  padding-bottom: 2px;
-  margin-top: 2px;
-  width: 100%;
+  width: 320px;
   background: transparent;
-  border-top: none;
-  border-left: none;
-  border-right: none;
+  border: none !important;
+  outline: none;
+}
+
+.ci-doc-title-input:focus {
+  outline: 1px dashed #1a5632;
+}
+
+/* ── Bill-to / Invoice meta grid ─────────────────────────────────── */
+.ci-meta-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: .5rem 1.5rem;
+  margin-bottom: .75rem;
+  align-items: start;
+}
+
+.ci-meta-left { font-size: .88rem; }
+.ci-meta-left p { margin: 1px 0; }
+
+.ci-meta-right {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  min-width: 260px;
+}
+
+/* ── Invoice No / Date key-value rows ────────────────────────────── */
+.ci-kv-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.ci-kv-label {
+  font-weight: 600;
+  font-size: .82rem;
+  color: #374151;
+  min-width: 6rem;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.ci-kv-val {
+  font-size: .88rem;
+}
+
+.ci-kv-input {
+  flex: 1;
+  min-width: 140px;
+  font-size: .88rem !important;
 }
 
 /* ── TO label ─────────────────────────────────────────────────────── */
@@ -30,7 +109,7 @@
   margin: 0 0 2px;
 }
 
-/* ── Order no inline row ─────────────────────────────────────────── */
+/* ── Customer order no row ───────────────────────────────────────── */
 .ci-order-row {
   display: flex;
   align-items: center;
@@ -85,6 +164,12 @@
   font-size: .82rem;
 }
 
+/* Shipment value inputs — enough room so they don't crowd the label */
+.ci-ship-val-input {
+  min-width: 130px;
+  flex: 1;
+}
+
 /* ── Commission table ────────────────────────────────────────────── */
 .ci-table {
   width: 100%;
@@ -114,7 +199,26 @@
   font-weight: 400;
   font-size: .7rem;
   display: block;
-  opacity: .85;
+  opacity: .9;
+}
+
+/* Editable unit/currency inputs inside green table header cells */
+.ci-subunit-input {
+  background: transparent;
+  border: none;
+  border-bottom: 1px dashed rgba(255,255,255,.6);
+  color: #fff;
+  font-size: .7rem;
+  font-weight: 400;
+  width: 4rem;
+  text-align: center;
+  padding: 0;
+  outline: none;
+}
+
+.ci-subunit-input:focus {
+  border-bottom-color: #fff;
+  background: rgba(255,255,255,.1);
 }
 
 .ci-col-product { width: 32%; }
@@ -225,10 +329,17 @@
   .ci-total-grand { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .ci-total-pay   { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 
-  .po-mkinput, .po-number-input, .po-inline-input, .po-input {
+  .po-mkinput, .po-number-input, .po-inline-input, .po-input,
+  .ci-kv-input, .ci-ship-val-input, .ci-doc-title-input, .ci-company-input {
     border: none !important;
     background: transparent !important;
     padding: 0 !important;
+  }
+
+  .ci-subunit-input {
+    border: none !important;
+    background: transparent !important;
+    color: #fff !important;
   }
 
   .ci-vat-pct { border: none !important; background: transparent !important; width: auto !important; }

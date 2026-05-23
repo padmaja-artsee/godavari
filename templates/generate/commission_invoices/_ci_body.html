@@ -1,23 +1,26 @@
 {% macro ci_body(ci, readonly=false) %}
 <div class="po-page po-excel-layout ci-page">
 
-  {# ── Header: logo + company ── #}
-  <div class="po-brand-row">
+  {# ── Header: logo + company name only (no border here) ── #}
+  <div class="ci-header-row">
     <img src="/static/gbbv-logo.png" alt="GBBV logo" class="po-logo" />
-    <div class="po-brand-text">
-      {% if readonly %}
-      <div class="po-company-title">{{ ci.company_name or '' }}</div>
-      <div class="ci-doc-title">{{ ci.document_title or 'COMMISSION INVOICE' }}</div>
-      {% else %}
-      <input class="po-input po-company-title" name="company_name" value="{{ ci.company_name or '' }}" />
-      <input class="po-input ci-doc-title" name="document_title" value="{{ ci.document_title or 'COMMISSION INVOICE' }}" />
-      {% endif %}
+    <div class="ci-company-name">
+      {% if readonly %}{{ ci.company_name or '' }}
+      {% else %}<input class="po-input po-company-title ci-company-input" name="company_name" value="{{ ci.company_name or '' }}" />{% endif %}
     </div>
+  </div>
+  {# ── Document title in its own full-width row with single underline ── #}
+  <div class="ci-title-row">
+    {% if readonly %}
+    <span class="ci-doc-title-text">{{ ci.document_title or 'COMMISSION INVOICE' }}</span>
+    {% else %}
+    <input class="po-input ci-doc-title-input" name="document_title" value="{{ ci.document_title or 'COMMISSION INVOICE' }}" />
+    {% endif %}
   </div>
 
   {# ── Bill-to + Invoice meta ── #}
-  <div class="po-meta-grid">
-    <div class="po-meta-left">
+  <div class="ci-meta-grid">
+    <div class="ci-meta-left">
       <p class="ci-to-label">TO</p>
       {% if readonly %}
       <p><strong>{{ ci.bill_to_name }}</strong></p>
@@ -31,17 +34,25 @@
       <input class="po-input" name="bill_to_address_2" value="{{ ci.bill_to_address_2 or '' }}" placeholder="Address line 2" />
       <input class="po-input" name="bill_to_address_3" value="{{ ci.bill_to_address_3 or '' }}" placeholder="Address line 3 (optional)" />
       <div class="ci-order-row">
-        <span class="po-hs-label">Customer Order no</span>
+        <span class="ci-kv-label">Customer Order no</span>
         <input class="po-mkinput" name="customer_order_no" value="{{ ci.customer_order_no or '' }}" placeholder="e.g. PO-12345" />
       </div>
       {% endif %}
     </div>
-    <table class="po-order-kv">
-      <tr><th>Invoice No</th>
-          <td>{% if readonly %}{{ ci.invoice_number }}{% else %}<input class="po-inline-input" name="invoice_number" value="{{ ci.invoice_number or '' }}" required />{% endif %}</td></tr>
-      <tr><th>Date</th>
-          <td>{% if readonly %}{{ ci.invoice_date }}{% else %}<input class="po-inline-input" type="date" name="invoice_date" value="{{ ci.invoice_date or '' }}" required />{% endif %}</td></tr>
-    </table>
+
+    {# Right column — Invoice No + Date, neatly aligned ── #}
+    <div class="ci-meta-right">
+      <div class="ci-kv-row">
+        <span class="ci-kv-label">Invoice No</span>
+        {% if readonly %}<span class="ci-kv-val">{{ ci.invoice_number or '—' }}</span>
+        {% else %}<input class="po-mkinput ci-kv-input" name="invoice_number" value="{{ ci.invoice_number or '' }}" required placeholder="e.g. 202627 ABC" />{% endif %}
+      </div>
+      <div class="ci-kv-row">
+        <span class="ci-kv-label">Date</span>
+        {% if readonly %}<span class="ci-kv-val">{{ ci.invoice_date or '—' }}</span>
+        {% else %}<input class="po-mkinput ci-kv-input" name="invoice_date" value="{{ ci.invoice_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
+      </div>
+    </div>
   </div>
 
   {# ── Transaction description ── #}
@@ -62,29 +73,29 @@
       <div class="ci-ship-row">
         <span class="ci-ship-label">Shipment Direct from GBL on</span>
         {% if readonly %}{{ ci.shipment_date or '—' }}{% else %}
-        <input class="po-mkinput" type="date" name="shipment_date" value="{{ ci.shipment_date or '' }}" />{% endif %}
+        <input class="po-mkinput ci-ship-val-input" name="shipment_date" value="{{ ci.shipment_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
       </div>
       <div class="ci-ship-row">
         <span class="ci-ship-label">Port of Loading</span>
         {% if readonly %}{{ ci.port_of_loading or '—' }}{% else %}
-        <input class="po-mkinput" name="port_of_loading" value="{{ ci.port_of_loading or '' }}" placeholder="e.g. Mundra" />{% endif %}
+        <input class="po-mkinput ci-ship-val-input" name="port_of_loading" value="{{ ci.port_of_loading or '' }}" placeholder="e.g. Mundra" />{% endif %}
       </div>
       <div class="ci-ship-row">
         <span class="ci-ship-label">Container No</span>
         {% if readonly %}{{ ci.container_numbers or '—' }}{% else %}
-        <input class="po-mkinput" name="container_numbers" value="{{ ci.container_numbers or '' }}" placeholder="e.g. TCKU123456" />{% endif %}
+        <input class="po-mkinput ci-ship-val-input" name="container_numbers" value="{{ ci.container_numbers or '' }}" placeholder="e.g. TCKU123456" />{% endif %}
       </div>
     </div>
     <div class="ci-ship-right">
       <div class="ci-ship-row">
         <span class="ci-ship-label">BL No</span>
         {% if readonly %}{{ ci.bl_number or '—' }}{% else %}
-        <input class="po-mkinput" name="bl_number" value="{{ ci.bl_number or '' }}" placeholder="e.g. ONED123456" />{% endif %}
+        <input class="po-mkinput ci-ship-val-input" name="bl_number" value="{{ ci.bl_number or '' }}" placeholder="e.g. ONED123456" />{% endif %}
       </div>
       <div class="ci-ship-row">
         <span class="ci-ship-label">BL Date</span>
         {% if readonly %}{{ ci.bl_date or '—' }}{% else %}
-        <input class="po-mkinput" type="date" name="bl_date" value="{{ ci.bl_date or '' }}" />{% endif %}
+        <input class="po-mkinput ci-ship-val-input" name="bl_date" value="{{ ci.bl_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
       </div>
     </div>
   </div>
@@ -95,10 +106,25 @@
       <tr>
         <th class="ci-col-product">PRODUCT AND OTHER DESCRIPTION</th>
         <th class="ci-col-gblinv">GBL Invoice #</th>
-        <th class="ci-col-qty">QUANTITY<br><span class="ci-subunit">MT</span></th>
-        <th class="ci-col-fob">Value<br><span class="ci-subunit">FOB Euro</span></th>
-        <th class="ci-col-rate">Commission<br><span class="ci-subunit">Rate</span></th>
-        <th class="ci-col-val">VALUE<br><span class="ci-subunit">Euro</span></th>
+        <th class="ci-col-qty">QUANTITY<br>
+          <span class="ci-subunit">
+            {% if readonly %}{{ ci.qty_unit or 'MT' }}
+            {% else %}<input class="ci-subunit-input" name="qty_unit" value="{{ ci.qty_unit or 'MT' }}" />{% endif %}
+          </span>
+        </th>
+        <th class="ci-col-fob">Value<br>
+          <span class="ci-subunit">FOB&nbsp;
+            {% if readonly %}{{ ci.fob_currency or 'Euro' }}
+            {% else %}<input class="ci-subunit-input" name="fob_currency" value="{{ ci.fob_currency or 'Euro' }}" />{% endif %}
+          </span>
+        </th>
+        <th class="ci-col-rate">Commission<br><span class="ci-subunit">Rate %</span></th>
+        <th class="ci-col-val">VALUE<br>
+          <span class="ci-subunit">
+            {% if readonly %}{{ ci.value_currency or 'Euro' }}
+            {% else %}<input class="ci-subunit-input" name="value_currency" value="{{ ci.value_currency or 'Euro' }}" />{% endif %}
+          </span>
+        </th>
       </tr>
     </thead>
     <tbody id="ci-lines-body">

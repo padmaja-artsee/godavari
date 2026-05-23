@@ -71,6 +71,10 @@ DEFAULT_CI: dict[str, Any] = {
     "bank_account_no":       "Account no 0311323650",
     "bank_iban":             "NL83RABO0311323650",
     "bank_bic":              "RABONL2U",
+    # Editable table units
+    "qty_unit":              "MT",
+    "fob_currency":          "Euro",
+    "value_currency":        "Euro",
     # Totals
     "vat_percent":           0,
     "amount_in_words":       "",
@@ -125,7 +129,19 @@ CI_SCALAR_FIELDS = [
     "payment_terms", "enclosures",
     "bank_name", "bank_account_no", "bank_iban", "bank_bic",
     "amount_in_words", "status", "prepared_by", "internal_notes",
+    # editable table header units
+    "qty_unit", "fob_currency", "value_currency",
 ]
+
+# Extra columns added after initial schema creation — migrated automatically
+CI_EXTRA_FIELDS = ["qty_unit", "fob_currency", "value_currency"]
+
+
+def _upgrade_ci_extra_columns(conn) -> None:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(commission_invoices)").fetchall()}
+    for col in CI_EXTRA_FIELDS:
+        if col not in cols:
+            conn.execute(f"ALTER TABLE commission_invoices ADD COLUMN {col} TEXT")
 
 
 def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -215,6 +231,7 @@ def upgrade_commission_invoices_schema() -> None:
             CREATE INDEX IF NOT EXISTS idx_ci_deal ON commission_invoices(deal_id);
             """
         )
+        _upgrade_ci_extra_columns(conn)
 
 
 # ── CRUD ─────────────────────────────────────────────────────────────────────
