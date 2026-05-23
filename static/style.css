@@ -758,49 +758,33 @@ tr:hover td { background: #f8fafc; }
 }
 
 .link-mode-btn {
-  padding: 0.45rem 1.1rem;
+  padding: 0.45rem 1.25rem;
   font-size: 0.85rem;
-  font-weight: 500;
-  font-family: inherit;
-  border: none;
-  border-right: 1px solid rgba(255,255,255,0.25);
-  cursor: pointer;
-  transition: filter 0.12s, opacity 0.12s;
-  white-space: nowrap;
-}
-
-.link-mode-btn:last-child { border-right: none; }
-
-/* Each button has its own colour; dimmed when not active */
-.link-mode-btn[data-value="existing"] {
-  background: #2563eb;
-  color: #fff;
-}
-.link-mode-btn[data-value="new"] {
-  background: #059669;
-  color: #fff;
-}
-.link-mode-btn[data-value="none"] {
-  background: #7c3aed;
-  color: #fff;
-}
-
-/* Non-active buttons are muted */
-.link-mode-btn:not(.active) {
-  opacity: 0.42;
-  filter: saturate(0.6);
-}
-
-.link-mode-btn:hover {
-  opacity: 0.85;
-  filter: saturate(1);
-}
-
-.link-mode-btn.active {
-  opacity: 1;
-  filter: none;
   font-weight: 600;
+  font-family: inherit;
+  border: none !important;
+  outline: none;
+  border-right: 1px solid rgba(255,255,255,0.3) !important;
+  cursor: pointer;
+  transition: filter 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  -webkit-appearance: none;
+  appearance: none;
 }
+
+.link-mode-btn:last-child { border-right: none !important; }
+
+/* Individual colours */
+.link-mode-btn[data-value="existing"] { background: #2563eb; color: #fff; }
+.link-mode-btn[data-value="new"]      { background: #059669; color: #fff; }
+.link-mode-btn[data-value="none"]     { background: #7c3aed; color: #fff; }
+
+/* Inactive = muted */
+.link-mode-btn:not(.active) { opacity: 0.38; filter: saturate(0.5); }
+
+.link-mode-btn:hover { opacity: 0.82; filter: saturate(1); }
+
+.link-mode-btn.active { opacity: 1; filter: none; }
 
 .panel { display: none; padding: 0.75rem; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); }
 
