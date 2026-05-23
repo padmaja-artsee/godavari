@@ -745,25 +745,45 @@ tr:hover td { background: #f8fafc; }
 
 .log-portal .form-grid { padding: 1.25rem; }
 
-.link-mode-row { display: flex; flex-direction: column; gap: 0.5rem; }
+.link-mode-row { display: flex; flex-direction: column; gap: 0.35rem; }
 
-.radio-card {
+/* ── Segmented button group ── */
+.link-mode-btn-group {
   display: flex;
-  gap: 0.65rem;
-  align-items: flex-start;
-  padding: 0.75rem 1rem;
+  gap: 0;
   border: 1px solid var(--border);
   border-radius: 8px;
-  cursor: pointer;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.link-mode-btn {
+  padding: 0.45rem 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  border-right: 1px solid var(--border);
   background: #f8fafc;
+  color: #374151;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+  position: relative;
 }
 
-.radio-card:has(input:checked) {
-  border-color: #93c5fd;
-  background: #eff6ff;
+.link-mode-btn:last-child { border-right: none; }
+
+.link-mode-btn:hover {
+  background: #e0f2fe;
+  color: #0369a1;
 }
 
-.radio-card input { margin-top: 0.2rem; }
+.link-mode-btn.active {
+  background: #1d4ed8;
+  color: #fff;
+  font-weight: 600;
+}
 
 .panel { display: none; padding: 0.75rem; background: #f8fafc; border-radius: 8px; border: 1px solid var(--border); }
 

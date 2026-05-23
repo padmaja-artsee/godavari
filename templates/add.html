@@ -10,29 +10,39 @@
 </div>
 
 <div class="filters" style="margin-bottom:1.25rem">
-  <a href="/add?tab=log" class="filter-pill {% if tab == 'log' %}active{% endif %}">Log update</a>
+  <a href="/add?tab=log" class="filter-pill {% if tab == 'log' %}active{% endif %}">Add or update</a>
   <a href="/add?tab=lead" class="filter-pill {% if tab == 'lead' %}active{% endif %}">Contact only</a>
   <a href="/add?tab=deal" class="filter-pill {% if tab == 'deal' %}active{% endif %}">Deal only (quick)</a>
 </div>
 
 {% if tab == 'log' %}
 <div class="card log-portal">
-  <div class="card-header"><h2>Log update — complete portal</h2></div>
+  <div class="card-header"><h2>Add or update — complete portal</h2></div>
   <form method="post" action="/add/log{% if return_to %}?return_to={{ return_to | urlencode }}{% endif %}" class="form-grid" id="log-form">
     <div class="full link-mode-row">
-      <label class="full">Attach this entry to:</label>
-      <label class="radio-card">
-        <input type="radio" name="link_mode" value="existing" {% if preset_deal_id %}checked{% endif %} />
-        <span><strong>Existing deal</strong> — email/quote on a pursuit in progress or closed</span>
-      </label>
-      <label class="radio-card">
-        <input type="radio" name="link_mode" value="new" {% if preset_product and not preset_deal_id %}checked{% endif %} />
-        <span><strong>Start new deal</strong> — first log entry + open a new deal row</span>
-      </label>
-      <label class="radio-card">
-        <input type="radio" name="link_mode" value="none" {% if not preset_deal_id and not preset_product %}checked{% endif %} />
-        <span><strong>Company only</strong> — general email, no specific deal yet</span>
-      </label>
+      <label class="full" style="margin-bottom:.4rem;font-size:.8rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Attach to</label>
+      <div class="link-mode-btn-group" id="link-mode-btns">
+        <input type="hidden" name="link_mode" id="link-mode-hidden"
+               value="{% if preset_deal_id %}existing{% elif preset_product and not preset_deal_id %}new{% else %}none{% endif %}" />
+        <button type="button"
+                class="link-mode-btn {% if preset_deal_id %}active{% endif %}"
+                data-value="existing"
+                title="Email / quote on a pursuit in progress or closed">
+          Existing deal
+        </button>
+        <button type="button"
+                class="link-mode-btn {% if preset_product and not preset_deal_id %}active{% endif %}"
+                data-value="new"
+                title="First log entry + open a new deal row">
+          Start new deal
+        </button>
+        <button type="button"
+                class="link-mode-btn {% if not preset_deal_id and not preset_product %}active{% endif %}"
+                data-value="none"
+                title="General email, no specific deal yet">
+          Company only
+        </button>
+      </div>
     </div>
 
     <div class="full log-company-row">
@@ -176,7 +186,7 @@
 {% else %}
 <div class="card" style="max-width:720px">
   <div class="card-header"><h2>Deal only (no log entry)</h2></div>
-  <p class="form-hint">Prefer <a href="/add?tab=log">Log update</a> to open a deal and record the first email together.</p>
+  <p class="form-hint">Prefer <a href="/add?tab=log">Add or update</a> to open a deal and record the first email together.</p>
   <form method="post" action="/add/deal" class="form-grid">
     <div class="full"><label>Company *</label><input name="company" required list="customers" value="{{ preset_company }}" /></div>
     <div class="full"><label>Product *</label><input name="product" required list="products" value="{{ preset_product }}" /></div>

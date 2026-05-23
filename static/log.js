@@ -9,9 +9,13 @@
 
   if (!companyInput) return;
 
+  const linkHidden = document.getElementById("link-mode-hidden");
+
   function setLinkMode(mode) {
-    document.querySelectorAll('#log-form input[name="link_mode"]').forEach((el) => {
-      el.checked = el.value === mode;
+    if (linkHidden) linkHidden.value = mode;
+    // update button active state
+    document.querySelectorAll("#link-mode-btns .link-mode-btn").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.value === mode);
     });
     Object.keys(panels).forEach((k) => {
       const panel = panels[k];
@@ -25,23 +29,15 @@
     });
   }
 
-  const logForm = document.getElementById("log-form");
-  if (logForm) {
-    logForm.addEventListener("submit", () => {
-      const checked = logForm.querySelector('input[name="link_mode"]:checked');
-      if (checked) setLinkMode(checked.value);
-    });
-  }
-
   async function loadDeals(company) {
     if (!dealSelect) return;
-    const mode = document.querySelector('#log-form input[name="link_mode"]:checked');
+    const mode = linkHidden ? linkHidden.value : "none";
     if (!company.trim()) {
       dealSelect.innerHTML =
         '<option value="">— Enter company name first —</option>';
       return;
     }
-    if (mode && mode.value !== "existing") {
+    if (mode !== "existing") {
       return;
     }
     dealSelect.innerHTML = '<option value="">Loading deals…</option>';
@@ -84,15 +80,15 @@
   companyInput.addEventListener("input", scheduleLoadDeals);
   companyInput.addEventListener("change", scheduleLoadDeals);
 
-  document.querySelectorAll('#log-form input[name="link_mode"]').forEach((el) => {
-    el.addEventListener("change", () => {
-      setLinkMode(el.value);
-      if (el.value === "existing") scheduleLoadDeals();
+  document.querySelectorAll("#link-mode-btns .link-mode-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setLinkMode(btn.dataset.value);
+      if (btn.dataset.value === "existing") scheduleLoadDeals();
     });
   });
 
   if (companyInput.value) scheduleLoadDeals();
 
-  const initial = document.querySelector('#log-form input[name="link_mode"]:checked');
-  if (initial) setLinkMode(initial.value);
+  // Apply initial mode from hidden input
+  if (linkHidden) setLinkMode(linkHidden.value);
 })();
