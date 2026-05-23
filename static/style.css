@@ -763,25 +763,42 @@ tr:hover td { background: #f8fafc; }
   font-weight: 500;
   font-family: inherit;
   border: none;
-  border-right: 1px solid var(--border);
-  background: #f8fafc;
-  color: #374151;
+  border-right: 1px solid rgba(255,255,255,0.25);
   cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: filter 0.12s, opacity 0.12s;
   white-space: nowrap;
-  position: relative;
 }
 
 .link-mode-btn:last-child { border-right: none; }
 
+/* Each button has its own colour; dimmed when not active */
+.link-mode-btn[data-value="existing"] {
+  background: #2563eb;
+  color: #fff;
+}
+.link-mode-btn[data-value="new"] {
+  background: #059669;
+  color: #fff;
+}
+.link-mode-btn[data-value="none"] {
+  background: #7c3aed;
+  color: #fff;
+}
+
+/* Non-active buttons are muted */
+.link-mode-btn:not(.active) {
+  opacity: 0.42;
+  filter: saturate(0.6);
+}
+
 .link-mode-btn:hover {
-  background: #e0f2fe;
-  color: #0369a1;
+  opacity: 0.85;
+  filter: saturate(1);
 }
 
 .link-mode-btn.active {
-  background: #1d4ed8;
-  color: #fff;
+  opacity: 1;
+  filter: none;
   font-weight: 600;
 }
 
