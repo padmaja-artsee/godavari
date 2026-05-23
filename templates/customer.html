@@ -14,7 +14,7 @@
     {% endif %}
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-    <a href="/add?tab=log&company={{ detail.customer.name | urlencode }}{% if detail.product_filter %}&product={{ detail.product_filter | urlencode }}{% endif %}" class="btn btn-primary">+ Log update</a>
+    <a href="/add?tab=log&company={{ detail.customer.name | urlencode }}{% if detail.product_filter %}&product={{ detail.product_filter | urlencode }}{% endif %}" class="btn btn-primary">+ Add or update</a>
     <a href="/add?tab=deal&company={{ detail.customer.name | urlencode }}" class="btn btn-ghost">+ Create deal</a>
     <form method="post" action="/customer/{{ detail.customer.id }}/delete" class="inline-form"
       onsubmit="return confirm('Delete {{ detail.customer.name }} and all deals, activities, and contact data? This cannot be undone.');">
@@ -201,7 +201,7 @@
     {% endif %}
 
     {% if not detail.timeline.deal_groups and not detail.timeline.company_level %}
-    <div class="empty">No activity logged. Use <strong>Log update</strong> to record emails and deal progress.</div>
+    <div class="empty">No activity logged. Use <strong>Add or update</strong> to record emails and deal progress.</div>
     {% endif %}
   </div>
 </div>

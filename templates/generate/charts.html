@@ -1,0 +1,487 @@
+{% extends "base.html" %}
+{% block title %}Charts{% endblock %}
+{% block extra_css %}
+<style>
+/* ── Charts page ─────────────────────────────────────────── */
+.charts-header { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
+.charts-header-left h1 { margin:0 0 .2rem; }
+.charts-header-left .subtitle { margin:0; color:var(--muted); font-size:.92rem; }
+
+.charts-toolbar {
+  display:flex; align-items:center; gap:.5rem; flex-wrap:wrap;
+  margin: 1rem 0 1.25rem;
+  background:#f8f9fa; border:1px solid #dee2e6;
+  border-radius:8px; padding:.6rem .85rem;
+}
+.charts-toolbar label { font-size:.85rem; font-weight:600; color:#444; margin-right:.25rem; white-space:nowrap; }
+.period-pills { display:flex; gap:.3rem; flex-wrap:wrap; }
+.period-pill {
+  padding:.28rem .7rem; border-radius:20px; font-size:.8rem; font-weight:600;
+  border:1.5px solid #ccc; background:#fff; color:#555; cursor:pointer;
+  text-decoration:none; transition:all .15s;
+}
+.period-pill:hover { border-color:#1A5632; color:#1A5632; }
+.period-pill.active { background:#1A5632; color:#fff; border-color:#1A5632; }
+.charts-divider { width:1px; height:24px; background:#dee2e6; margin:0 .2rem; }
+
+.metric-toggles { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
+.metric-toggle {
+  display:flex; align-items:center; gap:.3rem;
+  font-size:.8rem; font-weight:500; color:#333; cursor:pointer;
+  padding:.25rem .55rem; border:1.5px solid #ddd; border-radius:20px; background:#fff;
+  transition:all .15s; user-select:none;
+}
+.metric-toggle:hover { border-color:#888; }
+.metric-toggle input { margin:0; cursor:pointer; accent-color:#1A5632; }
+.metric-toggle.active { border-color:#1A5632; background:#eaf3ec; }
+
+.charts-actions { display:flex; gap:.5rem; margin-left:auto; }
+
+/* Charts grid */
+.charts-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:1.25rem; margin-top:.5rem;
+}
+.chart-card-wide { grid-column: 1 / -1; }
+
+.chart-card {
+  background:#fff; border:1px solid #e0e0e0; border-radius:10px;
+  box-shadow:0 1px 4px rgba(0,0,0,.06);
+  overflow:hidden; display:flex; flex-direction:column;
+}
+.chart-card-header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:.65rem 1rem .5rem; border-bottom:1px solid #f0f0f0;
+}
+.chart-card-title { font-size:.95rem; font-weight:700; color:#1A5632; margin:0; }
+.chart-card-subtitle { font-size:.75rem; color:#888; margin:.1rem 0 0; }
+.chart-card-body { flex:1; padding:.5rem; min-height:0; }
+.chart-plot { width:100%; }
+
+.btn-download-chart {
+  display:inline-flex; align-items:center; gap:.3rem;
+  padding:.28rem .65rem; border-radius:6px; font-size:.78rem; font-weight:600;
+  border:1.5px solid #ccc; background:#fff; color:#555; cursor:pointer;
+  transition:all .15s;
+}
+.btn-download-chart:hover { border-color:#1A5632; color:#1A5632; }
+.btn-download-chart svg { width:13px; height:13px; }
+
+.charts-note {
+  font-size:.78rem; color:#888; margin:.75rem 0 0;
+  padding:.5rem .75rem; background:#fffde7; border-left:3px solid #f9a825;
+  border-radius:0 6px 6px 0;
+}
+
+@media (max-width:900px) {
+  .charts-grid { grid-template-columns:1fr; }
+  .chart-card-wide { grid-column:1; }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Charts</h1>
+    <p class="subtitle">Board-ready deal and revenue analytics. Each chart can be downloaded as a PNG.</p>
+  </div>
+  <div class="page-header-actions">
+    <a href="/generate" class="btn btn-ghost btn-sm">← Generate hub</a>
+  </div>
+</div>
+
+{# ── Toolbar ── #}
+<div class="charts-toolbar">
+  <label>Period:</label>
+  <div class="period-pills">
+    {% for p, label in [('3m','3 months'),('6m','6 months'),('12m','12 months'),('ytd','This year'),('lastyear','Last year'),('all','All time')] %}
+    <a href="/generate/charts?period={{ p }}"
+       class="period-pill {% if period == p %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  <div class="charts-divider"></div>
+  <label>Show:</label>
+  <div class="metric-toggles">
+    <label class="metric-toggle active" id="tog-deals-month">
+      <input type="checkbox" checked data-chart="deals-month"> Deals over time
+    </label>
+    <label class="metric-toggle active" id="tog-revenue-month">
+      <input type="checkbox" checked data-chart="revenue-month"> Revenue over time
+    </label>
+    <label class="metric-toggle active" id="tog-combined">
+      <input type="checkbox" checked data-chart="combined"> Combined view
+    </label>
+    <label class="metric-toggle active" id="tog-status">
+      <input type="checkbox" checked data-chart="status"> By status
+    </label>
+    <label class="metric-toggle active" id="tog-products">
+      <input type="checkbox" checked data-chart="products"> By product
+    </label>
+    <label class="metric-toggle active" id="tog-customers">
+      <input type="checkbox" checked data-chart="customers"> Top customers
+    </label>
+    <label class="metric-toggle active" id="tog-shipped">
+      <input type="checkbox" checked data-chart="shipped"> Shipped
+    </label>
+  </div>
+
+  <div class="charts-actions">
+    <a href="/generate/charts?period={{ period }}" class="btn btn-sm btn-ghost" title="Reload with fresh data">
+      ↻ Refresh
+    </a>
+  </div>
+</div>
+
+<p class="charts-note">
+  Revenue figures are best-effort: deals where price or quantity are not purely numeric are counted but excluded from revenue totals.
+  Data refreshed on page load — click Refresh to pull the latest.
+</p>
+
+{# ── Charts grid ── #}
+<div class="charts-grid" id="charts-grid">
+
+  {# 1. Deals over time #}
+  <div class="chart-card" data-chart-id="deals-month">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Deals Over Time</div>
+        <div class="chart-card-subtitle">Number of deals created per month</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-deals-month','deals_over_time')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-deals-month" class="chart-plot"></div></div>
+  </div>
+
+  {# 2. Revenue over time #}
+  <div class="chart-card" data-chart-id="revenue-month">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Revenue Over Time</div>
+        <div class="chart-card-subtitle">Estimated deal value (€) per month</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-revenue-month','revenue_over_time')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-revenue-month" class="chart-plot"></div></div>
+  </div>
+
+  {# 3. Combined — full width #}
+  <div class="chart-card chart-card-wide" data-chart-id="combined">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Deals & Revenue Combined</div>
+        <div class="chart-card-subtitle">Deal count (bars) and estimated revenue (line) — dual axis</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-combined','deals_and_revenue')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-combined" class="chart-plot"></div></div>
+  </div>
+
+  {# 4. By status #}
+  <div class="chart-card" data-chart-id="status">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Deals by Status</div>
+        <div class="chart-card-subtitle">Distribution of deal outcomes in period</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-status','deals_by_status')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-status" class="chart-plot"></div></div>
+  </div>
+
+  {# 5. By product #}
+  <div class="chart-card" data-chart-id="products">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Deals by Product</div>
+        <div class="chart-card-subtitle">Top products by deal count</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-products','deals_by_product')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-products" class="chart-plot"></div></div>
+  </div>
+
+  {# 6. Top customers #}
+  <div class="chart-card" data-chart-id="customers">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Top Customers</div>
+        <div class="chart-card-subtitle">Companies with most deals in period</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-customers','top_customers')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-customers" class="chart-plot"></div></div>
+  </div>
+
+  {# 7. Shipped deals by month — full width #}
+  <div class="chart-card chart-card-wide" data-chart-id="shipped">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Shipped Deals by Month</div>
+        <div class="chart-card-subtitle">Closed/shipped deal count and estimated revenue by close date</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-shipped','shipped_deals')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-shipped" class="chart-plot"></div></div>
+  </div>
+
+</div>{# /charts-grid #}
+
+{# ── Data and Plotly ── #}
+<script>
+const CD = {{ chart_data_json | safe }};
+</script>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<script>
+/* ─── Shared theme ─────────────────────────────────── */
+const FONT = { family: "'DM Sans', 'Segoe UI', Arial, sans-serif", size: 12, color: '#333' };
+const GREEN = '#1A5632';
+const GREEN2 = '#2d7a4f';
+const GOLD  = '#c8a400';
+const GRAY  = '#9e9e9e';
+const BASE_LAYOUT = {
+  margin: { t: 30, r: 20, b: 55, l: 70 },
+  font: FONT,
+  paper_bgcolor: '#fff',
+  plot_bgcolor: '#fafafa',
+  hovermode: 'x unified',
+  legend: { orientation: 'h', y: -0.22, x: 0, font: { size: 11 } },
+};
+const CAT_XAXIS = { type: 'category', showgrid: false, tickangle: -35, automargin: true };
+const NUM_YAXIS_BASE = { rangemode: 'tozero', gridcolor: '#eee', automargin: true, ticklabelstandoff: 8 };
+const CONFIG = {
+  displaylogo: false,
+  modeBarButtonsToRemove: ['sendDataToCloud','select2d','lasso2d','autoScale2d'],
+  responsive: true,
+};
+
+/* ─── Helpers ──────────────────────────────────────── */
+function fmtEur(v) {
+  if (!v) return '€0';
+  if (v >= 1e6) return '€' + (v/1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return '€' + (v/1e3).toFixed(1) + 'k';
+  return '€' + Math.round(v).toLocaleString();
+}
+
+function monthLabels(rows, key='month') {
+  return rows.map(r => r[key]);
+}
+
+/* ─── 1. Deals over time ───────────────────────────── */
+function renderDealsMonth() {
+  const d = CD.by_month;
+  if (!d.length) return empty('plot-deals-month');
+  Plotly.newPlot('plot-deals-month', [{
+    type: 'bar',
+    x: monthLabels(d),
+    y: d.map(r => r.deal_count),
+    marker: { color: GREEN },
+    name: 'Deals',
+    hovertemplate: '<b>%{x}</b><br>Deals: %{y}<extra></extra>',
+  }], {
+    ...BASE_LAYOUT,
+    yaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
+    xaxis: CAT_XAXIS,
+  }, CONFIG);
+}
+
+/* ─── 2. Revenue over time ─────────────────────────── */
+function renderRevenueMonth() {
+  const d = CD.by_month.filter(r => r.revenue > 0);
+  if (!d.length) return empty('plot-revenue-month');
+  Plotly.newPlot('plot-revenue-month', [{
+    type: 'bar',
+    x: monthLabels(d),
+    y: d.map(r => r.revenue),
+    marker: { color: GOLD },
+    name: 'Revenue (€)',
+    hovertemplate: '<b>%{x}</b><br>Revenue: €%{y:,.0f}<extra></extra>',
+  }], {
+    ...BASE_LAYOUT,
+    yaxis: { ...NUM_YAXIS_BASE, title: 'Revenue (€)', tickformat: ',.0f' },
+    xaxis: CAT_XAXIS,
+  }, CONFIG);
+}
+
+/* ─── 3. Combined dual-axis ────────────────────────── */
+function renderCombined() {
+  const d = CD.by_month;
+  if (!d.length) return empty('plot-combined');
+  const traces = [
+    {
+      type: 'bar',
+      name: 'Deals (left)',
+      x: monthLabels(d), y: d.map(r => r.deal_count),
+      marker: { color: GREEN, opacity: 0.85 },
+      yaxis: 'y',
+      hovertemplate: '<b>%{x}</b><br>Deals: %{y}<extra></extra>',
+    },
+    {
+      type: 'scatter', mode: 'lines+markers',
+      name: 'Revenue € (right)',
+      x: monthLabels(d), y: d.map(r => r.revenue),
+      line: { color: GOLD, width: 2.5 },
+      marker: { size: 6, color: GOLD },
+      yaxis: 'y2',
+      hovertemplate: '<b>%{x}</b><br>Revenue: €%{y:,.0f}<extra></extra>',
+    },
+  ];
+  Plotly.newPlot('plot-combined', traces, {
+    ...BASE_LAYOUT,
+    margin: { t: 30, r: 80, b: 55, l: 70 },
+    yaxis:  { ...NUM_YAXIS_BASE, title: 'Deals', side: 'left' },
+    yaxis2: { ...NUM_YAXIS_BASE, title: 'Revenue (€)', overlaying: 'y',
+              side: 'right', showgrid: false, tickformat: ',.0f' },
+    xaxis:  { ...CAT_XAXIS },
+    legend: { orientation:'h', y:-0.22, x:0, font:{size:11} },
+  }, CONFIG);
+}
+
+/* ─── 4. By status ─────────────────────────────────── */
+function renderStatus() {
+  const d = CD.by_status;
+  if (!d.length) return empty('plot-status');
+  const STATUS_COLORS = { open:'#1A5632', shipped:'#2d7a4f', lost:'#c62828', lead:'#888' };
+  Plotly.newPlot('plot-status', [{
+    type: 'pie',
+    labels: d.map(r => r.status.charAt(0).toUpperCase() + r.status.slice(1)),
+    values: d.map(r => r.deal_count),
+    marker: { colors: d.map(r => STATUS_COLORS[r.status] || '#90a4ae') },
+    hole: 0.42,
+    textinfo: 'label+percent',
+    hovertemplate: '<b>%{label}</b><br>%{value} deals (%{percent})<extra></extra>',
+    insidetextfont: { color: '#fff', size: 12 },
+  }], {
+    ...BASE_LAYOUT,
+    margin: { t: 30, r: 30, b: 30, l: 30 },
+    legend: { orientation:'v', x:1.0, y:0.5 },
+    hovermode: 'closest',
+  }, CONFIG);
+}
+
+/* ─── 5. By product ────────────────────────────────── */
+function renderProducts() {
+  const d = [...CD.top_products].reverse();
+  if (!d.length) return empty('plot-products');
+  Plotly.newPlot('plot-products', [{
+    type: 'bar', orientation: 'h',
+    y: d.map(r => r.product),
+    x: d.map(r => r.deal_count),
+    marker: { color: GREEN2 },
+    name: 'Deals',
+    hovertemplate: '<b>%{y}</b><br>Deals: %{x}<extra></extra>',
+  }], {
+    ...BASE_LAYOUT,
+    margin: { t: 30, r: 20, b: 45, l: 170 },
+    xaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
+    yaxis: { showgrid: false, automargin: true, ticklabelstandoff: 8 },
+    hovermode: 'closest',
+  }, CONFIG);
+}
+
+/* ─── 6. Top customers ─────────────────────────────── */
+function renderCustomers() {
+  const d = [...CD.top_customers].reverse();
+  if (!d.length) return empty('plot-customers');
+  Plotly.newPlot('plot-customers', [{
+    type: 'bar', orientation: 'h',
+    y: d.map(r => r.customer),
+    x: d.map(r => r.deal_count),
+    marker: { color: GREEN, opacity: 0.85 },
+    name: 'Deals',
+    hovertemplate: '<b>%{y}</b><br>Deals: %{x}<extra></extra>',
+  }], {
+    ...BASE_LAYOUT,
+    margin: { t: 30, r: 20, b: 45, l: 180 },
+    xaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
+    yaxis: { showgrid: false, automargin: true, ticklabelstandoff: 8 },
+    hovermode: 'closest',
+  }, CONFIG);
+}
+
+/* ─── 7. Shipped by month ──────────────────────────── */
+function renderShipped() {
+  const d = CD.shipped_by_month;
+  if (!d.length) return empty('plot-shipped');
+  const traces = [
+    {
+      type: 'bar', name: 'Shipped deals (left)',
+      x: monthLabels(d), y: d.map(r => r.deal_count),
+      marker: { color: GREEN2 },
+      yaxis: 'y',
+      hovertemplate: '<b>%{x}</b><br>Shipped: %{y}<extra></extra>',
+    },
+    {
+      type: 'scatter', mode: 'lines+markers',
+      name: 'Revenue € (right)',
+      x: monthLabels(d), y: d.map(r => r.revenue),
+      line: { color: GOLD, width: 2.5 },
+      marker: { size: 6, color: GOLD },
+      yaxis: 'y2',
+      hovertemplate: '<b>%{x}</b><br>Revenue: €%{y:,.0f}<extra></extra>',
+    },
+  ];
+  Plotly.newPlot('plot-shipped', traces, {
+    ...BASE_LAYOUT,
+    margin: { t: 30, r: 80, b: 55, l: 70 },
+    yaxis:  { ...NUM_YAXIS_BASE, title: 'Shipped deals', side: 'left' },
+    yaxis2: { ...NUM_YAXIS_BASE, title: 'Revenue (€)', overlaying: 'y',
+              side: 'right', showgrid: false, tickformat: ',.0f' },
+    xaxis:  { ...CAT_XAXIS },
+    legend: { orientation:'h', y:-0.22, x:0, font:{size:11} },
+  }, CONFIG);
+}
+
+/* ─── empty placeholder ────────────────────────────── */
+function empty(id) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = '<p style="color:#aaa;text-align:center;padding:2rem 0;font-size:.9rem">No data for this period</p>';
+}
+
+/* ─── Download individual chart ────────────────────── */
+function downloadChart(divId, filename) {
+  Plotly.downloadImage(divId, { format:'png', width:1400, height:700, filename: filename });
+}
+
+/* ─── Metric toggles ───────────────────────────────── */
+document.querySelectorAll('.metric-toggle input').forEach(cb => {
+  cb.addEventListener('change', function() {
+    const chartId = this.dataset.chart;
+    const card = document.querySelector(`[data-chart-id="${chartId}"]`);
+    if (card) card.style.display = this.checked ? '' : 'none';
+    this.closest('.metric-toggle').classList.toggle('active', this.checked);
+  });
+});
+
+/* ─── Render all on load ───────────────────────────── */
+renderDealsMonth();
+renderRevenueMonth();
+renderCombined();
+renderStatus();
+renderProducts();
+renderCustomers();
+renderShipped();
+</script>
+{% endblock %}

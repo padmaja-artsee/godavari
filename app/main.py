@@ -1055,6 +1055,18 @@ async def generate_index(request: Request):
     )
 
 
+@app.get("/generate/charts", response_class=HTMLResponse)
+async def charts_page(request: Request, period: str = "12m"):
+    import json
+    from app.charts import all_chart_data
+    data = all_chart_data(period)
+    return templates.TemplateResponse(
+        "generate/charts.html",
+        ctx(request, page="generate", period=period,
+            chart_data_json=json.dumps(data)),
+    )
+
+
 @app.get("/generate/purchase-orders", response_class=HTMLResponse)
 async def po_list_page(request: Request):
     return templates.TemplateResponse(
