@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "generate/commission_invoices/_ci_body.html" import ci_body %}
+{% block title %}CI {{ ci.invoice_number }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/generate.css" />
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+{% endblock %}
+{% block content %}
+<div class="page-header no-print">
+  <div>
+    <h1>CI {{ ci.invoice_number }}</h1>
+    <p class="subtitle">
+      <a class="link" href="/generate/commission-invoices">← Commission Invoices</a> ·
+      <a class="link" href="/generate">Generate</a>
+    </p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="/generate/commission-invoices/{{ ci.id }}/edit" class="btn btn-primary">Edit</a>
+    <form method="post" action="/generate/commission-invoices/{{ ci.id }}/duplicate" style="display:inline">
+      <button type="submit" class="btn btn-ghost">Duplicate</button>
+    </form>
+    <a href="/generate/commission-invoices/{{ ci.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
+    <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost" target="_blank">Print</a>
+    <form method="post" action="/generate/commission-invoices/{{ ci.id }}/delete" style="display:inline"
+          onsubmit="return confirm('Delete this Commission Invoice?');">
+      <button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button>
+    </form>
+  </div>
+</div>
+
+{% if saved_msg %}<p class="card no-print" style="background:#ecfdf5;border-color:#86efac">{{ saved_msg }}</p>{% endif %}
+
+<div class="po-shell">
+  {{ ci_body(ci, readonly=true) }}
+</div>
+{% endblock %}

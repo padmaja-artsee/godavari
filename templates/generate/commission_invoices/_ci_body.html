@@ -1,0 +1,230 @@
+{% macro ci_body(ci, readonly=false) %}
+<div class="po-page po-excel-layout ci-page">
+
+  {# ── Header: logo + company ── #}
+  <div class="po-brand-row">
+    <img src="/static/gbbv-logo.png" alt="GBBV logo" class="po-logo" />
+    <div class="po-brand-text">
+      {% if readonly %}
+      <div class="po-company-title">{{ ci.company_name or '' }}</div>
+      <div class="ci-doc-title">{{ ci.document_title or 'COMMISSION INVOICE' }}</div>
+      {% else %}
+      <input class="po-input po-company-title" name="company_name" value="{{ ci.company_name or '' }}" />
+      <input class="po-input ci-doc-title" name="document_title" value="{{ ci.document_title or 'COMMISSION INVOICE' }}" />
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Bill-to + Invoice meta ── #}
+  <div class="po-meta-grid">
+    <div class="po-meta-left">
+      <p class="ci-to-label">TO</p>
+      {% if readonly %}
+      <p><strong>{{ ci.bill_to_name }}</strong></p>
+      <p>{{ ci.bill_to_address_1 }}</p>
+      <p>{{ ci.bill_to_address_2 }}</p>
+      {% if ci.bill_to_address_3 %}<p>{{ ci.bill_to_address_3 }}</p>{% endif %}
+      <p><strong>Customer Order no :</strong> {{ ci.customer_order_no or '—' }}</p>
+      {% else %}
+      <input class="po-input" name="bill_to_name" value="{{ ci.bill_to_name or '' }}" placeholder="e.g. Godavari Biorefineries Ltd" />
+      <input class="po-input" name="bill_to_address_1" value="{{ ci.bill_to_address_1 or '' }}" placeholder="Address line 1" />
+      <input class="po-input" name="bill_to_address_2" value="{{ ci.bill_to_address_2 or '' }}" placeholder="Address line 2" />
+      <input class="po-input" name="bill_to_address_3" value="{{ ci.bill_to_address_3 or '' }}" placeholder="Address line 3 (optional)" />
+      <div class="ci-order-row">
+        <span class="po-hs-label">Customer Order no</span>
+        <input class="po-mkinput" name="customer_order_no" value="{{ ci.customer_order_no or '' }}" placeholder="e.g. PO-12345" />
+      </div>
+      {% endif %}
+    </div>
+    <table class="po-order-kv">
+      <tr><th>Invoice No</th>
+          <td>{% if readonly %}{{ ci.invoice_number }}{% else %}<input class="po-inline-input" name="invoice_number" value="{{ ci.invoice_number or '' }}" required />{% endif %}</td></tr>
+      <tr><th>Date</th>
+          <td>{% if readonly %}{{ ci.invoice_date }}{% else %}<input class="po-inline-input" type="date" name="invoice_date" value="{{ ci.invoice_date or '' }}" required />{% endif %}</td></tr>
+    </table>
+  </div>
+
+  {# ── Transaction description ── #}
+  <div class="ci-section-head">TRANSACTION DESCRIPTION</div>
+  <div class="ci-txn-row">
+    {% if readonly %}
+    {{ ci.transaction_description or '' }}
+    {% else %}
+    <input class="po-mkinput ci-txn-input" name="transaction_description"
+           value="{{ ci.transaction_description or '' }}"
+           placeholder="Commission For Sales of [Product] to [Customer], [Country]" />
+    {% endif %}
+  </div>
+
+  {# ── Shipment details ── #}
+  <div class="ci-shipment-grid">
+    <div class="ci-ship-left">
+      <div class="ci-ship-row">
+        <span class="ci-ship-label">Shipment Direct from GBL on</span>
+        {% if readonly %}{{ ci.shipment_date or '—' }}{% else %}
+        <input class="po-mkinput" type="date" name="shipment_date" value="{{ ci.shipment_date or '' }}" />{% endif %}
+      </div>
+      <div class="ci-ship-row">
+        <span class="ci-ship-label">Port of Loading</span>
+        {% if readonly %}{{ ci.port_of_loading or '—' }}{% else %}
+        <input class="po-mkinput" name="port_of_loading" value="{{ ci.port_of_loading or '' }}" placeholder="e.g. Mundra" />{% endif %}
+      </div>
+      <div class="ci-ship-row">
+        <span class="ci-ship-label">Container No</span>
+        {% if readonly %}{{ ci.container_numbers or '—' }}{% else %}
+        <input class="po-mkinput" name="container_numbers" value="{{ ci.container_numbers or '' }}" placeholder="e.g. TCKU123456" />{% endif %}
+      </div>
+    </div>
+    <div class="ci-ship-right">
+      <div class="ci-ship-row">
+        <span class="ci-ship-label">BL No</span>
+        {% if readonly %}{{ ci.bl_number or '—' }}{% else %}
+        <input class="po-mkinput" name="bl_number" value="{{ ci.bl_number or '' }}" placeholder="e.g. ONED123456" />{% endif %}
+      </div>
+      <div class="ci-ship-row">
+        <span class="ci-ship-label">BL Date</span>
+        {% if readonly %}{{ ci.bl_date or '—' }}{% else %}
+        <input class="po-mkinput" type="date" name="bl_date" value="{{ ci.bl_date or '' }}" />{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Commission table ── #}
+  <table class="ci-table" id="ci-lines-table">
+    <thead>
+      <tr>
+        <th class="ci-col-product">PRODUCT AND OTHER DESCRIPTION</th>
+        <th class="ci-col-gblinv">GBL Invoice #</th>
+        <th class="ci-col-qty">QUANTITY<br><span class="ci-subunit">MT</span></th>
+        <th class="ci-col-fob">Value<br><span class="ci-subunit">FOB Euro</span></th>
+        <th class="ci-col-rate">Commission<br><span class="ci-subunit">Rate</span></th>
+        <th class="ci-col-val">VALUE<br><span class="ci-subunit">Euro</span></th>
+      </tr>
+    </thead>
+    <tbody id="ci-lines-body">
+      {% for line in ci.line_items %}
+      <tr class="ci-line-row">
+        <td>{% if readonly %}{{ line.product_description }}{% else %}<input class="po-input" name="product_description" value="{{ line.product_description or '' }}" required />{% endif %}</td>
+        <td>{% if readonly %}{{ line.gbl_invoice_number or '—' }}{% else %}<input class="po-input" name="gbl_invoice_number" value="{{ line.gbl_invoice_number or '' }}" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}{{ line.quantity|num }}{% else %}<input class="po-number-input ci-qty" name="quantity" value="{{ line.quantity or '' }}" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}{{ line.fob_value|num }}{% else %}<input class="po-number-input ci-fob" name="fob_value" value="{{ line.fob_value or '' }}" />{% endif %}</td>
+        <td class="ci-num">
+          {% if readonly %}{{ line.commission_rate|num }}%{% else %}
+          <input class="po-number-input ci-rate" name="commission_rate" value="{{ line.commission_rate or 3 }}" />
+          {% endif %}
+        </td>
+        <td class="ci-num ci-val-cell">
+          {% if readonly %}{{ line.commission_value|money }}{% else %}
+          <output class="ci-line-value">{{ line.commission_value|money }}</output>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      {% if not ci.line_items %}
+      <tr class="ci-line-row">
+        <td><input class="po-input" name="product_description" value="" required placeholder="e.g. Crotonaldehyde to BASF SE" /></td>
+        <td><input class="po-input" name="gbl_invoice_number" value="" /></td>
+        <td class="ci-num"><input class="po-number-input ci-qty" name="quantity" value="" /></td>
+        <td class="ci-num"><input class="po-number-input ci-fob" name="fob_value" value="" /></td>
+        <td class="ci-num"><input class="po-number-input ci-rate" name="commission_rate" value="3" /></td>
+        <td class="ci-num ci-val-cell"><output class="ci-line-value">0.00</output></td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  {% if not readonly %}
+  <div class="ci-line-actions no-print">
+    <button type="button" id="ci-add-line" class="btn btn-ghost btn-sm">+ Add line</button>
+  </div>
+  {% endif %}
+
+  {# ── Totals ── #}
+  <div class="ci-totals-block">
+    <div class="ci-total-row ci-total-grand">
+      <span>TOTAL</span>
+      <span id="ci-total-commission">{{ ci.total_commission|money if ci.total_commission else '0.00' }}</span>
+    </div>
+    <div class="ci-total-row">
+      <span>Net VALUE</span>
+      <span id="ci-net-value">{{ ci.net_value|money if ci.net_value else '0.00' }}</span>
+    </div>
+    <div class="ci-total-row">
+      <span>VAT
+        {% if readonly %}({{ ci.vat_percent|int }} %){% else %}
+        (<input class="po-number-input ci-vat-pct" name="vat_percent" value="{{ ci.vat_percent|int }}" style="width:2.5rem;text-align:center" /> %)
+        {% endif %}
+      </span>
+      <span id="ci-vat-amount">{{ ci.vat_amount|money if ci.vat_amount else '0.00' }}</span>
+    </div>
+    <div class="ci-total-row ci-total-pay">
+      <span>TOTAL TO PAY</span>
+      <span id="ci-total-pay">{{ ci.total_to_pay|money if ci.total_to_pay else '0.00' }}</span>
+    </div>
+    <div class="ci-total-row ci-inwords-row">
+      <span>In Words</span>
+      {% if readonly %}
+      <span>{{ ci.amount_in_words or '' }}</span>
+      {% else %}
+      <input class="po-mkinput ci-inwords-input" name="amount_in_words" value="{{ ci.amount_in_words or '' }}" placeholder="e.g. Euro Three Thousand Only" />
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Payment Terms + Enclosures ── #}
+  <div class="ci-pay-enc-grid">
+    <div>
+      <span class="ci-ship-label">Payment Terms</span>
+      {% if readonly %}{{ ci.payment_terms or '—' }}{% else %}
+      <input class="po-mkinput" name="payment_terms" value="{{ ci.payment_terms or 'Prompt' }}" />{% endif %}
+    </div>
+    <div>
+      <span class="ci-ship-label">Enclosures</span>
+      {% if readonly %}{{ ci.enclosures or '—' }}{% else %}
+      <textarea class="po-mkinput ci-enc-textarea" name="enclosures" rows="2">{{ ci.enclosures or '' }}</textarea>{% endif %}
+    </div>
+  </div>
+
+  {# ── Bank Details ── #}
+  <div class="ci-bank-block">
+    <p class="ci-bank-title">BANK DETAILS</p>
+    <div class="ci-bank-grid">
+      <span class="ci-ship-label">Bank</span>
+      {% if readonly %}{{ ci.bank_name or '' }}{% else %}
+      <input class="po-mkinput" name="bank_name" value="{{ ci.bank_name or '' }}" />{% endif %}
+
+      <span class="ci-ship-label">Account No</span>
+      {% if readonly %}{{ ci.bank_account_no or '' }}{% else %}
+      <input class="po-mkinput" name="bank_account_no" value="{{ ci.bank_account_no or '' }}" />{% endif %}
+
+      <span class="ci-ship-label">IBAN</span>
+      {% if readonly %}{{ ci.bank_iban or '' }}{% else %}
+      <input class="po-mkinput" name="bank_iban" value="{{ ci.bank_iban or '' }}" />{% endif %}
+
+      <span class="ci-ship-label">BIC</span>
+      {% if readonly %}{{ ci.bank_bic or '' }}{% else %}
+      <input class="po-mkinput" name="bank_bic" value="{{ ci.bank_bic or '' }}" />{% endif %}
+    </div>
+  </div>
+
+  {# ── Signature + Footer ── #}
+  <div class="po-footer">
+    <div class="po-sig-block">
+      <p class="po-sig-for">For Godavari Biorefineries B.V.</p>
+      <div class="po-sig-line"></div>
+      <p class="po-sig-label">Authorised Signatory</p>
+    </div>
+    <div class="po-footer-company">
+      <img src="/static/footer logo.png" alt="Footer logo" class="po-footer-logo" />
+      <div class="po-footer-details">
+        <p>Commercial Register Number 34325188</p>
+        <p>VAT : NL8203.86.157.B.01</p>
+        <p>Bank : Rabobank – Haarlem / IBAN NL83RABO 0311323650 / BIC : RABONL2U</p>
+        <p>Address : Opaallaan 1180, &nbsp; 2132 LN &nbsp; Hoofddorp. &nbsp; The Netherlands.</p>
+        <p>Tel : +31 6 11 12 61 66</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endmacro %}

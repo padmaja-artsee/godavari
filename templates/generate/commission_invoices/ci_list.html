@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Commission Invoices{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Commission Invoices</h1>
+    <p class="subtitle"><a class="link" href="/generate">← Back to Generate</a></p>
+  </div>
+  <a href="/generate/commission-invoices/new" class="btn btn-primary">New Commission Invoice</a>
+</div>
+
+<div class="table-wrap card" style="padding:0;overflow-x:auto">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Invoice No</th>
+        <th>Date</th>
+        <th>Bill To</th>
+        <th>Product</th>
+        <th>Total Commission</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a class="link" href="/generate/commission-invoices/{{ row.id }}">{{ row.invoice_number or '—' }}</a></td>
+        <td>{{ row.invoice_date or '—' }}</td>
+        <td>{{ row.bill_to_name or '—' }}</td>
+        <td>{{ row.product or '—' }}</td>
+        <td>{% if row.line_commission %}{{ row.line_commission|money }} Euro{% else %}—{% endif %}</td>
+        <td><span class="badge">{{ row.status or 'Draft' }}</span></td>
+        <td>{{ (row.created_at or '')[:10] }}</td>
+        <td class="action-links">
+          <a class="link" href="/generate/commission-invoices/{{ row.id }}">View</a>
+          <a class="link" href="/generate/commission-invoices/{{ row.id }}/edit">Edit</a>
+          <form method="post" action="/generate/commission-invoices/{{ row.id }}/duplicate" style="display:inline">
+            <button type="submit" class="link-btn">Duplicate</button>
+          </form>
+          <a class="link" href="/generate/commission-invoices/{{ row.id }}/export.xlsx">XLSX</a>
+          <a class="link" href="/generate/commission-invoices/{{ row.id }}/print" target="_blank">Print</a>
+          <form method="post" action="/generate/commission-invoices/{{ row.id }}/delete" style="display:inline"
+                onsubmit="return confirm('Delete CI {{ row.invoice_number }}?');">
+            <button type="submit" class="link-btn" style="color:var(--danger,#b91c1c)">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="text-align:center;color:#666;padding:1.5rem">No commission invoices yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

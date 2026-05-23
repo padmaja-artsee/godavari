@@ -1,0 +1,238 @@
+/*
+ * Commission Invoice – editor & print styles.
+ * Self-contained; builds on po_wysiwyg.css base classes (po-page, po-brand-row, etc.)
+ * but adds no rules to those selectors.
+ */
+
+/* ── Document title ───────────────────────────────────────────────── */
+.ci-doc-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: .05em;
+  color: var(--primary, #1a5632);
+  text-align: center;
+  border-bottom: 2px solid var(--primary, #1a5632);
+  padding-bottom: 2px;
+  margin-top: 2px;
+  width: 100%;
+  background: transparent;
+  border-top: none;
+  border-left: none;
+  border-right: none;
+}
+
+/* ── TO label ─────────────────────────────────────────────────────── */
+.ci-to-label {
+  font-weight: 700;
+  font-size: .78rem;
+  text-transform: uppercase;
+  color: #555;
+  margin: 0 0 2px;
+}
+
+/* ── Order no inline row ─────────────────────────────────────────── */
+.ci-order-row {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  margin-top: .35rem;
+}
+
+/* ── Transaction section ─────────────────────────────────────────── */
+.ci-section-head {
+  background: #f2f2f2;
+  border: 1px solid #d1d5db;
+  font-weight: 700;
+  font-size: .78rem;
+  padding: 3px 8px;
+  margin-top: .75rem;
+  letter-spacing: .04em;
+}
+
+.ci-txn-row {
+  border: 1px solid #d1d5db;
+  border-top: none;
+  padding: 5px 8px;
+  min-height: 2rem;
+  font-size: .88rem;
+}
+
+.ci-txn-input {
+  width: 100%;
+}
+
+/* ── Shipment grid ───────────────────────────────────────────────── */
+.ci-shipment-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .25rem 1.5rem;
+  margin-top: .75rem;
+  font-size: .88rem;
+}
+
+.ci-ship-row {
+  display: flex;
+  align-items: center;
+  gap: .4rem;
+  padding: 2px 0;
+}
+
+.ci-ship-label {
+  font-weight: 600;
+  white-space: nowrap;
+  color: #374151;
+  min-width: 9rem;
+  font-size: .82rem;
+}
+
+/* ── Commission table ────────────────────────────────────────────── */
+.ci-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: .75rem;
+  font-size: .84rem;
+}
+
+.ci-table th {
+  background: #1a5632;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  padding: 5px 6px;
+  border: 1px solid #0f3320;
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.ci-table td {
+  border: 1px solid #d1d5db;
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+
+.ci-subunit {
+  font-weight: 400;
+  font-size: .7rem;
+  display: block;
+  opacity: .85;
+}
+
+.ci-col-product { width: 32%; }
+.ci-col-gblinv  { width: 14%; }
+.ci-col-qty     { width: 9%; text-align: center; }
+.ci-col-fob     { width: 12%; text-align: right; }
+.ci-col-rate    { width: 13%; text-align: center; }
+.ci-col-val     { width: 12%; text-align: right; }
+
+.ci-num { text-align: right; }
+.ci-val-cell { font-weight: 600; }
+
+/* ── Line actions ────────────────────────────────────────────────── */
+.ci-line-actions {
+  margin-top: .4rem;
+}
+
+/* ── Totals block ────────────────────────────────────────────────── */
+.ci-totals-block {
+  margin-top: .5rem;
+  margin-left: auto;
+  width: 40%;
+  min-width: 260px;
+  border: 1px solid #d1d5db;
+  font-size: .87rem;
+}
+
+.ci-total-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid #e5e7eb;
+  gap: .5rem;
+}
+
+.ci-total-row:last-child { border-bottom: none; }
+
+.ci-total-grand {
+  background: #f2f2f2;
+  font-weight: 700;
+}
+
+.ci-total-pay {
+  background: #1a5632;
+  color: #fff;
+  font-weight: 700;
+}
+
+.ci-inwords-row {
+  flex-wrap: wrap;
+  gap: .25rem;
+}
+
+.ci-inwords-input {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* ── Payment + Enclosures ────────────────────────────────────────── */
+.ci-pay-enc-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .5rem 1.5rem;
+  margin-top: .75rem;
+  font-size: .88rem;
+}
+
+.ci-pay-enc-grid > div {
+  display: flex;
+  align-items: flex-start;
+  gap: .4rem;
+}
+
+.ci-enc-textarea {
+  flex: 1;
+  resize: vertical;
+  font-size: .85rem;
+}
+
+/* ── Bank details ────────────────────────────────────────────────── */
+.ci-bank-block {
+  margin-top: .75rem;
+  border: 1px solid #d1d5db;
+  padding: 6px 8px;
+  font-size: .88rem;
+}
+
+.ci-bank-title {
+  font-weight: 700;
+  font-size: .78rem;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  margin: 0 0 4px;
+  color: #1a5632;
+}
+
+.ci-bank-grid {
+  display: grid;
+  grid-template-columns: 8rem 1fr;
+  gap: 3px 6px;
+  align-items: center;
+}
+
+/* ── Print overrides ─────────────────────────────────────────────── */
+@media print {
+  .ci-table th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .ci-total-grand { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .ci-total-pay   { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+  .po-mkinput, .po-number-input, .po-inline-input, .po-input {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  .ci-vat-pct { border: none !important; background: transparent !important; width: auto !important; }
+
+  .ci-line-actions, .no-print { display: none !important; }
+  .ci-totals-block { width: 45%; }
+}

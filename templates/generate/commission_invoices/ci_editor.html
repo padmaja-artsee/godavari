@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% from "generate/commission_invoices/_ci_body.html" import ci_body %}
+{% block title %}{% if editing %}Edit{% else %}New{% endif %} Commission Invoice{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/generate.css" />
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+{% endblock %}
+{% block content %}
+<div class="po-shell">
+  <div class="po-action-bar no-print">
+    <a href="/generate" class="btn btn-ghost btn-sm">← Generate</a>
+    <a href="/generate/commission-invoices" class="btn btn-ghost btn-sm">Saved Invoices</a>
+    <div class="po-action-bar-right">
+      {% if editing and ci.id %}
+      <a href="/generate/commission-invoices/{{ ci.id }}" class="btn btn-ghost btn-sm">Preview</a>
+      <a href="/generate/commission-invoices/{{ ci.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
+      <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost btn-sm" target="_blank">Print</a>
+      {% endif %}
+      <button type="submit" form="ci-editor-form" class="btn btn-primary btn-sm">Save</button>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem">
+    {% for e in errors %}<p style="margin:0.25rem 0">{{ e }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" id="ci-editor-form"
+        action="{% if editing %}/generate/commission-invoices/{{ ci.id }}/edit{% else %}/generate/commission-invoices/new{% endif %}">
+    {% if ci.deal_id %}<input type="hidden" name="deal_id" value="{{ ci.deal_id }}" />{% endif %}
+    {% if ci.customer_id %}<input type="hidden" name="customer_id" value="{{ ci.customer_id }}" />{% endif %}
+    {{ ci_body(ci, readonly=false) }}
+  </form>
+
+  <section class="po-admin-panel no-print card" style="margin-top:1rem;max-width:960px;margin-left:auto;margin-right:auto">
+    <h2 style="margin:0 0 0.75rem;font-size:1rem">Internal Notes <span class="badge">Not printed</span></h2>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div>
+        <label>Status</label>
+        <select name="status" form="ci-editor-form">
+          {% for s in ['Draft','Approved','Sent','Cancelled'] %}
+          <option value="{{ s }}" {% if ci.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div><label>Prepared By</label><input name="prepared_by" form="ci-editor-form" value="{{ ci.prepared_by or '' }}" /></div>
+      <div class="full"><label>Internal Notes</label><textarea name="internal_notes" form="ci-editor-form" rows="3">{{ ci.internal_notes or '' }}</textarea></div>
+    </div>
+  </section>
+</div>
+<script src="/static/ci_wysiwyg.js"></script>
+{% endblock %}

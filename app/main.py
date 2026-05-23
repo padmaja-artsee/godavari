@@ -87,6 +87,20 @@ from app.products import (
 )
 from app.generate import GENERATE_DOCUMENTS
 from app.po_exports import export_po_pdf, export_po_xlsx
+# ── Commission Invoice (self-contained; remove this block to drop the feature) ──
+from app.commission_invoices import (
+    DEFAULT_CI,
+    create_ci_from_deal,
+    create_commission_invoice,
+    delete_commission_invoice,
+    duplicate_commission_invoice,
+    get_commission_invoice,
+    get_commission_invoice_for_export,
+    list_commission_invoices,
+    parse_ci_form,
+    upgrade_commission_invoices_schema,
+)
+from app.ci_exports import export_ci_xlsx
 from app.purchase_orders import (
     DEFAULT_PO,
     calculate_po_totals,
@@ -153,6 +167,7 @@ def startup() -> None:
     migrate_to_leads_deals()
     import_catalogue()
     fix_legacy_product_names()
+    upgrade_commission_invoices_schema()  # CI: remove with CI feature block
 
 
 def ctx(request: Request, **extra):
@@ -1255,5 +1270,138 @@ async def po_export_pdf_route(request: Request, po_id: int):
     return Response(
         content=content,
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# ── Commission Invoice routes ────────────────────────────────────────────────
+# Remove this entire block (and the imports above) to drop the CI feature.
+# ════════════════════════════════════════════════════════════════════════════
+
+@app.get("/generate/commission-invoices", response_class=HTMLResponse)
+async def ci_list_page(request: Request):
+    rows = list_commission_invoices()
+    return templates.TemplateResponse(
+        "generate/commission_invoices/ci_list.html",
+        {"request": request, "rows": rows},
+    )
+
+
+@app.get("/generate/commission-invoices/new", response_class=HTMLResponse)
+async def ci_new_page(
+    request: Request,
+    deal_id: int = Query(0),
+    blank: str = Query(""),
+):
+    if not deal_id and blank != "1":
+        return templates.TemplateResponse(
+            "generate/commission_invoices/ci_pick_deal.html",
+            {"request": request},
+        )
+    from copy import deepcopy
+    if deal_id:
+        ci = create_ci_from_deal(deal_id) or deepcopy(DEFAULT_CI)
+    else:
+        ci = deepcopy(DEFAULT_CI)
+    return templates.TemplateResponse(
+        "generate/commission_invoices/ci_editor.html",
+        {"request": request, "ci": ci, "editing": False, "errors": []},
+    )
+
+
+@app.post("/generate/commission-invoices/new", response_class=HTMLResponse)
+async def ci_new_post(request: Request):
+    form = await request.form()
+    data, line_items = parse_ci_form(form)
+    if not data.get("invoice_number"):
+        return templates.TemplateResponse(
+            "generate/commission_invoices/ci_editor.html",
+            {"request": request, "ci": {**data, "line_items": line_items},
+             "editing": False, "errors": ["Invoice number is required."]},
+            status_code=422,
+        )
+    deal_id    = int(form.get("deal_id") or 0) or None
+    customer_id = int(form.get("customer_id") or 0) or None
+    ci_id = create_commission_invoice(data, line_items, deal_id=deal_id, customer_id=customer_id)
+    return RedirectResponse(f"/generate/commission-invoices/{ci_id}?saved=1", status_code=303)
+
+
+@app.get("/generate/commission-invoices/{ci_id}", response_class=HTMLResponse)
+async def ci_detail_page(request: Request, ci_id: int):
+    ci = get_commission_invoice(ci_id)
+    if not ci:
+        return RedirectResponse("/generate/commission-invoices", status_code=303)
+    saved_msg = "Saved successfully." if request.query_params.get("saved") else None
+    return templates.TemplateResponse(
+        "generate/commission_invoices/ci_detail.html",
+        {"request": request, "ci": ci, "saved_msg": saved_msg},
+    )
+
+
+@app.get("/generate/commission-invoices/{ci_id}/edit", response_class=HTMLResponse)
+async def ci_edit_page(request: Request, ci_id: int):
+    ci = get_commission_invoice(ci_id)
+    if not ci:
+        return RedirectResponse("/generate/commission-invoices", status_code=303)
+    return templates.TemplateResponse(
+        "generate/commission_invoices/ci_editor.html",
+        {"request": request, "ci": ci, "editing": True, "errors": []},
+    )
+
+
+@app.post("/generate/commission-invoices/{ci_id}/edit", response_class=HTMLResponse)
+async def ci_edit_post(request: Request, ci_id: int):
+    form = await request.form()
+    data, line_items = parse_ci_form(form)
+    if not data.get("invoice_number"):
+        ci = get_commission_invoice(ci_id) or {}
+        ci.update(data)
+        ci["line_items"] = line_items
+        return templates.TemplateResponse(
+            "generate/commission_invoices/ci_editor.html",
+            {"request": request, "ci": ci, "editing": True,
+             "errors": ["Invoice number is required."]},
+            status_code=422,
+        )
+    from app.commission_invoices import update_commission_invoice
+    update_commission_invoice(ci_id, data, line_items)
+    return RedirectResponse(f"/generate/commission-invoices/{ci_id}?saved=1", status_code=303)
+
+
+@app.post("/generate/commission-invoices/{ci_id}/duplicate")
+async def ci_duplicate(ci_id: int):
+    new_id = duplicate_commission_invoice(ci_id)
+    if new_id:
+        return RedirectResponse(f"/generate/commission-invoices/{new_id}/edit", status_code=303)
+    return RedirectResponse("/generate/commission-invoices", status_code=303)
+
+
+@app.post("/generate/commission-invoices/{ci_id}/delete")
+async def ci_delete(ci_id: int):
+    delete_commission_invoice(ci_id)
+    return RedirectResponse("/generate/commission-invoices", status_code=303)
+
+
+@app.get("/generate/commission-invoices/{ci_id}/print", response_class=HTMLResponse)
+async def ci_print_page(request: Request, ci_id: int):
+    ci = get_commission_invoice(ci_id)
+    if not ci:
+        return RedirectResponse("/generate/commission-invoices", status_code=303)
+    return templates.TemplateResponse(
+        "generate/commission_invoices/ci_print.html",
+        {"request": request, "ci": ci},
+    )
+
+
+@app.get("/generate/commission-invoices/{ci_id}/export.xlsx")
+async def ci_export_xlsx_route(ci_id: int):
+    ci = get_commission_invoice_for_export(ci_id)
+    if not ci:
+        return RedirectResponse("/generate/commission-invoices", status_code=303)
+    content, fname = export_ci_xlsx(ci)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{fname}"'},
     )

@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% from "generate/commission_invoices/_ci_body.html" import ci_body %}
+{% block title %}Print CI {{ ci.invoice_number }}{% endblock %}
+{% set hide_nav = true %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+<style>
+  body { margin: 0; }
+  .main { padding: 0 !important; margin: 0 !important; }
+  .po-shell { background: white; padding: 0; }
+  .po-action-bar { max-width: 960px; margin: 0.75rem auto; display: flex; gap: 0.75rem; align-items: center; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="po-action-bar no-print">
+  <a href="/generate/commission-invoices/{{ ci.id }}" class="btn btn-ghost">← Back</a>
+</div>
+<div class="po-shell">
+  {{ ci_body(ci, readonly=true) }}
+</div>
+<script>window.addEventListener("load", function(){ window.print(); });</script>
+{% endblock %}
