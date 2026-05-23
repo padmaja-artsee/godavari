@@ -188,6 +188,35 @@ tr:hover td { background: #f8fafc; }
   flex-wrap: wrap;
 }
 
+/* ── Summary page: single-line filter bar with nav buttons on the right ── */
+.summary-filter-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.summary-filter-left {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.summary-filter-divider {
+  color: #d1d5db;
+  font-size: 1rem;
+  padding: 0 0.2rem;
+  user-select: none;
+}
+
+.summary-filter-right {
+  display: flex;
+  gap: 0.5rem;
+}
+
 .filter-pill {
   padding: 0.4rem 0.75rem;
   border-radius: 999px;

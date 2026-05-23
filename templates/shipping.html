@@ -7,9 +7,11 @@
     <p class="subtitle">Tracking template — one row per deal with company, product, and logistics fields.</p>
   </div>
   <div class="page-header-actions">
+    <a href="/summary" class="btn btn-ghost btn-sm">Product Summary</a>
+    <a href="/shipping" class="btn btn-primary btn-sm">Shipping Summary</a>
     <a href="/shipping/export.csv?company={{ company | urlencode }}&product={{ product | urlencode }}&status={{ status }}&q={{ q | urlencode }}" class="btn btn-ghost btn-sm">CSV</a>
     <a href="/shipping/export.xlsx?company={{ company | urlencode }}&product={{ product | urlencode }}&status={{ status }}&q={{ q | urlencode }}" class="btn btn-ghost btn-sm">XLS</a>
-    <a href="/add?tab=log&return_to=/shipping" class="btn btn-primary">+ Log update</a>
+    <a href="/add?tab=log&return_to=/shipping" class="btn btn-ghost btn-sm">+ Add or update</a>
   </div>
 </div>
 

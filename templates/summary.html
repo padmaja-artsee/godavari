@@ -8,19 +8,23 @@
   </div>
   <div class="page-header-actions">
     <a href="/summary/export.xlsx?period={{ period }}&group={{ group }}&sheet=all" class="btn btn-ghost btn-sm">Download all (XLS)</a>
-    <a href="/shipping" class="btn btn-ghost">Shipping summary →</a>
   </div>
 </div>
 
-<div class="filters" style="margin-bottom:1rem">
-  {% for p, label in [('week','Week'),('month','Month'),('quarter','Quarter'),('year','Year'),('all','All')] %}
-  <a href="/summary?period={{ p }}&group={{ group }}" class="filter-pill {% if period == p %}active{% endif %}">{{ label }}</a>
-  {% endfor %}
-</div>
-
-<div class="filters" style="margin-bottom:1.25rem">
-  <a href="/summary?period={{ period }}&group=product" class="filter-pill {% if group == 'product' %}active{% endif %}">By product</a>
-  <a href="/summary?period={{ period }}&group=customer" class="filter-pill {% if group == 'customer' %}active{% endif %}">By customer</a>
+{# ── All filters + view toggles on one line ── #}
+<div class="summary-filter-bar">
+  <div class="summary-filter-left">
+    {% for p, label in [('week','Week'),('month','Month'),('quarter','Quarter'),('year','Year'),('all','All')] %}
+    <a href="/summary?period={{ p }}&group={{ group }}" class="filter-pill {% if period == p %}active{% endif %}">{{ label }}</a>
+    {% endfor %}
+    <span class="summary-filter-divider">|</span>
+    <a href="/summary?period={{ period }}&group=product" class="filter-pill {% if group == 'product' %}active{% endif %}">By product</a>
+    <a href="/summary?period={{ period }}&group=customer" class="filter-pill {% if group == 'customer' %}active{% endif %}">By customer</a>
+  </div>
+  <div class="summary-filter-right">
+    <a href="/summary" class="btn btn-sm {% if not request.path.startswith('/shipping') %}btn-primary{% else %}btn-ghost{% endif %}">Product Summary</a>
+    <a href="/shipping" class="btn btn-sm btn-ghost">Shipping Summary</a>
+  </div>
 </div>
 
 <div class="stats" style="margin-bottom:1.25rem">
@@ -81,25 +85,30 @@
 
 <div class="card shipping-card" style="margin-top:1.25rem">
   <div class="card-header">
-    <h2>Shipping summary</h2>
+    <h2>Shipping Summary</h2>
     <div class="export-links">
       <a class="btn btn-ghost btn-sm" href="/summary/export.csv?period={{ period }}&sheet=shipping">CSV</a>
       <a class="btn btn-ghost btn-sm" href="/summary/export.xlsx?period={{ period }}&sheet=shipping">XLS</a>
-      <a href="/shipping" class="link">Full sheet →</a>
     </div>
   </div>
   <div class="card-body shipping-table-scroll">
     {% if shipping_rows %}
-    <table class="deals-table shipping-table shipping-table-compact">
+    <table class="deals-table shipping-table">
       <thead>
         <tr>
           <th>Company</th>
           <th>Product</th>
           <th>PO #</th>
-          <th>Qty</th>
-          <th>Container</th>
+          <th>PO Date</th>
+          <th>Quantity</th>
+          <th>Packing</th>
+          <th>GBL Invoice</th>
+          <th>GBL Inv. Date</th>
+          <th>Container #</th>
           <th>Vessel</th>
-          <th>ETD</th>
+          <th>ETD India</th>
+          <th>Transit</th>
+          <th>Destination</th>
           <th>ETA</th>
           <th></th>
         </tr>
@@ -107,21 +116,27 @@
       <tbody>
       {% for row in shipping_rows %}
       <tr>
-        <td>{{ row.company }}</td>
+        <td><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></td>
         <td>{{ row.product }}</td>
-        <td>{{ row.po_number or '—' }}</td>
+        <td><a class="link" href="/deal/{{ row.deal_id }}?from=shipping">{{ row.po_number or '—' }}</a></td>
+        <td>{{ row.po_date or '—' }}</td>
         <td>{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</td>
+        <td>{{ row.packing or '—' }}</td>
+        <td>{{ row.gbl_invoice or '—' }}</td>
+        <td>{{ row.gbl_invoice_date or '—' }}</td>
         <td>{{ row.container_number or '—' }}</td>
         <td>{{ row.vessel_name or '—' }}</td>
         <td>{{ row.etd_india or '—' }}</td>
+        <td>{{ row.transit_time or '—' }}</td>
+        <td>{{ row.destination or '—' }}</td>
         <td>{{ row.eta or '—' }}</td>
-        <td><a class="link" href="/deal/{{ row.deal_id }}?from=shipping">Edit</a></td>
+        <td class="col-quick"><a class="link" href="/deal/{{ row.deal_id }}?from=shipping">Edit</a></td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="empty">No open deals. <a class="link" href="/shipping">Shipping summary</a></div>
+    <div class="empty">No open deals matching this period.</div>
     {% endif %}
   </div>
 </div>
