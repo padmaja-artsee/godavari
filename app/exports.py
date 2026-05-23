@@ -6,6 +6,12 @@ from typing import Any, Optional
 import pandas as pd
 
 from app.database import format_quantity_display
+from app.xl_style import (
+    auto_col_widths,
+    freeze_header,
+    style_data_row,
+    style_header_row,
+)
 
 ROLLUP_PRODUCT_COLUMNS = [
     ("Product", "product"),
@@ -89,6 +95,26 @@ def to_xlsx_bytes(
             df = pd.DataFrame(projected, columns=[label for label, _ in columns])
             safe_name = sheet_name[:31]
             df.to_excel(writer, sheet_name=safe_name, index=False)
+
+        wb = writer.book
+        for sheet_name, rows, columns in sheets:
+            safe_name = sheet_name[:31]
+            ws = wb[safe_name]
+            n_cols = len(columns)
+
+            # Style header row (row 1)
+            style_header_row(ws, row=1, col_start=1, col_end=n_cols)
+            ws.row_dimensions[1].height = 18
+
+            # Style data rows
+            for r_idx in range(2, ws.max_row + 1):
+                style_data_row(ws, row=r_idx, col_start=1, col_end=n_cols,
+                               alternate=(r_idx % 2 == 0))
+                ws.row_dimensions[r_idx].height = 15
+
+            auto_col_widths(ws, col_start=1, col_end=n_cols)
+            freeze_header(ws, row=1)
+
     buf.seek(0)
     return buf.read()
 
