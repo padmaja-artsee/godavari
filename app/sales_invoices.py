@@ -62,7 +62,7 @@ SI_SCALAR_FIELDS = [
 
 DEFAULT_SI: dict[str, Any] = {
     "document_title":        "COMMERCIAL INVOICE",
-    "company_name":          "Godavari Biorefineries B.V.",
+    "company_name":          "Godavari Biorefineries Inc",
     "invoice_number":        "",
     "invoice_date":          date.today().isoformat(),
     # Bill-to

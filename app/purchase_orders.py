@@ -35,7 +35,7 @@ DEFAULT_PO: dict[str, Any] = {
     "incoterm_terms": "CFR Antwerp",
     "shipment_timing": "Prompt",
     "currency": "Euro",
-    "company_name": "Godavari Biorefineries B.V.",
+    "company_name": "Godavari Biorefineries Inc",
     "issuer_name": "GODAVARI BIOREFINERIES LTD",
     "address_line_1": "Somaiya Bhavan, 45-47, MG ROAD",
     "address_line_2": "Fort, MUMBAI - 400 001",

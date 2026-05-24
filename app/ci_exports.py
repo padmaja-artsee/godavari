@@ -99,7 +99,7 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
 
     # ── Company name (B4) ───────────────────────────────────────────────────
     ws.row_dimensions[4].height = 16
-    _s(ws, "B4", ci.get("company_name") or "Godavari Biorefineries B.V.",
+    _s(ws, "B4", ci.get("company_name") or "Godavari Biorefineries Inc",
        bold=True, align=_l)
 
     # ── Document title (A9) ─────────────────────────────────────────────────
@@ -271,7 +271,7 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
     # ── Signature block ─────────────────────────────────────────────────────
     r += 2
     ws.merge_cells(f"A{r}:C{r}")
-    _s(ws, f"A{r}", "For Godavari Biorefineries B.V.", bold=True, align=_l)
+    _s(ws, f"A{r}", "For Godavari Biorefineries Inc", bold=True, align=_l)
     r += 4
     ws.merge_cells(f"A{r}:C{r}")
     _s(ws, f"A{r}", "Authorised Signatory", bold=True,
@@ -287,7 +287,7 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
     r += 1
     ws.merge_cells(f"C{r}:E{r}")
     _s(ws, f"C{r}",
-       "Godavari Biorefineries B.V.   Opaallaan 1180,   2132 LN,   Hoofddorp", align=_l)
+       "Godavari Biorefineries Inc   Opaallaan 1180,   2132 LN,   Hoofddorp", align=_l)
     r += 1
     ws.merge_cells(f"C{r}:D{r}")
     _s(ws, f"C{r}", "The Netherlands", align=_l)
