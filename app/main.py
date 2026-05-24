@@ -238,6 +238,20 @@ def startup() -> None:
     except Exception as exc:
         _log.error("init_db failed: %s", exc)
 
+    # Finance is mounted as a sub-app; Starlette does NOT call its startup events.
+    # We must initialise the Finance DB here so its tables exist before any request.
+    try:
+        from finance.app.database import init_db as _finance_init_db, DB_PATH as _FINANCE_DB_PATH
+        import sqlite3 as _sq3
+        _FINANCE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _fw = _sq3.connect(str(_FINANCE_DB_PATH), timeout=30)
+        _fw.execute("PRAGMA journal_mode = WAL")
+        _fw.commit()
+        _fw.close()
+        _finance_init_db()
+    except Exception as exc:
+        _log.error("finance init_db failed: %s", exc)
+
     # Seed loading can be slow (large JSON with hundreds of records).
     # Run it in a background thread so the server accepts requests immediately.
     # The 3-second delay lets the first user interaction complete before any

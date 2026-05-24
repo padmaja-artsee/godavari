@@ -5,7 +5,7 @@
   <h1 class="f-title">{{ "Edit" if vendor else "Add" }} Vendor</h1>
 </div>
 <div class="f-form-card">
-  <form method="post" action="{{ '/vendors/'+vendor.id|string+'/edit' if vendor else '/vendors/new' }}">
+  <form method="post" action="{{ _base+'/vendors/'+vendor.id|string+'/edit' if vendor else _base+'/vendors/new' }}">
     <div class="f-form-grid">
       <div class="f-field">
         <label class="f-label">Name <span class="f-required">*</span></label>

@@ -39,6 +39,16 @@ if [ -z "$TAURI_APP" ]; then
 fi
 echo "  ✓ Found bundle at: $TAURI_APP"
 
+# Ensure the bundle is consistently named GodavariLeads.app (Tauri may produce
+# Leads.app when it uses a cached binary from an older productName setting).
+if [[ "$TAURI_APP" == *"/Leads.app" ]]; then
+    RENAMED_APP="${TAURI_APP%/Leads.app}/GodavariLeads.app"
+    rm -rf "$RENAMED_APP"
+    mv "$TAURI_APP" "$RENAMED_APP"
+    TAURI_APP="$RENAMED_APP"
+    echo "  ✓ Renamed bundle to GodavariLeads.app"
+fi
+
 echo ""
 echo "▶ Step 3: Inject Python bundle into app (preserving structure)..."
 RESOURCES="$TAURI_APP/Contents/Resources"
