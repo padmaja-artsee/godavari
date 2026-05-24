@@ -15,10 +15,11 @@ fn main() {
             .and_then(|p| p.parent().map(|d| d.to_path_buf()))
             .unwrap_or_default();
 
+        // The PyInstaller onedir bundle is copied as "leads-bin/" next to the exe.
         let backend = if cfg!(target_os = "windows") {
-            exe_dir.join("leads.exe")
+            exe_dir.join("leads-bin").join("leads.exe")
         } else {
-            exe_dir.join("leads")
+            exe_dir.join("leads-bin").join("leads")
         };
 
         if backend.exists() {

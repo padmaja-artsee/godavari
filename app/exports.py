@@ -3,7 +3,7 @@ import csv
 import io
 from typing import Any, Optional
 
-import pandas as pd
+from openpyxl import Workbook
 
 from app.database import format_quantity_display
 from app.xl_style import (
@@ -88,33 +88,35 @@ def to_csv_bytes(rows: list[dict[str, Any]], columns: list[tuple[str, str]]) -> 
 def to_xlsx_bytes(
     sheets: list[tuple[str, list[dict[str, Any]], list[tuple[str, str]]]],
 ) -> bytes:
+    wb = Workbook()
+    # Remove default empty sheet.
+    wb.remove(wb.active)
+
+    for sheet_name, rows, columns in sheets:
+        projected = project_rows(rows, columns)
+        safe_name = sheet_name[:31]
+        ws = wb.create_sheet(title=safe_name)
+
+        headers = [label for label, _ in columns]
+        ws.append(headers)
+
+        for row in projected:
+            ws.append([row.get(h, "") for h in headers])
+
+        n_cols = len(columns)
+        style_header_row(ws, row=1, col_start=1, col_end=n_cols)
+        ws.row_dimensions[1].height = 18
+
+        for r_idx in range(2, ws.max_row + 1):
+            style_data_row(ws, row=r_idx, col_start=1, col_end=n_cols,
+                           alternate=(r_idx % 2 == 0))
+            ws.row_dimensions[r_idx].height = 15
+
+        auto_col_widths(ws, col_start=1, col_end=n_cols)
+        freeze_header(ws, row=1)
+
     buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        for sheet_name, rows, columns in sheets:
-            projected = project_rows(rows, columns)
-            df = pd.DataFrame(projected, columns=[label for label, _ in columns])
-            safe_name = sheet_name[:31]
-            df.to_excel(writer, sheet_name=safe_name, index=False)
-
-        wb = writer.book
-        for sheet_name, rows, columns in sheets:
-            safe_name = sheet_name[:31]
-            ws = wb[safe_name]
-            n_cols = len(columns)
-
-            # Style header row (row 1)
-            style_header_row(ws, row=1, col_start=1, col_end=n_cols)
-            ws.row_dimensions[1].height = 18
-
-            # Style data rows
-            for r_idx in range(2, ws.max_row + 1):
-                style_data_row(ws, row=r_idx, col_start=1, col_end=n_cols,
-                               alternate=(r_idx % 2 == 0))
-                ws.row_dimensions[r_idx].height = 15
-
-            auto_col_widths(ws, col_start=1, col_end=n_cols)
-            freeze_header(ws, row=1)
-
+    wb.save(buf)
     buf.seek(0)
     return buf.read()
 

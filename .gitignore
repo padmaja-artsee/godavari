@@ -20,6 +20,12 @@ build/
 # Tauri / Rust build artifacts
 src-tauri/target/
 src-tauri/WixTools/
+# PyInstaller binary bundle copied into Tauri (generated, not source)
+src-tauri/leads-bin/
+# Distributable packages (generated)
+*.dmg
+*.exe
+*.AppImage
 
 # Database (local data — never commit)
 *.db

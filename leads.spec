@@ -58,7 +58,7 @@ a = Analysis(
     ],
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "scipy", "numpy", "test", "unittest"],
+    excludes=["tkinter", "matplotlib", "scipy", "numpy", "pandas", "test", "unittest"],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -70,25 +70,32 @@ pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)  # noqa: F821
 exe = EXE(  # noqa: F821
     pyz,
     a.scripts,
-    a.binaries,
-    a.zipfiles,
-    a.datas,
     [],
+    exclude_binaries=True,
     name="leads",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    upx_exclude=[],
-    runtime_tmpdir=None,
     console=False,   # No terminal window on launch (set True to debug).
     # icon="static/icon.icns",   # Uncomment and add icon file for branded app.
+)
+
+coll = COLLECT(  # noqa: F821
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    name="leads",
 )
 
 # Mac: wrap in a proper .app bundle.
 if sys.platform == "darwin":
     app = BUNDLE(  # noqa: F821
-        exe,
+        coll,
         name="Leads.app",
         # icon="static/icon.icns",
         bundle_identifier="com.godavari.leads",
