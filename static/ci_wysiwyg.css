@@ -13,15 +13,22 @@
 }
 
 .ci-company-name {
+  flex: 1;
+  min-width: 0;
   font-weight: 700;
   font-size: .95rem;
   color: #111;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .ci-company-input {
+  flex: 1;
+  min-width: 0;
   font-weight: 700 !important;
   font-size: .95rem !important;
-  width: 320px;
+  width: 100% !important;
+  max-width: 480px;
 }
 
 /* ── Document title — single green underline, full width ─────────── */
@@ -114,7 +121,8 @@
   display: flex;
   align-items: center;
   gap: .5rem;
-  margin-top: .35rem;
+  margin-top: .45rem;
+  margin-bottom: .15rem;
 }
 
 /* ── Transaction section ─────────────────────────────────────────── */
