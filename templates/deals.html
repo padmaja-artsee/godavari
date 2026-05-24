@@ -6,7 +6,11 @@
     <h1>Active leads</h1>
     <p class="subtitle">One line per deal (or lead-only product). Grouped {% if view == 'product' %}by <strong>product</strong>{% else %}by <strong>company</strong>{% endif %}.</p>
   </div>
-  <a href="/add?tab=log&return_to=/deals" class="btn btn-primary">+ Add or update</a>
+  <div style="display:flex;gap:.5rem;align-items:center">
+    <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&company={{ company }}&product={{ product }}&q={{ q }}"
+       class="btn btn-ghost btn-sm">↓ Export Excel</a>
+    <a href="/add?tab=log&return_to=/deals" class="btn btn-primary">+ Add or update</a>
+  </div>
 </div>
 
 <div class="card deals-card">
@@ -47,8 +51,6 @@
       <input name="q" value="{{ q }}" placeholder="Search" />
       <button type="submit" class="btn btn-primary">Apply</button>
       <a href="/deals?status=all&period=month&view={{ view }}" class="btn btn-ghost">Clear</a>
-      <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&company={{ company }}&product={{ product }}&q={{ q }}"
-         class="btn btn-ghost">↓ Export Excel</a>
     </div>
   </form>
 
