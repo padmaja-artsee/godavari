@@ -63,7 +63,7 @@ def export_dn_xlsx(dn: dict[str, Any]) -> tuple[bytes, str]:
     r = 1
 
     # Company name
-    _m(ws, r, 1, r, 3, val=dn.get("company_name") or "Godavari Biorefineries Inc",
+    _m(ws, r, 1, r, 3, val=dn.get("company_name") or "Godavari Biorefineries BV",
        font=_font(bold=True, size=13, color=_GREEN), align=_align("left"))
     r += 1
 
@@ -208,7 +208,7 @@ def export_dn_xlsx(dn: dict[str, Any]) -> tuple[bytes, str]:
        font=_font(size=8, color="555555"), align=_align("center"))
     r += 1
     _m(ws, r, 1, r, 5,
-       val="Godavari Biorefineries Inc  ·  Opaallaan 1180, 2132 LN Hoofddorp, The Netherlands  ·  Tel: +31 6 11 12 61 66",
+       val="Godavari Biorefineries BV  ·  Opaallaan 1180, 2132 LN Hoofddorp, The Netherlands  ·  Tel: +31 6 11 12 61 66",
        font=_font(size=8, color="555555"), align=_align("center"))
 
     buf = io.BytesIO()

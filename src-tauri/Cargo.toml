@@ -2,7 +2,7 @@
 name = "leads"
 version = "1.0.0"
 description = "Godavari Leads Dashboard"
-authors = ["Godavari Biorefineries Inc"]
+authors = ["Godavari Biorefineries BV"]
 edition = "2021"
 
 [lib]

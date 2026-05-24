@@ -84,7 +84,7 @@ def export_si_xlsx(si: dict[str, Any]) -> tuple[bytes, str]:
 
     # ── Row 1: Company name ─────────────────────────────────────────
     _merge(ws, r, 1, r, 5,
-           value=si.get("company_name") or "Godavari Biorefineries Inc",
+           value=si.get("company_name") or "Godavari Biorefineries BV",
            font=_font(bold=True, size=13, color=_GREEN),
            align=_align("right"),
            fill=_fill(_WHITE))
@@ -234,7 +234,7 @@ def export_si_xlsx(si: dict[str, Any]) -> tuple[bytes, str]:
 
     # ── Signature ─────────────────────────────────────────────────────
     r += 1
-    _merge(ws, r, 1, r, 3, value="For Godavari Biorefineries Inc", font=_font(bold=True))
+    _merge(ws, r, 1, r, 3, value="For Godavari Biorefineries BV", font=_font(bold=True))
     r += 2
     _write(ws, r, 1, "Authorised Signatory", font=_font())
     r += 1
@@ -246,7 +246,7 @@ def export_si_xlsx(si: dict[str, Any]) -> tuple[bytes, str]:
            font=_font(size=8, color="555555"), align=_align("center"))
     r += 1
     _merge(ws, r, 1, r, 5,
-           value="Godavari Biorefineries Inc  ·  Opaallaan 1180, 2132 LN Hoofddorp, The Netherlands  ·  Tel: +31 6 11 12 61 66",
+           value="Godavari Biorefineries BV  ·  Opaallaan 1180, 2132 LN Hoofddorp, The Netherlands  ·  Tel: +31 6 11 12 61 66",
            font=_font(size=8, color="555555"), align=_align("center"))
 
     # ── Finalize ──────────────────────────────────────────────────────

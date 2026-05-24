@@ -60,7 +60,7 @@ DN_NUMERIC_FIELDS = [
 
 DEFAULT_DN: dict[str, Any] = {
     "document_title":         "DELIVERY NOTE CUM PACKING LIST",
-    "company_name":           "Godavari Biorefineries Inc",
+    "company_name":           "Godavari Biorefineries BV",
     # Reference
     "reference_number":       "",
     "reference_date":         date.today().isoformat(),

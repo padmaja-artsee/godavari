@@ -50,7 +50,7 @@ def _fill_po_sheet(ws, po: dict[str, Any]) -> None:
     line = (po.get("line_items") or [{}])[0]
     batches = line.get("batches") or []
 
-    ws["C2"] = po.get("company_name") or "Godavari Biorefineries Inc"
+    ws["C2"] = po.get("company_name") or "Godavari Biorefineries BV"
     ws["A5"] = po.get("document_title") or "Purchase Order"
     ws["A7"] = po.get("issuer_name")
     ws["E7"] = po.get("po_number")
