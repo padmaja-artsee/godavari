@@ -70,11 +70,16 @@ echo ""
 echo "▶ Step 6: Package into DMG..."
 DMG_NAME="GodavariLeads_1.1.0_aarch64.dmg"
 rm -f "$SCRIPT_DIR/$DMG_NAME"
+# Stage app + Applications symlink so users can drag-to-install
+DMG_STAGING=$(mktemp -d)
+cp -r "$TAURI_APP" "$DMG_STAGING/GodavariLeads.app"
+ln -s /Applications "$DMG_STAGING/Applications"
 hdiutil create \
     -volname "Godavari Leads" \
-    -srcfolder "$TAURI_APP" \
+    -srcfolder "$DMG_STAGING" \
     -ov -format UDZO \
     "$SCRIPT_DIR/$DMG_NAME" 2>&1 | tail -3
+rm -rf "$DMG_STAGING"
 echo "  ✓ DMG created: $DMG_NAME"
 
 echo ""
