@@ -497,6 +497,13 @@ async def vendors_page(request: Request, saved: int = Query(0)):
     ))
 
 
+@app.get("/vendors/new", response_class=HTMLResponse)
+async def vendor_new_form(request: Request):
+    return templates.TemplateResponse("vendor_form.html", _ctx(
+        request, vendor=None, page="vendor_new",
+    ))
+
+
 @app.post("/vendors/new")
 async def vendor_new(
     name: str = Form(...),
@@ -506,6 +513,17 @@ async def vendor_new(
 ):
     save_vendor(name, email, phone, notes)
     return RedirectResponse("/vendors?saved=1", status_code=303)
+
+
+@app.get("/vendors/{vid}/edit", response_class=HTMLResponse)
+async def vendor_edit_form(request: Request, vid: int):
+    vendors = list_vendors()
+    vendor = next((v for v in vendors if v["id"] == vid), None)
+    if not vendor:
+        return RedirectResponse("/vendors", status_code=303)
+    return templates.TemplateResponse("vendor_form.html", _ctx(
+        request, vendor=vendor, page="vendor_new",
+    ))
 
 
 @app.post("/vendors/{vid}/edit")

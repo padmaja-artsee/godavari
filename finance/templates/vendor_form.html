@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set page = "vendor_new" %}
+{% block title %}{% if vendor %}Edit Vendor{% else %}Add Vendor{% endif %}{% endblock %}
+{% block content %}
+
+<div class="f-page-header">
+  <div>
+    <h1>{% if vendor %}Edit Vendor{% else %}Add Vendor{% endif %}</h1>
+  </div>
+  <a href="/vendors" class="f-btn f-btn-ghost">← All Vendors</a>
+</div>
+
+<div class="f-form-card" style="max-width:520px">
+  <form method="POST" action="{% if vendor %}/vendors/{{ vendor.id }}/edit{% else %}/vendors/new{% endif %}">
+
+    <div class="f-field">
+      <label class="f-label">Name <span class="f-required">*</span></label>
+      <input type="text" name="name" class="f-input" required
+             value="{{ vendor.name if vendor else '' }}"
+             placeholder="Vendor or company name" />
+    </div>
+
+    <div class="f-field" style="margin-top:14px">
+      <label class="f-label">Email</label>
+      <input type="email" name="email" class="f-input"
+             value="{{ vendor.email if vendor else '' }}"
+             placeholder="vendor@example.com" />
+    </div>
+
+    <div class="f-field" style="margin-top:14px">
+      <label class="f-label">Phone</label>
+      <input type="text" name="phone" class="f-input"
+             value="{{ vendor.phone if vendor else '' }}"
+             placeholder="+1 555 000 0000" />
+    </div>
+
+    <div class="f-field" style="margin-top:14px">
+      <label class="f-label">Notes</label>
+      <textarea name="notes" class="f-textarea" rows="3"
+                placeholder="Optional notes…">{{ vendor.notes if vendor else '' }}</textarea>
+    </div>
+
+    <div class="f-form-actions" style="margin-top:22px">
+      <button type="submit" class="f-btn f-btn-primary">
+        {% if vendor %}Save Changes{% else %}Add Vendor{% endif %}
+      </button>
+      <a href="/vendors" class="f-btn f-btn-ghost">Cancel</a>
+    </div>
+
+  </form>
+</div>
+{% endblock %}
