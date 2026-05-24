@@ -5,159 +5,135 @@
 
 <div class="f-page-header">
   <div>
-    <h1>Actuals Entry</h1>
-    <p class="f-subtitle">GBInc · FY{{ fy }} · USD — shaded values auto-rolled from expenses; add extra below</p>
+    <h1>Actuals</h1>
+    <p class="f-subtitle">GBInc · FY{{ fy }} · Consolidated from recorded expenses</p>
   </div>
-  <div class="f-fy-picker">
-    {% for y in fiscal_years %}
-    <a href="/actuals?fy={{ y }}" class="f-fy-btn {% if y == fy %}active{% endif %}">FY{{ y }}</a>
-    {% endfor %}
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <div class="f-fy-picker">
+      {% for y in fiscal_years %}
+      <a href="/actuals?fy={{ y }}" class="f-fy-btn {% if y == fy %}active{% endif %}">FY{{ y }}</a>
+      {% endfor %}
+    </div>
+    <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ Record Expense</a>
   </div>
 </div>
 
-{% if saved %}
-<div class="f-toast f-toast-ok">Manual additions saved.</div>
-{% endif %}
-
-<div class="f-legend-bar">
-  <span class="f-legend-item"><span class="f-dot" style="background:#c4d9c9"></span>From expenses (auto)</span>
-  <span class="f-legend-item"><span class="f-dot" style="background:#fff;border:1px solid #cbd5e1"></span>Manual addition</span>
-  <a href="/expenses?fy={{ fy }}" class="f-link-small" style="margin-left:auto">Record an expense →</a>
+<div class="f-legend-bar" style="margin-bottom:16px">
+  <span class="f-legend-item"><span class="f-dot" style="background:#c4d9c9"></span>Auto-rolled from expenses</span>
+  <span class="f-legend-item"><span class="f-dot" style="background:#e8f4ff;border:1px solid #93c5fd"></span>Manual addition</span>
+  <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">
+    To change actuals, <a href="/expenses?fy={{ fy }}" class="f-link-small">record or edit expenses</a>.
+    Manual additions for items not in expenses can be added below.
+  </span>
 </div>
 
-<form method="POST" action="/actuals" id="actuals-form">
-  <input type="hidden" name="fy" value="{{ fy }}" />
-  <div class="f-grid-wrapper">
-    <table class="f-grid">
-      <thead>
-        <tr>
-          <th class="f-col-label">Particulars</th>
-          {% for m in months %}
-          <th>{{ month_labels[m] }}</th>
-          {% endfor %}
-          <th class="f-col-total">Total</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% set ns = namespace(prev_sec='') %}
-        {% for row in rows %}
-        {% set line = row.line %}
-        {% set sec  = line.section %}
-
-        {% if sec == 'income' and ns.prev_sec != 'income' %}
-        <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">INCOME</td></tr>
-        {% elif sec == 'expense' and ns.prev_sec != 'expense' %}
-        <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">EXPENSES</td></tr>
-        {% elif sec == 'below_ebitda' and ns.prev_sec not in ('below_ebitda','ebitda') %}
-        <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">BELOW EBITDA</td></tr>
-        {% endif %}
-        {% set ns.prev_sec = sec %}
-
-        <tr class="f-row-{{ row.style if row.style else 'normal' }}">
-          <td class="f-col-label {% if line.is_calculated %}f-calc{% endif %}">
-            {% if not line.is_calculated %}&nbsp;&nbsp;{% endif %}{{ line.name }}
-          </td>
-          {% for m in months %}
-          {% set rollup = row.monthly_rollup[m] %}
-          {% set manual = row.monthly_manual[m] %}
-          {% set total  = row.monthly_total[m]  %}
-          <td class="f-hybrid-cell">
-            {% if line.is_calculated %}
-              <span class="f-calc-cell" id="calc_{{ line.id }}_{{ m }}">
-                {{ "%.1f"|format(total) if total else '' }}
-              </span>
-            {% else %}
-              <div class="f-hybrid-wrap">
-                {% if rollup %}
-                <span class="f-rollup-badge" title="Auto-calculated from expenses">{{ "%.1f"|format(rollup) }}</span>
-                {% endif %}
-                <input type="number" step="0.01" name="{{ line.id }}_{{ m }}"
-                       value="{{ manual if manual else '' }}"
-                       class="f-cell-input f-manual-input"
-                       data-rollup="{{ rollup }}"
-                       data-line="{{ line.id }}" data-month="{{ m }}"
-                       placeholder="{% if rollup %}+add{% else %}0{% endif %}" />
-              </div>
-            {% endif %}
-          </td>
-          {% endfor %}
-          <td class="f-col-total">
-            <span id="rowtotal_{{ line.id }}">{{ "%.1f"|format(row.total) if row.total else '' }}</span>
-          </td>
-        </tr>
+<div class="f-grid-wrapper">
+  <table class="f-grid">
+    <thead>
+      <tr>
+        <th class="f-col-label">Particulars</th>
+        {% for m in months %}
+        <th>{{ month_labels[m] }}</th>
         {% endfor %}
-      </tbody>
-    </table>
+        <th class="f-col-total">Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% set ns = namespace(prev_sec='') %}
+      {% for row in rows %}
+      {% set line = row.line %}
+      {% set sec  = line.section %}
+
+      {% if sec == 'income' and ns.prev_sec != 'income' %}
+      <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">INCOME</td></tr>
+      {% elif sec == 'expense' and ns.prev_sec != 'expense' %}
+      <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">EXPENSES</td></tr>
+      {% elif sec == 'below_ebitda' and ns.prev_sec not in ('below_ebitda','ebitda') %}
+      <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">BELOW EBITDA</td></tr>
+      {% endif %}
+      {% set ns.prev_sec = sec %}
+
+      <tr class="f-row-{{ row.style if row.style else 'normal' }}">
+        <td class="f-col-label {% if line.is_calculated %}f-calc{% endif %}">
+          {% if not line.is_calculated %}&nbsp;&nbsp;{% endif %}{{ line.name }}
+        </td>
+        {% for m in months %}
+        {% set rollup = row.monthly_rollup[m] %}
+        {% set manual = row.monthly_manual[m] %}
+        {% set total  = row.monthly_total[m]  %}
+        <td style="text-align:right;padding:4px 6px;">
+          {% if line.is_calculated %}
+            <span class="f-ro-val {% if total < 0 %}f-neg{% endif %}">
+              {{ "%.1f"|format(total) if total else '—' }}
+            </span>
+          {% else %}
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">
+              {% if rollup %}
+              <span class="f-rollup-badge" title="From expenses">{{ "%.1f"|format(rollup) }}</span>
+              {% endif %}
+              {% if manual %}
+              <span class="f-manual-badge" title="Manual addition">+{{ "%.1f"|format(manual) }}</span>
+              {% endif %}
+              {% if not rollup and not manual %}
+              <span style="color:#cbd5e1;font-size:11px">—</span>
+              {% endif %}
+            </div>
+          {% endif %}
+        </td>
+        {% endfor %}
+        <td class="f-col-total">
+          <span class="{% if row.total < 0 %}f-neg{% endif %}">
+            {{ "%.1f"|format(row.total) if row.total else '—' }}
+          </span>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Manual additions (collapsed accordion) -->
+<details class="f-manual-details">
+  <summary>Add manual adjustments <span class="f-text-muted" style="font-size:12px">(for items not captured as individual expenses)</span></summary>
+  <div style="margin-top:14px">
+    <form method="POST" action="/actuals" id="actuals-form">
+      <input type="hidden" name="fy" value="{{ fy }}" />
+      <div class="f-grid-wrapper">
+        <table class="f-grid">
+          <thead>
+            <tr>
+              <th class="f-col-label">Particulars</th>
+              {% for m in months %}
+              <th>{{ month_labels[m] }}</th>
+              {% endfor %}
+              <th class="f-col-total">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for row in rows %}
+            {% set line = row.line %}
+            {% if not line.is_calculated %}
+            <tr>
+              <td class="f-col-label">&nbsp;&nbsp;{{ line.name }}</td>
+              {% for m in months %}
+              <td>
+                <input type="number" step="0.01" name="{{ line.id }}_{{ m }}"
+                       value="{{ row.monthly_manual[m] if row.monthly_manual[m] else '' }}"
+                       class="f-cell-input" placeholder="0" />
+              </td>
+              {% endfor %}
+              <td class="f-col-total f-text-muted" style="font-size:11px">manual only</td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      <div class="f-form-actions" style="margin-top:8px">
+        <button type="submit" class="f-btn f-btn-primary">Save Adjustments</button>
+      </div>
+    </form>
   </div>
+</details>
 
-  <div class="f-form-actions">
-    <button type="submit" class="f-btn f-btn-primary">Save Manual Additions</button>
-    <a href="/?fy={{ fy }}" class="f-btn f-btn-ghost">Cancel</a>
-  </div>
-</form>
-
-<script>
-const INCOME_LINES  = {{ lines | selectattr('section','eq','income')  | map(attribute='id') | list | tojson }};
-const EXPENSE_LINES = {{ lines | selectattr('section','eq','expense') | map(attribute='id') | list | tojson }};
-const CALC_IDS = {
-  TI:  {{ lines | selectattr('name','eq','Total Income')   | map(attribute='id') | first | default(0) }},
-  TE:  {{ lines | selectattr('name','eq','Total Expenses') | map(attribute='id') | first | default(0) }},
-  EB:  {{ lines | selectattr('name','eq','EBITDA')         | map(attribute='id') | first | default(0) }},
-  INT: {{ lines | selectattr('name','eq','Interest')       | map(attribute='id') | first | default(0) }},
-  DEP: {{ lines | selectattr('name','eq','Depreciation')   | map(attribute='id') | first | default(0) }},
-  EBT: {{ lines | selectattr('name','eq','EBT')            | map(attribute='id') | first | default(0) }},
-  EXT: {{ lines | selectattr('name','eq','Extraordinary Items') | map(attribute='id') | first | default(0) }},
-  NET: {{ lines | selectattr('name','eq','Net EBT')        | map(attribute='id') | first | default(0) }},
-};
-const MONTHS = {{ months | tojson }};
-
-function getTotal(lineId, month) {
-  const inp = document.querySelector(`input[name="${lineId}_${month}"]`);
-  if (!inp) return 0;
-  const rollup = parseFloat(inp.dataset.rollup) || 0;
-  const manual = parseFloat(inp.value) || 0;
-  return rollup + manual;
-}
-function setCalc(lineId, month, val) {
-  const el = document.getElementById(`calc_${lineId}_${month}`);
-  if (el) el.textContent = val ? val.toFixed(1) : '';
-}
-function setRowTotal(lineId, val) {
-  const el = document.getElementById(`rowtotal_${lineId}`);
-  if (el) el.textContent = val ? val.toFixed(1) : '';
-}
-
-function recalc() {
-  MONTHS.forEach(m => {
-    const ti  = INCOME_LINES.reduce((s,id)  => s + getTotal(id,m), 0);
-    const te  = EXPENSE_LINES.reduce((s,id) => s + getTotal(id,m), 0);
-    const eb  = ti - te;
-    const int = getTotal(CALC_IDS.INT, m);
-    const dep = getTotal(CALC_IDS.DEP, m);
-    const ebt = eb - int - dep;
-    const ext = getTotal(CALC_IDS.EXT, m);
-    const net = ebt - ext;
-    setCalc(CALC_IDS.TI,  m, ti);
-    setCalc(CALC_IDS.TE,  m, te);
-    setCalc(CALC_IDS.EB,  m, eb);
-    setCalc(CALC_IDS.EBT, m, ebt);
-    setCalc(CALC_IDS.NET, m, net);
-  });
-  {% for line in lines %}
-  (function(){
-    const id = {{ line.id }};
-    {% if not line.is_calculated %}
-    const t = MONTHS.reduce((s,m) => s + getTotal(id, m), 0);
-    setRowTotal(id, t);
-    {% else %}
-    const cc = MONTHS.map(m => { const e = document.getElementById(`calc_${id}_${m}`); return parseFloat(e?.textContent || 0) || 0; });
-    setRowTotal(id, cc.reduce((a,b)=>a+b,0));
-    {% endif %}
-  })();
-  {% endfor %}
-}
-
-document.querySelectorAll('.f-manual-input').forEach(inp => inp.addEventListener('input', recalc));
-recalc();
-</script>
 {% endblock %}

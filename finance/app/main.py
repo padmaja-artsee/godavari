@@ -150,7 +150,13 @@ async def dashboard(request: Request, fy: int = Query(0)):
 # ---------------------------------------------------------------------------
 
 @app.get("/budget", response_class=HTMLResponse)
-async def budget_page(request: Request, fy: int = Query(0), saved: int = Query(0)):
+async def budget_page(
+    request: Request,
+    fy: int = Query(0),
+    saved: int = Query(0),
+    uploaded: int = Query(0),
+    upload_error: str = Query(""),
+):
     fiscal_years = get_fiscal_years()
     if not fy:
         fy = fiscal_years[0]
@@ -160,8 +166,50 @@ async def budget_page(request: Request, fy: int = Query(0), saved: int = Query(0
     return templates.TemplateResponse("budget.html", _ctx(
         request, fy=fy, fiscal_years=fiscal_years,
         lines=lines, rows=rows,
-        months=FY_MONTHS, month_labels=MONTH_LABELS, saved=saved,
+        months=FY_MONTHS, month_labels=MONTH_LABELS,
+        saved=saved, uploaded=uploaded, upload_error=upload_error,
     ))
+
+
+@app.get("/budget/template.xlsx")
+async def budget_template(fy: int = Query(0)):
+    from finance.app.exports import generate_budget_template
+    fiscal_years = get_fiscal_years()
+    if not fy:
+        fy = fiscal_years[0] if fiscal_years else 2027
+    lines = list_pl_lines()
+    content, fname = generate_budget_template(lines, fy)
+    bundle_base = os.environ.get("LEADS_BUNDLE_BASE") or getattr(sys, "frozen", False)
+    if bundle_base:
+        import subprocess
+        dest = Path.home() / "Downloads" / fname
+        dest.write_bytes(content)
+        try:
+            subprocess.Popen(["open", str(dest)])
+        except Exception:
+            pass
+        return Response(status_code=204)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+@app.post("/budget/upload")
+async def budget_upload(
+    fy: int = Form(...),
+    file: UploadFile = File(...),
+):
+    from finance.app.exports import parse_budget_upload
+    data = await file.read()
+    lines = list_pl_lines()
+    try:
+        values = parse_budget_upload(data, lines)
+        save_grid("budget", fy, values)
+        return RedirectResponse(f"/budget?fy={fy}&saved=1&uploaded={len(values)}", status_code=303)
+    except Exception as exc:
+        return RedirectResponse(f"/budget?fy={fy}&upload_error={str(exc)[:120]}", status_code=303)
 
 
 @app.post("/budget")

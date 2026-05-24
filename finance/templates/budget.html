@@ -18,6 +18,32 @@
 {% if saved %}
 <div class="f-toast f-toast-ok">Budget saved successfully.</div>
 {% endif %}
+{% if uploaded %}
+<div class="f-toast f-toast-ok">Budget uploaded — {{ uploaded }} values imported from Excel.</div>
+{% endif %}
+{% if upload_error %}
+<div class="f-toast f-toast-err">Upload error: {{ upload_error }}</div>
+{% endif %}
+
+<!-- Upload + Download row -->
+<div class="f-upload-bar">
+  <div class="f-upload-section">
+    <span class="f-upload-label">Upload Budget from Excel</span>
+    <form method="POST" action="/budget/upload" enctype="multipart/form-data" class="f-upload-form">
+      <input type="hidden" name="fy" value="{{ fy }}" />
+      <label class="f-upload-btn">
+        <input type="file" name="file" accept=".xlsx,.xls" required
+               onchange="this.parentElement.querySelector('.f-upload-fname').textContent = this.files[0]?.name || ''" />
+        Choose file
+      </label>
+      <span class="f-upload-fname f-text-muted"></span>
+      <button type="submit" class="f-btn f-btn-primary" style="padding:6px 16px">Upload</button>
+    </form>
+  </div>
+  <a href="/budget/template.xlsx?fy={{ fy }}" class="f-btn f-btn-ghost" style="white-space:nowrap">
+    ⬇ Download Template
+  </a>
+</div>
 
 <form method="POST" action="/budget" id="budget-form">
   <input type="hidden" name="fy" value="{{ fy }}" />

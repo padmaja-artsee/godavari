@@ -481,6 +481,47 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 .f-manual-input:focus { outline: none; border-color: var(--green-mid); background: var(--white); }
 .f-manual-input::placeholder { color: #b0bec5; font-style: italic; }
 
+/* ── Upload bar ── */
+.f-upload-bar {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 16px;
+  margin-bottom: 18px; box-shadow: var(--shadow);
+}
+.f-upload-section { display: flex; align-items: center; gap: 10px; flex: 1; flex-wrap: wrap; }
+.f-upload-label { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; }
+.f-upload-form { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.f-upload-btn {
+  display: inline-flex; align-items: center;
+  padding: 6px 14px; border-radius: var(--radius);
+  border: 1.5px solid var(--border); background: var(--bg);
+  font-size: 12px; font-weight: 600; color: var(--text);
+  cursor: pointer; transition: all .15s; font-family: inherit;
+}
+.f-upload-btn:hover { border-color: var(--green); color: var(--green); }
+.f-upload-btn input[type=file] { display: none; }
+.f-upload-fname { font-size: 12px; color: var(--text-muted); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.f-toast-err { background: #fee2e2; color: var(--red); border: 1px solid #fca5a5; }
+
+/* Read-only actuals */
+.f-ro-val { font-size: 12px; font-weight: 500; }
+.f-manual-badge {
+  font-size: 10px; font-weight: 600;
+  background: #dbeafe; color: #1e40af;
+  border-radius: 3px; padding: 1px 4px;
+  white-space: nowrap;
+}
+.f-manual-details {
+  background: var(--white); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px 16px;
+  margin-top: 18px; box-shadow: var(--shadow);
+}
+.f-manual-details summary {
+  cursor: pointer; font-size: 13px; font-weight: 600;
+  color: var(--text-muted); user-select: none;
+}
+.f-manual-details summary:hover { color: var(--green); }
+
 /* Dashboard recent expenses */
 .f-recent-list { list-style: none; }
 .f-recent-list li {
