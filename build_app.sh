@@ -8,7 +8,8 @@ cd "$SCRIPT_DIR"
 
 export PATH="$HOME/.cargo/bin:$HOME/Library/Python/3.9/bin:$PATH"
 
-echo "▶ Step 1: Build Python bundle with PyInstaller..."
+echo "▶ Step 1: Build Python bundle with PyInstaller (clean build)..."
+rm -rf build/ dist/
 pyinstaller -y leads.spec
 echo "  ✓ Python bundle built: dist/leads/"
 
