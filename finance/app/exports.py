@@ -506,3 +506,237 @@ def export_vendors_xlsx(vendors: list) -> tuple:
 
     buf = BytesIO(); wb.save(buf)
     return buf.getvalue(), "GBInc-Vendors.xlsx"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# P&L Report
+# ─────────────────────────────────────────────────────────────────────────────
+
+def export_report_xlsx(
+    period_label: str,
+    income_lines: list,
+    total_income_actual: float,
+    total_income_budget: float,
+    expense_sections: list,
+    total_expenses_actual: float,
+    total_expenses_budget: float,
+    net_actual: float,
+    net_budget: float,
+    fiscal_year: int,
+) -> tuple:
+    wb = openpyxl.Workbook()
+    ws = wb.active; ws.title = "P&L Report"
+
+    # ── Header rows ───────────────────────────────────────────────────────────
+    ws.merge_cells("A1:D1")
+    c = ws["A1"]; c.value = "Godavari Biorefineries Inc"
+    c.font = _f(bold=True, size=13, color=_WHITE); c.fill = _fill(_GREEN_D)
+    c.alignment = _al(h="left"); ws.row_dimensions[1].height = 22
+
+    ws.merge_cells("A2:D2")
+    c = ws["A2"]; c.value = f"Profit & Loss — {period_label}"
+    c.font = _f(bold=True, size=11, color=_WHITE); c.fill = _fill(_GREEN)
+    c.alignment = _al(h="left"); ws.row_dimensions[2].height = 18
+
+    # ── Column headers ────────────────────────────────────────────────────────
+    for ci, h in enumerate(["", "Actual", "Budget", "Variance"], 1):
+        c = ws.cell(3, ci, h)
+        c.font = _f(bold=True, size=9, color=_WHITE)
+        c.fill = _fill(_GREEN); c.alignment = _al(h="right" if ci > 1 else "left")
+        c.border = _border()
+    ws.column_dimensions["A"].width = 32
+    for col in ["B", "C", "D"]:
+        ws.column_dimensions[col].width = 14
+    ws.row_dimensions[3].height = 14
+
+    def _money(ws, row, col, val, bold=False, fill=None):
+        c = ws.cell(row, col, val if val else 0)
+        c.number_format = "#,##0.00"
+        c.alignment = _al(h="right")
+        c.font = _f(bold=bold)
+        if fill: c.fill = _fill(fill)
+        c.border = _border()
+        return c
+
+    def _label(ws, row, val, indent=0, bold=False, fill=None):
+        c = ws.cell(row, 1, ("  " * indent) + val)
+        c.font = _f(bold=bold)
+        if fill: c.fill = _fill(fill)
+        c.border = _border()
+        ws.row_dimensions[row].height = 13
+        return c
+
+    row = 4
+
+    # ── INCOME ────────────────────────────────────────────────────────────────
+    ws.cell(row, 1, "INCOME").font = _f(bold=True, size=9, color=_WHITE)
+    ws.cell(row, 1).fill = _fill(_GREEN)
+    ws.cell(row, 1).border = _border()
+    for ci in range(2, 5):
+        ws.cell(row, ci).fill = _fill(_GREEN); ws.cell(row, ci).border = _border()
+    ws.row_dimensions[row].height = 14
+    row += 1
+
+    for line in income_lines:
+        act, bud = line["actual"], line["budget"]
+        _label(ws, row, line["name"], indent=1)
+        _money(ws, row, 2, act); _money(ws, row, 3, bud)
+        _money(ws, row, 4, act - bud)
+        row += 1
+
+    _label(ws, row, "Total Income", bold=True, fill=_GREEN_L)
+    _money(ws, row, 2, total_income_actual, bold=True, fill=_GREEN_L)
+    _money(ws, row, 3, total_income_budget, bold=True, fill=_GREEN_L)
+    _money(ws, row, 4, total_income_actual - total_income_budget, bold=True, fill=_GREEN_L)
+    row += 2  # blank spacer
+
+    # ── EXPENSES ─────────────────────────────────────────────────────────────
+    ws.cell(row, 1, "EXPENSES").font = _f(bold=True, size=9, color=_WHITE)
+    ws.cell(row, 1).fill = _fill(_GREEN)
+    ws.cell(row, 1).border = _border()
+    for ci in range(2, 5):
+        ws.cell(row, ci).fill = _fill(_GREEN); ws.cell(row, ci).border = _border()
+    ws.row_dimensions[row].height = 14
+    row += 1
+
+    for sec in expense_sections:
+        # section header
+        _label(ws, row, sec["label"].upper(), bold=True, fill=_GREY)
+        for ci in range(2, 5):
+            ws.cell(row, ci).fill = _fill(_GREY); ws.cell(row, ci).border = _border()
+        ws.row_dimensions[row].height = 13
+        row += 1
+
+        for line in sec["lines"]:
+            act, bud = line["actual"], line["budget"]
+            _label(ws, row, line["name"], indent=1)
+            _money(ws, row, 2, act); _money(ws, row, 3, bud)
+            _money(ws, row, 4, bud - act)
+            row += 1
+
+        # section total
+        sa, sb = sec["total_actual"], sec["total_budget"]
+        _label(ws, row, f"Total {sec['label']}", bold=True, fill=_GREEN_L)
+        _money(ws, row, 2, sa, bold=True, fill=_GREEN_L)
+        _money(ws, row, 3, sb, bold=True, fill=_GREEN_L)
+        _money(ws, row, 4, sb - sa, bold=True, fill=_GREEN_L)
+        row += 2  # spacer after section
+
+    # Total Expenses
+    _label(ws, row, "TOTAL EXPENSES", bold=True, fill="FFF9C4")
+    _money(ws, row, 2, total_expenses_actual, bold=True, fill="FFF9C4")
+    _money(ws, row, 3, total_expenses_budget, bold=True, fill="FFF9C4")
+    _money(ws, row, 4, total_expenses_budget - total_expenses_actual, bold=True, fill="FFF9C4")
+    row += 2
+
+    # Net Income
+    _label(ws, row, "NET INCOME (Income − Expenses)", bold=True, fill=_GREEN_L)
+    _money(ws, row, 2, net_actual, bold=True, fill=_GREEN_L)
+    _money(ws, row, 3, net_budget, bold=True, fill=_GREEN_L)
+    _money(ws, row, 4, net_actual - net_budget, bold=True, fill=_GREEN_L)
+
+    ws.freeze_panes = "B4"
+    fname = f"GBInc-PnL-FY{fiscal_year}.xlsx"
+    buf = BytesIO(); wb.save(buf)
+    return buf.getvalue(), fname
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Analysis (Budget vs Actuals summary + monthly breakdown)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def export_analysis_xlsx(summary: list, chart_months: list,
+                          exp_budget: list, exp_actual: list,
+                          income_actual: list, fiscal_year: int) -> tuple:
+    wb = openpyxl.Workbook()
+
+    # ── Sheet 1: Section Summary ───────────────────────────────────────────
+    ws1 = wb.active; ws1.title = "Summary"
+    _grid_header(ws1, f"Budget vs Actuals Summary — FY{fiscal_year}",
+                 "Godavari Biorefineries Inc", 5)
+
+    for ci, h in enumerate(["Section", "Planned", "Actual", "Variance", "Variance %"], 1):
+        c = ws1.cell(5, ci, h)
+        c.font = _f(bold=True, size=8, color=_WHITE)
+        c.fill = _fill(_GREEN); c.alignment = _al(h="center"); c.border = _border()
+    for col, w in [(1, 22), (2, 14), (3, 14), (4, 14), (5, 12)]:
+        ws1.column_dimensions[get_column_letter(col)].width = w
+
+    for r, s in enumerate(summary, 6):
+        rf = _fill(_WHITE) if r % 2 == 0 else _fill(_GREY)
+        ws1.cell(r, 1, s["label"]).fill = rf; ws1.cell(r, 1).border = _border()
+        for ci, key in enumerate(["planned", "actual", "variance"], 2):
+            c = ws1.cell(r, ci, s.get(key, 0))
+            c.number_format = "#,##0"; c.alignment = _al(h="right")
+            c.fill = rf; c.border = _border()
+        vp = s.get("var_pct")
+        c5 = ws1.cell(r, 5, round(vp, 1) if vp is not None else "")
+        if vp is not None:
+            c5.number_format = '#,##0.0"%"'
+        c5.alignment = _al(h="right"); c5.fill = rf; c5.border = _border()
+        ws1.row_dimensions[r].height = 13
+    ws1.freeze_panes = "A6"
+
+    # ── Sheet 2: Monthly Expenses ──────────────────────────────────────────
+    ws2 = wb.create_sheet("Monthly Expenses")
+    _grid_header(ws2, f"Monthly Expenses — FY{fiscal_year}",
+                 "Godavari Biorefineries Inc", 4)
+    for ci, h in enumerate(["Month", "Budget", "Actuals", "Variance"], 1):
+        c = ws2.cell(4, ci, h)
+        c.font = _f(bold=True, size=8, color=_WHITE)
+        c.fill = _fill(_GREEN); c.alignment = _al(h="center"); c.border = _border()
+    for col, w in [(1, 16), (2, 14), (3, 14), (4, 14)]:
+        ws2.column_dimensions[get_column_letter(col)].width = w
+
+    for r, (m, bud, act) in enumerate(zip(chart_months, exp_budget, exp_actual), 5):
+        rf = _fill(_WHITE) if r % 2 == 0 else _fill(_GREY)
+        ws2.cell(r, 1, m).fill = rf; ws2.cell(r, 1).border = _border()
+        for ci, v in enumerate([bud, act, bud - act], 2):
+            c = ws2.cell(r, ci, v)
+            c.number_format = "#,##0"; c.alignment = _al(h="right")
+            c.fill = rf; c.border = _border()
+        ws2.row_dimensions[r].height = 13
+
+    # totals row
+    tr = 5 + len(chart_months)
+    ws2.cell(tr, 1, "TOTAL").font = _f(bold=True)
+    ws2.cell(tr, 1).fill = _fill(_GREEN_L); ws2.cell(tr, 1).border = _border()
+    for ci, vals in [(2, exp_budget), (3, exp_actual)]:
+        c = ws2.cell(tr, ci, sum(vals))
+        c.font = _f(bold=True); c.number_format = "#,##0"
+        c.alignment = _al(h="right"); c.fill = _fill(_GREEN_L); c.border = _border()
+    c = ws2.cell(tr, 4, sum(exp_budget) - sum(exp_actual))
+    c.font = _f(bold=True); c.number_format = "#,##0"
+    c.alignment = _al(h="right"); c.fill = _fill(_GREEN_L); c.border = _border()
+    ws2.freeze_panes = "A5"
+
+    # ── Sheet 3: Monthly Income ────────────────────────────────────────────
+    ws3 = wb.create_sheet("Monthly Income")
+    _grid_header(ws3, f"Monthly Income — FY{fiscal_year}",
+                 "Godavari Biorefineries Inc", 2)
+    for ci, h in enumerate(["Month", "Income Actual"], 1):
+        c = ws3.cell(4, ci, h)
+        c.font = _f(bold=True, size=8, color=_WHITE)
+        c.fill = _fill(_GREEN); c.alignment = _al(h="center"); c.border = _border()
+    ws3.column_dimensions["A"].width = 16
+    ws3.column_dimensions["B"].width = 16
+
+    for r, (m, inc) in enumerate(zip(chart_months, income_actual), 5):
+        rf = _fill(_WHITE) if r % 2 == 0 else _fill(_GREY)
+        ws3.cell(r, 1, m).fill = rf; ws3.cell(r, 1).border = _border()
+        c = ws3.cell(r, 2, inc)
+        c.number_format = "#,##0"; c.alignment = _al(h="right")
+        c.fill = rf; c.border = _border()
+        ws3.row_dimensions[r].height = 13
+
+    tr3 = 5 + len(chart_months)
+    ws3.cell(tr3, 1, "TOTAL").font = _f(bold=True)
+    ws3.cell(tr3, 1).fill = _fill(_GREEN_L); ws3.cell(tr3, 1).border = _border()
+    c = ws3.cell(tr3, 2, sum(income_actual))
+    c.font = _f(bold=True); c.number_format = "#,##0"
+    c.alignment = _al(h="right"); c.fill = _fill(_GREEN_L); c.border = _border()
+    ws3.freeze_panes = "A5"
+
+    fname = f"GBInc-Analysis-FY{fiscal_year}.xlsx"
+    buf = BytesIO(); wb.save(buf)
+    return buf.getvalue(), fname

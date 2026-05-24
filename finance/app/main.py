@@ -638,6 +638,109 @@ def _excel_response(content: bytes, filename: str):
     )
 
 
+@app.get("/export/report.xlsx")
+async def export_report(
+    fy: int = Query(0),
+    view: str = Query("ytd"),
+    month: int = Query(0),
+):
+    from finance.app.exports import export_report_xlsx
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0] if fys else 2027
+    items  = list_line_items()
+    b_grid = compute_grid(get_budget_grid(fy), items)
+    a_grid = _combined_actuals(fy, items)
+    by_name = {i["name"]: i["id"] for i in items}
+
+    if view == "monthly" and month:
+        sel = [month]
+        period_label = f"{MONTH_LABELS.get(month, '')} FY{fy}"
+    else:
+        sel = FY_MONTHS
+        period_label = f"FY{fy} Year to Date (Apr {fy-1} – Mar {fy})"
+
+    def _sum(name):
+        lid = by_name.get(name)
+        return sum(a_grid.get((lid, m), 0.0) if a_grid else 0 for m in sel) if lid else 0.0
+
+    def _bsum(name):
+        lid = by_name.get(name)
+        return sum(b_grid.get((lid, m), 0.0) if b_grid else 0 for m in sel) if lid else 0.0
+
+    EXPENSE_SECTIONS = [
+        ("employee", "Employee Costs",    "Total Employee Costs"),
+        ("office",   "Office Costs",      "Total Office Costs"),
+        ("admin",    "Bank / Legal / Admin", "Total Admin"),
+        ("travel",   "Conference / Travel",  "Total Travel"),
+    ]
+    income_lines = [
+        {"name": i["name"], "actual": _sum(i["name"]), "budget": _bsum(i["name"])}
+        for i in items if i["section"] == "income" and not i["is_calculated"]
+    ]
+    expense_sections = []
+    for sec, label, tot_name in EXPENSE_SECTIONS:
+        sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
+        lines = [
+            {"name": i["name"], "actual": _sum(i["name"]), "budget": _bsum(i["name"])}
+            for i in sec_items if _sum(i["name"]) or _bsum(i["name"])
+        ]
+        expense_sections.append({
+            "label": label, "lines": lines,
+            "total_actual": _sum(tot_name), "total_budget": _bsum(tot_name),
+        })
+
+    content, fname = export_report_xlsx(
+        period_label=period_label,
+        income_lines=income_lines,
+        total_income_actual=_sum("Total Income"),
+        total_income_budget=_bsum("Total Income"),
+        expense_sections=expense_sections,
+        total_expenses_actual=_sum("Total Expenses"),
+        total_expenses_budget=_bsum("Total Expenses"),
+        net_actual=_sum("Net (Income - Expenses)"),
+        net_budget=_bsum("Net (Income - Expenses)"),
+        fiscal_year=fy,
+    )
+    return _excel_response(content, fname)
+
+
+@app.get("/export/analysis.xlsx")
+async def export_analysis(fy: int = Query(0)):
+    from finance.app.exports import export_analysis_xlsx
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0] if fys else 2027
+    items  = list_line_items()
+    b_grid = compute_grid(get_budget_grid(fy), items)
+    a_grid = _combined_actuals(fy, items)
+
+    SUMMARY_LINES = [
+        ("income",   "Income"),
+        ("employee", "Employee Costs"),
+        ("office",   "Office Costs"),
+        ("admin",    "Bank/Legal/Admin"),
+        ("travel",   "Conference/Travel"),
+    ]
+    summary = []
+    for sec, label in SUMMARY_LINES:
+        sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
+        planned = sum(b_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
+        actual  = sum(a_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
+        var     = planned - actual if sec != "income" else actual - planned
+        var_pct = (var / planned * 100) if planned else None
+        summary.append({"label": label, "planned": planned, "actual": actual,
+                         "variance": var, "var_pct": var_pct})
+
+    by_name = {i["name"]: i["id"] for i in items}
+    chart_months  = [MONTH_LABELS[m] for m in FY_MONTHS]
+    exp_budget    = [b_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
+    exp_actual    = [a_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
+    income_actual = [a_grid.get((by_name.get("Total Income"),   m), 0) for m in FY_MONTHS]
+
+    content, fname = export_analysis_xlsx(summary, chart_months,
+                                           exp_budget, exp_actual, income_actual, fy)
+    return _excel_response(content, fname)
+
+
 @app.get("/export/budget.xlsx")
 async def export_budget(fy: int = Query(0)):
     from finance.app.exports import export_budget_xlsx
