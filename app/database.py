@@ -2336,6 +2336,9 @@ def delete_activity(activity_id: int) -> Optional[str]:
 
 def delete_customer(customer_id: int) -> Optional[str]:
     """Remove company and all leads, deals, engagements, and activities."""
+    from app.deal_files import delete_all_deal_files
+
+    # Step 1: read-only — get customer info and deal IDs (no write lock held).
     with get_db() as conn:
         row = conn.execute(
             "SELECT id, name FROM customers WHERE id = ?", (customer_id,)
@@ -2344,23 +2347,27 @@ def delete_customer(customer_id: int) -> Optional[str]:
             return None
         cid = row["id"]
         name = row["name"]
-        from app.deal_files import delete_all_deal_files
-
         deal_ids = [
             r["id"]
             for r in conn.execute(
                 "SELECT id FROM deals WHERE customer_id = ?", (cid,)
             ).fetchall()
         ]
-        for did in deal_ids:
-            delete_all_deal_files(did)
+
+    # Step 2: delete uploaded files for each deal (opens its own DB connections).
+    # Must happen OUTSIDE the outer get_db() block to avoid nested write-lock deadlock.
+    for did in deal_ids:
+        delete_all_deal_files(did)
+
+    # Step 3: delete all DB rows in a single transaction.
+    with get_db() as conn:
         conn.execute("DELETE FROM activities WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM deals WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM engagements WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM contacts WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM leads WHERE customer_id = ?", (cid,))
         conn.execute("DELETE FROM customers WHERE id = ?", (cid,))
-        return name
+    return name
 
 
 def recent_activities(limit: int = 15, period: str = "all") -> list[dict]:
