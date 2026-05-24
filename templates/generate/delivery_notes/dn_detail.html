@@ -24,7 +24,7 @@
     <a href="/generate/delivery-notes/{{ dn.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
     <a href="/generate/delivery-notes/{{ dn.id }}/print" class="btn btn-ghost" target="_blank">Print</a>
     <form method="post" action="/generate/delivery-notes/{{ dn.id }}/delete" style="display:inline"
-          onsubmit="return confirm('Delete this Delivery Note?');">
+          data-confirm="Delete this Delivery Note?">
       <button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button>
     </form>
   </div>

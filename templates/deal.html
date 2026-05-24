@@ -132,7 +132,7 @@
         <a class="link" href="/deals/files/{{ f.id }}" target="_blank">{{ f.filename }}</a>
         <span class="muted">{% if f.file_size %}{{ (f.file_size / 1024)|round(1) }} KB · {% endif %}{{ f.created_at[:10] }}</span>
         <form method="post" action="/deals/files/{{ f.id }}/delete" class="inline-form"
-              onsubmit="return confirm('Remove this PDF?')">
+              data-confirm="Remove this PDF?">
           <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
           <button type="submit" class="btn btn-danger btn-sm">Remove</button>
         </form>
@@ -224,13 +224,13 @@
     </form>
     {% else %}
     <form method="post" action="/deals/{{ d.id }}/archive" class="inline-form"
-          onsubmit="return confirm('Archive this deal? It will be hidden from the dashboard.')">
+          data-confirm="Archive this deal? It will be hidden from the dashboard.">
       <input type="hidden" name="next_url" value="/deals" />
       <button type="submit" class="btn btn-ghost btn-sm">Archive</button>
     </form>
     {% endif %}
     <form method="post" action="/deals/{{ d.id }}/delete" class="inline-form"
-          onsubmit="return confirm('Delete this deal permanently?')">
+          data-confirm="Delete this deal permanently?">
       <input type="hidden" name="next_url" value="/deals" />
       <button type="submit" class="btn btn-danger btn-sm">Delete</button>
     </form>

@@ -17,7 +17,7 @@
     <a href="/generate/purchase-orders/{{ po.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
     <a href="/generate/purchase-orders/{{ po.id }}/export.pdf" class="btn btn-ghost">Export PDF</a>
     <a href="/generate/purchase-orders/{{ po.id }}/print" class="btn btn-ghost" target="_blank">Print</a>
-    <form method="post" action="/generate/purchase-orders/{{ po.id }}/delete" style="display:inline" onsubmit="return confirm('Delete this PO?');"><button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button></form>
+    <form method="post" action="/generate/purchase-orders/{{ po.id }}/delete" style="display:inline" data-confirm="Delete this PO?"><button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button></form>
   </div>
 </div>
 

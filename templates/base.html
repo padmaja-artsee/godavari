@@ -30,5 +30,72 @@
       {% block content %}{% endblock %}
     </main>
   </div>
+
+  <!-- Confirmation modal (replaces window.confirm which is blocked in Tauri) -->
+  <div id="app-confirm-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:10px;padding:1.5rem 2rem;max-width:380px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+      <p id="app-confirm-msg" style="margin:0 0 1.25rem;font-size:0.95rem;line-height:1.5;color:#1e293b;"></p>
+      <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+        <button id="app-confirm-cancel" class="btn btn-ghost">Cancel</button>
+        <button id="app-confirm-ok" class="btn btn-danger">Delete</button>
+      </div>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var overlay = document.getElementById('app-confirm-overlay');
+    var msgEl   = document.getElementById('app-confirm-msg');
+    var okBtn   = document.getElementById('app-confirm-ok');
+    var cancelBtn = document.getElementById('app-confirm-cancel');
+    var _resolve = null;
+
+    function showConfirm(msg, okLabel) {
+      msgEl.textContent = msg;
+      okBtn.textContent = okLabel || 'Delete';
+      overlay.style.display = 'flex';
+      return new Promise(function (resolve) { _resolve = resolve; });
+    }
+
+    okBtn.addEventListener('click', function () {
+      overlay.style.display = 'none';
+      if (_resolve) { _resolve(true); _resolve = null; }
+    });
+    cancelBtn.addEventListener('click', function () {
+      overlay.style.display = 'none';
+      if (_resolve) { _resolve(false); _resolve = null; }
+    });
+    overlay.addEventListener('click', function (e) {
+      if (e.target === overlay) {
+        overlay.style.display = 'none';
+        if (_resolve) { _resolve(false); _resolve = null; }
+      }
+    });
+
+    // Intercept any form/button with data-confirm attribute.
+    document.addEventListener('submit', function (e) {
+      var form = e.target;
+      var msg = form.getAttribute('data-confirm');
+      if (!msg) return;
+      e.preventDefault();
+      showConfirm(msg, form.getAttribute('data-confirm-ok') || 'Delete').then(function (ok) {
+        if (ok) form.submit();
+      });
+    }, true);
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-confirm-click]');
+      if (!btn) return;
+      var msg = btn.getAttribute('data-confirm-click');
+      e.preventDefault();
+      showConfirm(msg, btn.getAttribute('data-confirm-ok') || 'Delete').then(function (ok) {
+        if (ok) {
+          var form = btn.closest('form');
+          if (form) form.submit();
+          else if (btn.tagName === 'A') window.location = btn.href;
+        }
+      });
+    }, true);
+  })();
+  </script>
 </body>
 </html>

@@ -43,7 +43,7 @@
           <a class="link" href="/generate/sales-invoices/{{ row.id }}/export.xlsx">XLSX</a>
           <a class="link" href="/generate/sales-invoices/{{ row.id }}/print" target="_blank">Print</a>
           <form method="post" action="/generate/sales-invoices/{{ row.id }}/delete" style="display:inline"
-                onsubmit="return confirm('Delete Invoice {{ row.invoice_number }}?');">
+                data-confirm="Delete Invoice {{ row.invoice_number }}?">
             <button type="submit" class="link-btn" style="color:var(--danger,#b91c1c)">Delete</button>
           </form>
         </td>

@@ -43,7 +43,7 @@
           <a class="link" href="/generate/delivery-notes/{{ row.id }}/export.xlsx">XLSX</a>
           <a class="link" href="/generate/delivery-notes/{{ row.id }}/print" target="_blank">Print</a>
           <form method="post" action="/generate/delivery-notes/{{ row.id }}/delete" style="display:inline"
-                onsubmit="return confirm('Delete delivery note {{ row.reference_number }}?');">
+                data-confirm="Delete delivery note {{ row.reference_number }}?">
             <button type="submit" class="link-btn" style="color:var(--danger,#b91c1c)">Delete</button>
           </form>
         </td>

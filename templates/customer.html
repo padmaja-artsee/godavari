@@ -17,7 +17,7 @@
     <a href="/add?tab=log&company={{ detail.customer.name | urlencode }}{% if detail.product_filter %}&product={{ detail.product_filter | urlencode }}{% endif %}" class="btn btn-primary">+ Add or update</a>
     <a href="/add?tab=deal&company={{ detail.customer.name | urlencode }}" class="btn btn-ghost">+ Create deal</a>
     <form method="post" action="/customer/{{ detail.customer.id }}/delete" class="inline-form"
-      onsubmit="return confirm('Delete {{ detail.customer.name }} and all deals, activities, and contact data? This cannot be undone.');">
+      data-confirm="Delete {{ detail.customer.name }} and all deals, activities, and contact data? This cannot be undone.">
       <button type="submit" class="btn btn-danger">Delete company</button>
     </form>
   </div>
@@ -55,7 +55,7 @@
             <div class="contact-card-btns">
               <button type="submit" class="btn btn-primary btn-sm">Save</button>
               <button type="submit" formaction="/contacts/{{ c.id }}/delete" formmethod="post" class="btn btn-ghost btn-sm"
-                onclick="return confirm('Remove this contact?');">Remove</button>
+                data-confirm-click="Remove this contact?">Remove</button>
             </div>
           </div>
         </form>
