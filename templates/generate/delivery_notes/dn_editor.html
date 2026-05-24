@@ -16,7 +16,7 @@
       {% if editing and dn.id %}
       <a href="/generate/delivery-notes/{{ dn.id }}" class="btn btn-ghost btn-sm">Preview</a>
       <a href="/generate/delivery-notes/{{ dn.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
-      <a href="/generate/delivery-notes/{{ dn.id }}/print" class="btn btn-ghost btn-sm" target="_blank">Print</a>
+      <a href="/generate/delivery-notes/{{ dn.id }}/print" class="btn btn-ghost btn-sm">Print</a>
       {% endif %}
       <button type="submit" form="dn-editor-form" class="btn btn-primary btn-sm">Save</button>
     </div>

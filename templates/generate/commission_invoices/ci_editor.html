@@ -15,7 +15,7 @@
       {% if editing and ci.id %}
       <a href="/generate/commission-invoices/{{ ci.id }}" class="btn btn-ghost btn-sm">Preview</a>
       <a href="/generate/commission-invoices/{{ ci.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
-      <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost btn-sm" target="_blank">Print</a>
+      <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost btn-sm">Print</a>
       {% endif %}
       <button type="submit" form="ci-editor-form" class="btn btn-primary btn-sm">Save</button>
     </div>

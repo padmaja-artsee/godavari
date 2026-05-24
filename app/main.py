@@ -251,6 +251,37 @@ def startup() -> None:
         _log.error("Schema upgrade failed: %s", exc)
 
 
+def _export_to_downloads(content: bytes, fname: str) -> str:
+    """
+    Save export bytes to ~/Downloads/<fname> and open in the default app.
+    Returns the full path so routes can show it in a success message.
+    Used because Tauri's WKWebView does not handle Content-Disposition
+    attachment downloads the way a regular browser does.
+    """
+    import subprocess, sys as _sys2
+    downloads = Path.home() / "Downloads"
+    downloads.mkdir(exist_ok=True)
+    dest = downloads / fname
+    # Avoid clobbering: append a counter if the file already exists.
+    counter = 1
+    while dest.exists():
+        stem, suffix = dest.stem, dest.suffix
+        dest = downloads / f"{stem}_{counter}{suffix}"
+        counter += 1
+    dest.write_bytes(content)
+    # Open the file with the default application (Excel / Numbers on macOS).
+    try:
+        if _sys2.platform == "darwin":
+            subprocess.Popen(["open", str(dest)])
+        elif _sys2.platform == "win32":
+            import os as _os2; _os2.startfile(str(dest))
+        else:
+            subprocess.Popen(["xdg-open", str(dest)])
+    except Exception:
+        pass
+    return str(dest)
+
+
 def ctx(request: Request, **extra):
     return {
         "request": request,
@@ -1074,6 +1105,14 @@ async def remove_contact(
 
 
 def _download_response(content: bytes, filename: str, media_type: str) -> Response:
+    # In the packaged Tauri app WKWebView cannot trigger file downloads, so
+    # save to ~/Downloads and open in the default app instead.
+    if _os.environ.get("LEADS_BUNDLE_BASE") or getattr(_sys, "frozen", False):
+        _export_to_downloads(content, filename)
+        return Response(
+            content=b"",
+            status_code=204,
+        )
     return Response(
         content=content,
         media_type=media_type,
@@ -1405,10 +1444,9 @@ async def po_export_xlsx_route(po_id: int):
     if not po:
         return RedirectResponse("/generate/purchase-orders", status_code=303)
     content, fname = export_po_xlsx(po)
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    return _download_response(
+        content, fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -1565,10 +1603,9 @@ async def ci_export_xlsx_route(ci_id: int):
     if not ci:
         return RedirectResponse("/generate/commission-invoices", status_code=303)
     content, fname = export_ci_xlsx(ci)
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    return _download_response(
+        content, fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -1703,10 +1740,9 @@ async def si_export_xlsx_route(si_id: int):
     if not si:
         return RedirectResponse("/generate/sales-invoices", status_code=303)
     content, fname = export_si_xlsx(si)
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    return _download_response(
+        content, fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -1834,8 +1870,7 @@ async def dn_export_xlsx_route(dn_id: int):
     if not dn:
         return RedirectResponse("/generate/delivery-notes", status_code=303)
     content, fname = export_dn_xlsx(dn)
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    return _download_response(
+        content, fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )

@@ -36,7 +36,7 @@
           <form method="post" action="/generate/purchase-orders/{{ row.id }}/duplicate" style="display:inline"><button type="submit" class="link-btn">Duplicate</button></form>
           <a class="link" href="/generate/purchase-orders/{{ row.id }}/export.xlsx">XLSX</a>
           <a class="link" href="/generate/purchase-orders/{{ row.id }}/export.pdf">PDF</a>
-          <a class="link" href="/generate/purchase-orders/{{ row.id }}/print" target="_blank">Print</a>
+          <a class="link" href="/generate/purchase-orders/{{ row.id }}/print">Print</a>
           <form method="post" action="/generate/purchase-orders/{{ row.id }}/delete" style="display:inline" data-confirm="Delete PO {{ row.po_number }}?"><button type="submit" class="link-btn" style="color:var(--danger,#b91c1c)">Delete</button></form>
         </td>
       </tr>
