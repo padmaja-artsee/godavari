@@ -133,13 +133,6 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .setup(|app| {
-            // Always start at the Leads root, regardless of last-visited URL.
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.eval("window.location.replace('http://localhost:8000/')");
-            }
-            Ok(())
-        })
         .run(tauri::generate_context!())
         .expect("error running Tauri application");
 }
