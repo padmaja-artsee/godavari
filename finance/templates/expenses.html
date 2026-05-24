@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% set page = "expenses" %}
+{% block title %}Expenses FY{{ fy }}{% endblock %}
+{% block content %}
+
+<div class="f-page-header">
+  <div>
+    <h1>Expenses</h1>
+    <p class="f-subtitle">GBInc · FY{{ fy }} · {{ expenses|length }} records · Total ${{ "%.2f"|format(total) }}</p>
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <div class="f-fy-picker">
+      {% for y in fiscal_years %}
+      <a href="/expenses?fy={{ y }}" class="f-fy-btn {% if y == fy %}active{% endif %}">FY{{ y }}</a>
+      {% endfor %}
+    </div>
+    <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ New Expense</a>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="f-filter-row">
+  <form method="GET" action="/expenses" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <input type="hidden" name="fy" value="{{ fy }}" />
+    <select name="account_id" class="f-select f-select-sm">
+      <option value="">All Accounts</option>
+      {% set prev_group = namespace(v='') %}
+      {% for a in accounts %}
+      {% if a.group_label != prev_group.v %}
+      {% if prev_group.v %}</optgroup>{% endif %}
+      <optgroup label="{{ a.group_label }}">
+      {% set prev_group.v = a.group_label %}
+      {% endif %}
+      <option value="{{ a.id }}" {% if a.id == filter_account %}selected{% endif %}>{{ a.name }}</option>
+      {% endfor %}
+      {% if accounts %}</optgroup>{% endif %}
+    </select>
+    <select name="vendor_id" class="f-select f-select-sm">
+      <option value="">All Vendors</option>
+      {% for v in vendors %}
+      <option value="{{ v.id }}" {% if v.id == filter_vendor %}selected{% endif %}>{{ v.name }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="f-btn f-btn-ghost" style="padding:5px 14px;">Filter</button>
+    <a href="/expenses?fy={{ fy }}" class="f-btn f-btn-ghost" style="padding:5px 14px;">Clear</a>
+  </form>
+</div>
+
+{% if expenses %}
+<div class="f-grid-wrapper">
+  <table class="f-grid f-expense-table">
+    <thead>
+      <tr>
+        <th style="text-align:left">Date</th>
+        <th style="text-align:left">Expense Account</th>
+        <th style="text-align:left">Vendor</th>
+        <th style="text-align:left">Reference</th>
+        <th style="text-align:left">Paid Through</th>
+        <th>Amount</th>
+        <th style="text-align:center">Receipt</th>
+        <th style="text-align:center">Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in expenses %}
+      <tr class="f-exp-row">
+        <td style="white-space:nowrap">{{ e.date | fmtdate }}</td>
+        <td>
+          <span class="f-acct-tag">{{ e.account_name }}</span>
+          {% if e.group_label %}<span class="f-group-tag">{{ e.group_label }}</span>{% endif %}
+        </td>
+        <td>{{ e.vendor_name or '—' }}</td>
+        <td class="f-text-muted">{{ e.reference or '—' }}</td>
+        <td class="f-text-muted">{{ e.payment_account_name or '—' }}</td>
+        <td style="text-align:right;font-weight:600">${{ "%.2f"|format(e.amount) }}</td>
+        <td style="text-align:center">
+          {% if e.receipt_filename %}
+          <a href="/expenses/{{ e.id }}/receipt" target="_blank" class="f-receipt-link" title="View receipt">
+            📎
+          </a>
+          {% else %}
+          <span class="f-text-muted" style="font-size:11px">none</span>
+          {% endif %}
+        </td>
+        <td style="text-align:center;white-space:nowrap">
+          <a href="/expenses/{{ e.id }}/edit?fy={{ fy }}" class="f-action-btn">Edit</a>
+          <form method="POST" action="/expenses/{{ e.id }}/delete" style="display:inline"
+                data-confirm="Delete this expense of ${{ '%.2f'|format(e.amount) }} on {{ e.date|fmtdate }}?">
+            <input type="hidden" name="fy" value="{{ fy }}" />
+            <button type="submit" class="f-action-btn f-action-danger">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot>
+      <tr class="f-exp-total-row">
+        <td colspan="5" style="text-align:right;font-weight:700;padding-right:12px">Total</td>
+        <td style="text-align:right;font-weight:700">${{ "%.2f"|format(total) }}</td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
+  </table>
+</div>
+{% else %}
+<div class="f-empty-state">
+  <p>No expenses recorded for FY{{ fy }}.</p>
+  <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ Add First Expense</a>
+</div>
+{% endif %}
+
+<script>
+document.querySelectorAll('form[data-confirm]').forEach(form => {
+  form.addEventListener('submit', function(e) {
+    if (!confirm(this.dataset.confirm)) e.preventDefault();
+  });
+});
+</script>
+{% endblock %}

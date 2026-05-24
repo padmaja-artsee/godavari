@@ -58,12 +58,35 @@
   </div>
 </div>
 
-<div class="f-actions-row">
-  <a href="/budget?fy={{ fy }}"  class="f-btn f-btn-primary">Enter Budget</a>
-  <a href="/actuals?fy={{ fy }}" class="f-btn f-btn-primary">Enter Actuals</a>
-  <a href="/report?fy={{ fy }}"  class="f-btn f-btn-ghost">Budget vs Actuals Report</a>
+<div class="f-actions-row" style="margin-bottom:28px">
+  <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ Record Expense</a>
+  <a href="/budget?fy={{ fy }}"       class="f-btn f-btn-ghost">Budget</a>
+  <a href="/actuals?fy={{ fy }}"      class="f-btn f-btn-ghost">Actuals</a>
+  <a href="/report?fy={{ fy }}"       class="f-btn f-btn-ghost">Report</a>
   <a href="/report/export.xlsx?fy={{ fy }}" class="f-btn f-btn-ghost">Export Excel</a>
 </div>
+
+{% if recent_expenses %}
+<div class="f-card" style="max-width:640px">
+  <h3 style="margin-bottom:12px">Recent Expenses</h3>
+  <ul class="f-recent-list">
+    {% for e in recent_expenses %}
+    <li>
+      <div>
+        <span class="f-acct-tag">{{ e.account_name }}</span>
+        {% if e.vendor_name %}<span style="margin-left:6px;font-size:12px;color:var(--text-muted)">{{ e.vendor_name }}</span>{% endif %}
+        <span style="margin-left:6px;font-size:11px;color:var(--text-muted)">{{ e.date | fmtdate }}</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="f-recent-amount">${{ "%.2f"|format(e.amount) }}</span>
+        <a href="/expenses/{{ e.id }}/edit?fy={{ fy }}" class="f-link-small">edit</a>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  <a href="/expenses?fy={{ fy }}" class="f-link-small" style="display:inline-block;margin-top:8px">View all expenses →</a>
+</div>
+{% endif %}
 
 <script>
 const months = {{ chart_months | tojson }};

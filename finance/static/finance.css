@@ -294,9 +294,191 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 
 /* Legend */
 .f-report-legend { display: flex; gap: 16px; margin-bottom: 14px; }
+.f-legend-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
 .f-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-muted); }
-.f-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.f-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
 .f-dot-budget  { background: #94a3b8; }
 .f-dot-actual  { background: var(--green); }
 .f-dot-var-pos { background: var(--green); }
 .f-dot-var-neg { background: var(--red); }
+
+/* ── Nav divider ── */
+.f-nav-divider { height: 1px; background: rgba(255,255,255,.12); margin: 6px 16px; }
+
+/* ── Filter row ── */
+.f-filter-row { margin-bottom: 14px; }
+.f-select-sm  { font-size: 12px; padding: 5px 8px; }
+
+/* ── Expense table ── */
+.f-expense-table td { vertical-align: middle; }
+.f-exp-row:hover { background: var(--green-pale) !important; cursor: pointer; }
+.f-acct-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  background: var(--green-lt);
+  color: var(--green);
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.f-group-tag {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 2px 6px;
+  background: var(--bg);
+  color: var(--text-muted);
+  border-radius: 12px;
+  font-size: 10px;
+  border: 1px solid var(--border);
+}
+.f-receipt-link { font-size: 16px; text-decoration: none; }
+.f-action-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+  transition: all .12s;
+  font-family: inherit;
+}
+.f-action-btn:hover { background: var(--bg); border-color: var(--green); color: var(--green); }
+.f-action-danger { color: var(--red) !important; }
+.f-action-danger:hover { border-color: var(--red) !important; background: var(--red-lt) !important; }
+.f-exp-total-row { background: var(--green-pale); }
+.f-exp-total-row td { padding: 8px 8px; font-size: 13px; }
+.f-text-muted { color: var(--text-muted); font-size: 12px; }
+
+/* ── Empty state ── */
+.f-empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+  background: var(--white);
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
+}
+.f-empty-state p { margin-bottom: 16px; }
+
+/* ── Two-col layout ── */
+.f-two-col {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+@media (max-width: 800px) { .f-two-col { grid-template-columns: 1fr; } }
+
+/* ── Form card ── */
+.f-form-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 32px;
+  max-width: 860px;
+  box-shadow: var(--shadow);
+}
+.f-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
+}
+@media (max-width: 680px) { .f-form-grid { grid-template-columns: 1fr; } }
+
+/* ── Form elements ── */
+.f-field { display: flex; flex-direction: column; }
+.f-label { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .4px; }
+.f-required { color: var(--red); }
+.f-input, .f-select, .f-textarea {
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--white);
+  transition: border-color .15s;
+  width: 100%;
+}
+.f-input:focus, .f-select:focus, .f-textarea:focus {
+  outline: none;
+  border-color: var(--green-mid);
+  box-shadow: 0 0 0 3px rgba(28,86,49,.08);
+}
+.f-textarea { resize: vertical; }
+.f-field-hint { margin-top: 4px; font-size: 11px; }
+.f-link-small { color: var(--green); text-decoration: none; font-size: 12px; }
+.f-link-small:hover { text-decoration: underline; }
+
+/* ── File upload dropzone ── */
+.f-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  background: var(--bg);
+}
+.f-dropzone:hover, .f-dropzone.dragover {
+  border-color: var(--green-mid);
+  background: var(--green-pale);
+}
+.f-dropzone-inner { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.f-drop-icon  { font-size: 28px; }
+.f-drop-text  { font-size: 13px; font-weight: 500; color: var(--text); }
+.f-drop-hint  { font-size: 11px; color: var(--text-muted); }
+.f-existing-receipt { margin-bottom: 8px; font-size: 12px; color: var(--text-muted); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+/* ── Section title ── */
+.f-section-title { font-size: 16px; font-weight: 700; color: var(--green); margin-bottom: 4px; padding-bottom: 6px; border-bottom: 2px solid var(--green-lt); }
+
+/* ── Badge ── */
+.f-badge { display: inline-block; padding: 1px 6px; background: #e2e8f0; color: var(--text-muted); border-radius: 8px; font-size: 10px; font-weight: 600; margin-left: 4px; }
+
+/* ── Modal overlay ── */
+.f-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.45);
+  z-index: 9999; display: flex; align-items: center; justify-content: center;
+}
+.f-modal {
+  background: var(--white); border-radius: var(--radius); padding: 28px;
+  max-width: 440px; width: 90%; box-shadow: 0 8px 32px rgba(0,0,0,.2);
+}
+
+/* ── Hybrid actuals cell ── */
+.f-hybrid-cell { padding: 3px 4px !important; }
+.f-hybrid-wrap { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.f-rollup-badge {
+  font-size: 10px; font-weight: 600;
+  background: #c4d9c9; color: #1a4228;
+  border-radius: 3px; padding: 1px 4px;
+  white-space: nowrap;
+}
+.f-manual-input {
+  width: 68px;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  text-align: right;
+  background: transparent;
+  color: var(--text);
+}
+.f-manual-input:focus { outline: none; border-color: var(--green-mid); background: var(--white); }
+.f-manual-input::placeholder { color: #b0bec5; font-style: italic; }
+
+/* Dashboard recent expenses */
+.f-recent-list { list-style: none; }
+.f-recent-list li {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px;
+}
+.f-recent-list li:last-child { border-bottom: none; }
+.f-recent-amount { font-weight: 700; color: var(--text); }
