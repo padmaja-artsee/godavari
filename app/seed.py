@@ -1,9 +1,13 @@
 import json
+import os
 from pathlib import Path
 
 from app.database import get_db, init_db, migrate_to_leads_deals, now_iso, upsert_customer, upsert_product
 
-SEED_PATH = Path(__file__).resolve().parent.parent / "data" / "seed.json"
+# When packaged, LEADS_SEED_DIR points to the read-only bundle data dir.
+# When running from source, fall back to the repo's data/ directory.
+_seed_dir = os.environ.get("LEADS_SEED_DIR") or str(Path(__file__).resolve().parent.parent / "data")
+SEED_PATH = Path(_seed_dir) / "seed.json"
 
 MILESTONE_MAP = {
     "Initial Request": "initial_request",

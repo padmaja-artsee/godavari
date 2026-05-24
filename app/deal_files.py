@@ -4,9 +4,9 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from app.database import get_db, now_iso
+from app.database import get_data_dir, get_db, now_iso
 
-DEAL_UPLOAD_ROOT = Path(__file__).resolve().parent.parent / "data" / "uploads" / "deals"
+DEAL_UPLOAD_ROOT = get_data_dir() / "uploads" / "deals"
 
 
 def upgrade_deal_files_schema() -> None:

@@ -6,9 +6,25 @@ from pathlib import Path
 from typing import Any, Iterable, Optional
 
 import os as _os
+
+# ---------------------------------------------------------------------------
+# Data directory resolution
+# When packaged (PyInstaller), LEADS_DATA_DIR is set to a writable OS path
+# such as ~/Library/Application Support/GodavariLeads.
+# When running from source, fall back to the repo's data/ directory.
+# ---------------------------------------------------------------------------
+_SOURCE_DATA = Path(__file__).resolve().parent.parent / "data"
+
+def get_data_dir() -> Path:
+    """Return the writable data directory (DB, uploads, exports)."""
+    env = _os.environ.get("LEADS_DATA_DIR")
+    p = Path(env) if env else _SOURCE_DATA
+    p.mkdir(parents=True, exist_ok=True)
+    return p
+
 DB_PATH = Path(
     _os.environ.get("LEADS_DB_PATH")
-    or Path(__file__).resolve().parent.parent / "data" / "leads.db"
+    or get_data_dir() / "leads.db"
 )
 
 
@@ -261,9 +277,12 @@ def patch_deal_commercial(
 @contextmanager
 def get_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    # timeout=30: retry for up to 30 s if another connection holds a write lock.
+    conn = sqlite3.connect(DB_PATH, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
+    # WAL mode allows concurrent readers + one writer without blocking reads.
+    conn.execute("PRAGMA journal_mode = WAL")
     try:
         yield conn
         conn.commit()

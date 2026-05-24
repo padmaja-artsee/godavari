@@ -5,10 +5,18 @@ import uuid
 from pathlib import Path
 from typing import Any, Optional
 
-from app.database import get_db, now_iso, upsert_product
+from app.database import get_data_dir, get_db, now_iso, upsert_product
 
-CATALOGUE_PATH = Path(__file__).resolve().parent.parent / "data" / "product_catalogue.json"
-UPLOAD_ROOT = Path(__file__).resolve().parent.parent / "data" / "uploads" / "products"
+_SOURCE_DATA = Path(__file__).resolve().parent.parent / "data"
+
+def _catalogue_path() -> Path:
+    import os as _os
+    seed_dir = _os.environ.get("LEADS_SEED_DIR")
+    base = Path(seed_dir) if seed_dir else _SOURCE_DATA
+    return base / "product_catalogue.json"
+
+CATALOGUE_PATH = _catalogue_path()
+UPLOAD_ROOT = get_data_dir() / "uploads" / "products"
 
 # Legacy / typo names → canonical catalogue name
 PRODUCT_ALIASES = {

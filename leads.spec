@@ -20,11 +20,15 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=[
-        # Bundle templates, static assets, and the data directory.
+        # Bundle templates, static assets, and the data directory (seed + templates).
         (str(ROOT / "templates"),  "templates"),
         (str(ROOT / "static"),     "static"),
         (str(ROOT / "data"),       "data"),
     ],
+    # Note: data/leads.db is intentionally included so the app can copy it to
+    # ~/Library/Application Support/GodavariLeads/ on first launch, avoiding
+    # slow JSON seed loading.
+
     hiddenimports=[
         # FastAPI / Starlette internals not always auto-detected.
         "uvicorn.logging",

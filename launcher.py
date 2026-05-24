@@ -52,15 +52,42 @@ def _open_browser(port: int) -> None:
         webbrowser.open(f"http://{HOST}:{port}")
 
 
+def _user_data_dir(app_name: str) -> str:
+    """
+    Return a writable, persistent user data directory for the app.
+    - macOS:   ~/Library/Application Support/<app_name>
+    - Windows: %APPDATA%/<app_name>
+    - Linux:   ~/.local/share/<app_name>
+    """
+    if sys.platform == "darwin":
+        base = os.path.expanduser("~/Library/Application Support")
+    elif sys.platform == "win32":
+        base = os.environ.get("APPDATA", os.path.expanduser("~"))
+    else:
+        base = os.environ.get("XDG_DATA_HOME", os.path.expanduser("~/.local/share"))
+    data_dir = os.path.join(base, app_name)
+    os.makedirs(data_dir, exist_ok=True)
+    return data_dir
+
+
 def main() -> None:
     # When frozen by PyInstaller sys._MEIPASS is set; resolve the app root.
     if getattr(sys, "frozen", False):
+        import shutil
         app_root = sys._MEIPASS  # type: ignore[attr-defined]
         sys.path.insert(0, app_root)
-        # Store the DB next to the actual executable, not the temp bundle dir.
-        exe_dir = os.path.dirname(sys.executable)
-        os.environ.setdefault("LEADS_DB_PATH", os.path.join(exe_dir, "leads.db"))
-        os.environ.setdefault("LEADS_DATA_DIR", os.path.join(exe_dir, "data"))
+        # Store user data (DB, uploads, exports) in a writable OS location,
+        # NOT inside the app bundle which may be read-only.
+        user_dir = _user_data_dir("GodavariLeads")
+        user_db = os.path.join(user_dir, "leads.db")
+        bundled_db = os.path.join(app_root, "data", "leads.db")
+        # First-run: copy the pre-seeded DB from the bundle so seed loading is instant.
+        if not os.path.exists(user_db) and os.path.exists(bundled_db):
+            shutil.copy2(bundled_db, user_db)
+        os.environ.setdefault("LEADS_DB_PATH", user_db)
+        os.environ.setdefault("LEADS_DATA_DIR", user_dir)
+        # Seed data and templates still come from the read-only bundle.
+        os.environ.setdefault("LEADS_SEED_DIR", os.path.join(app_root, "data"))
     else:
         # Running from source — project root is this file's directory.
         here = os.path.dirname(os.path.abspath(__file__))
