@@ -446,10 +446,59 @@ def import_catalogue(merge_aliases: bool = True) -> dict:
     if not CATALOGUE_PATH.exists():
         return {"error": "catalogue not found"}
     items = json.loads(CATALOGUE_PATH.read_text())
-    counts = {"imported": 0, "merged": 0}
-    for item in items:
-        save_product(item)
-        counts["imported"] += 1
+
+    # Skip import if the DB already has at least as many products as the catalogue.
+    # This avoids holding write locks on every startup when nothing has changed.
+    with get_db() as conn:
+        existing_count = conn.execute("SELECT COUNT(*) AS n FROM products").fetchone()["n"]
+    if existing_count >= len(items):
+        # Still run alias merges in case of name changes, but nothing new to insert.
+        counts = {"imported": 0, "merged": 0}
+    else:
+        # Batch all inserts/updates into a single transaction to minimize lock time.
+        counts = {"imported": 0, "merged": 0}
+        ts = now_iso()
+        with get_db() as conn:
+            for item in items:
+                name = item["name"].strip()
+                existing = conn.execute(
+                    "SELECT id FROM products WHERE name = ? COLLATE NOCASE", (name,)
+                ).fetchone()
+                if existing:
+                    conn.execute(
+                        """UPDATE products SET
+                            trade_name=?, cas_number=?, hs_code=?, biobased_content=?,
+                            applications=?, certifications=?, category=?,
+                            synonyms=?, notes=?, status=?, updated_at=?
+                           WHERE id=?""",
+                        (
+                            item.get("trade_name", ""), item.get("cas_number", ""),
+                            item.get("hs_code", ""), item.get("biobased_content", ""),
+                            item.get("applications", ""), item.get("certifications", ""),
+                            item.get("category", ""), item.get("synonyms", ""),
+                            item.get("notes", ""), item.get("status", "active"),
+                            ts, existing["id"],
+                        ),
+                    )
+                else:
+                    conn.execute(
+                        """INSERT INTO products (
+                               name, trade_name, cas_number, hs_code, biobased_content,
+                               applications, certifications, category, synonyms, notes,
+                               status, created_at, updated_at
+                           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (
+                            name,
+                            item.get("trade_name", ""), item.get("cas_number", ""),
+                            item.get("hs_code", ""), item.get("biobased_content", ""),
+                            item.get("applications", ""), item.get("certifications", ""),
+                            item.get("category", ""), item.get("synonyms", ""),
+                            item.get("notes", ""), item.get("status", "active"),
+                            ts, ts,
+                        ),
+                    )
+                counts["imported"] += 1
+
     if merge_aliases:
         with get_db() as conn:
             rows = conn.execute("SELECT id, name FROM products").fetchall()

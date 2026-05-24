@@ -228,7 +228,11 @@ def startup() -> None:
 
     # Seed loading can be slow (large JSON with hundreds of records).
     # Run it in a background thread so the server accepts requests immediately.
+    # The 3-second delay lets the first user interaction complete before any
+    # background writes begin, preventing immediate DB lock contention.
     def _seed_in_background():
+        import time as _time
+        _time.sleep(3)
         try:
             load_seed()
             migrate_to_leads_deals()
