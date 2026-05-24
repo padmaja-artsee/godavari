@@ -14,9 +14,10 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
 from app.commission_invoices import _float, safe_ci_filename
+from app.database import get_data_dir
 
 BASE       = Path(__file__).resolve().parent.parent
-XLSX_DIR   = BASE / "data" / "exports" / "commission_invoices" / "xlsx"
+XLSX_DIR   = get_data_dir() / "exports" / "commission_invoices" / "xlsx"
 LOGO_PNG   = BASE / "static" / "gbbv-logo.png"
 FOOTER_PNG = BASE / "static" / "footer logo.png"
 

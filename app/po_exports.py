@@ -10,12 +10,15 @@ from typing import Any
 import openpyxl
 from openpyxl.drawing.image import Image as XLImage
 
+from app.database import get_data_dir
 from app.purchase_orders import _float, safe_document_filename
 
 BASE = Path(__file__).resolve().parent.parent
-XLSX_DIR = BASE / "data" / "exports" / "purchase_orders" / "xlsx"
-PDF_DIR = BASE / "data" / "exports" / "purchase_orders" / "pdf"
-TEMPLATE_DIR = BASE / "data" / "templates" / "gbbv"
+XLSX_DIR = get_data_dir() / "exports" / "purchase_orders" / "xlsx"
+PDF_DIR  = get_data_dir() / "exports" / "purchase_orders" / "pdf"
+# Template: prefer bundled seed dir, fall back to source tree.
+_seed = __import__("os").environ.get("LEADS_SEED_DIR") or str(BASE / "data")
+TEMPLATE_DIR = Path(_seed) / "templates" / "gbbv"
 TEMPLATE_SRC = Path("/Users/padmajaganapathy/Documents/Godavari/Leads summary/GBBV/PO sample gbbv.xlsx")
 TEMPLATE_FILE = TEMPLATE_DIR / "PO sample gbbv.xlsx"
 LOGO_SVG = BASE / "static" / "gbbv-logo.svg"
