@@ -66,6 +66,8 @@ a = Analysis(
         "app.products",
         "app.exports",
         "app.seed",
+        "app.charts",
+        "app.xl_style",
         # ── Finance modules ────────────────────────────────────────────────
         "finance",
         "finance.app",

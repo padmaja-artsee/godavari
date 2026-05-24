@@ -57,7 +57,7 @@ echo "  ✓ Signed (ad-hoc)"
 
 echo ""
 echo "▶ Step 6: Package into DMG..."
-DMG_NAME="Leads_1.0.0_aarch64.dmg"
+DMG_NAME="GodavariLeads_1.1.0_aarch64.dmg"
 rm -f "$SCRIPT_DIR/$DMG_NAME"
 hdiutil create \
     -volname "Godavari Leads" \
