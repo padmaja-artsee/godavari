@@ -81,7 +81,7 @@ exe = EXE(  # noqa: F821
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,   # No terminal window on launch (set True to debug).
+    console=True,    # Show console for debugging - set False for production release.
     # icon="static/icon.icns",   # Uncomment and add icon file for branded app.
 )
 

@@ -147,12 +147,12 @@ from app.purchase_orders import (
 from app.seed import load_seed
 
 import sys as _sys
-# When frozen by PyInstaller, files are extracted to sys._MEIPASS (_internal/).
-# Path(__file__) resolves correctly inside the frozen bundle, so BASE works.
-# We expose it via an env var so other modules can locate bundle assets too.
-BASE = Path(__file__).resolve().parent.parent
-if getattr(_sys, "frozen", False) and not __import__("os").environ.get("LEADS_BUNDLE_BASE"):
-    __import__("os").environ["LEADS_BUNDLE_BASE"] = str(BASE)
+import os as _os
+# When frozen by PyInstaller the launcher sets LEADS_BUNDLE_BASE = sys._MEIPASS,
+# which is the directory that actually contains templates/, static/, data/.
+# Fall back to Path(__file__).parent.parent for source runs.
+_bundle_base = _os.environ.get("LEADS_BUNDLE_BASE")
+BASE = Path(_bundle_base) if _bundle_base else Path(__file__).resolve().parent.parent
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 templates.env.filters["qty_display"] = format_quantity_display
 templates.env.filters["iso_date"] = iso_date_input
@@ -204,18 +204,27 @@ else:
 @app.on_event("startup")
 def startup() -> None:
     import threading as _threading
+    import logging as _logging
 
-    # Enable WAL mode before anything else so concurrent reads never block saves.
-    import sqlite3 as _sqlite3
-    from app.database import DB_PATH as _DB_PATH
-    _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    _wc = _sqlite3.connect(str(_DB_PATH), timeout=30)
-    _wc.execute("PRAGMA journal_mode = WAL")
-    _wc.commit()
-    _wc.close()
+    _log = _logging.getLogger("leads.startup")
 
-    # init_db creates tables — must run synchronously before requests arrive.
-    init_db()
+    try:
+        # Enable WAL mode before anything else so concurrent reads never block saves.
+        import sqlite3 as _sqlite3
+        from app.database import DB_PATH as _DB_PATH
+        _DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _wc = _sqlite3.connect(str(_DB_PATH), timeout=30)
+        _wc.execute("PRAGMA journal_mode = WAL")
+        _wc.commit()
+        _wc.close()
+    except Exception as exc:
+        _log.error("WAL setup failed: %s", exc)
+
+    try:
+        # init_db creates tables — must run synchronously before requests arrive.
+        init_db()
+    except Exception as exc:
+        _log.error("init_db failed: %s", exc)
 
     # Seed loading can be slow (large JSON with hundreds of records).
     # Run it in a background thread so the server accepts requests immediately.
@@ -226,13 +235,16 @@ def startup() -> None:
             import_catalogue()
             fix_legacy_product_names()
         except Exception as exc:
-            import logging
-            logging.getLogger("leads.startup").warning("Background seed error: %s", exc)
+            _logging.getLogger("leads.startup").warning("Background seed error: %s", exc)
 
     _threading.Thread(target=_seed_in_background, daemon=True).start()
-    upgrade_commission_invoices_schema()  # CI: remove with CI feature block
-    upgrade_sales_invoices_schema()       # SI: remove with SI feature block
-    upgrade_delivery_notes_schema()       # DN: remove with DN feature block
+
+    try:
+        upgrade_commission_invoices_schema()
+        upgrade_sales_invoices_schema()
+        upgrade_delivery_notes_schema()
+    except Exception as exc:
+        _log.error("Schema upgrade failed: %s", exc)
 
 
 def ctx(request: Request, **extra):

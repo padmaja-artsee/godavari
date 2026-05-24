@@ -19,7 +19,6 @@ import webbrowser
 
 HOST = "127.0.0.1"
 PORT = 8000
-URL  = f"http://{HOST}:{PORT}"
 
 
 def _find_free_port(preferred: int) -> int:
@@ -31,6 +30,26 @@ def _find_free_port(preferred: int) -> int:
         except OSError:
             s.bind((HOST, 0))
             return s.getsockname()[1]
+
+
+def _kill_port(port: int) -> None:
+    """Kill any process currently listening on port (our own stale instance)."""
+    try:
+        import subprocess
+        result = subprocess.run(
+            ["lsof", "-ti", f"tcp:{port}"],
+            capture_output=True, text=True
+        )
+        for pid_str in result.stdout.strip().splitlines():
+            pid = int(pid_str.strip())
+            if pid != os.getpid():
+                try:
+                    os.kill(pid, signal.SIGTERM)
+                except ProcessLookupError:
+                    pass
+        time.sleep(0.5)
+    except Exception:
+        pass
 
 
 def _wait_for_server(port: int, timeout: float = 15.0) -> bool:
@@ -70,24 +89,54 @@ def _user_data_dir(app_name: str) -> str:
     return data_dir
 
 
+def _setup_logging(log_dir: str) -> None:
+    """Route Python logging + uvicorn output to a rotating log file."""
+    import logging
+    from logging.handlers import RotatingFileHandler
+    log_path = os.path.join(log_dir, "leads.log")
+    handler = RotatingFileHandler(log_path, maxBytes=2 * 1024 * 1024, backupCount=2)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s: %(message)s"))
+    root = logging.getLogger()
+    root.setLevel(logging.WARNING)
+    root.addHandler(handler)
+    # Also redirect stdout/stderr so any print() or raw exceptions go to file.
+    try:
+        sys.stdout = open(log_path, "a", buffering=1)
+        sys.stderr = sys.stdout
+    except Exception:
+        pass
+
+
 def main() -> None:
     # When frozen by PyInstaller sys._MEIPASS is set; resolve the app root.
     if getattr(sys, "frozen", False):
         import shutil
         app_root = sys._MEIPASS  # type: ignore[attr-defined]
         sys.path.insert(0, app_root)
+
+        # Expose the bundle root so app/main.py can locate templates/static.
+        os.environ.setdefault("LEADS_BUNDLE_BASE", app_root)
+
         # Store user data (DB, uploads, exports) in a writable OS location,
         # NOT inside the app bundle which may be read-only.
         user_dir = _user_data_dir("GodavariLeads")
         user_db = os.path.join(user_dir, "leads.db")
         bundled_db = os.path.join(app_root, "data", "leads.db")
+
         # First-run: copy the pre-seeded DB from the bundle so seed loading is instant.
         if not os.path.exists(user_db) and os.path.exists(bundled_db):
             shutil.copy2(bundled_db, user_db)
+
         os.environ.setdefault("LEADS_DB_PATH", user_db)
         os.environ.setdefault("LEADS_DATA_DIR", user_dir)
-        # Seed data and templates still come from the read-only bundle.
+        # Seed data (product_catalogue.json, etc.) come from the read-only bundle.
         os.environ.setdefault("LEADS_SEED_DIR", os.path.join(app_root, "data"))
+
+        # Write errors to a log file so they're visible without a console.
+        _setup_logging(user_dir)
+
+        # Kill any stale instance of ourselves on PORT before binding.
+        _kill_port(PORT)
     else:
         # Running from source — project root is this file's directory.
         here = os.path.dirname(os.path.abspath(__file__))
