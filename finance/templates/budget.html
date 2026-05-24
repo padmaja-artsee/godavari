@@ -129,9 +129,10 @@
 </div>
 
 {% if not archived %}
-<div class="f-form-actions" style="margin-top:1rem">
+<div class="f-form-actions" style="margin-top:1rem;align-items:center">
   <button type="submit" class="f-btn f-btn-primary">Save Budget</button>
   <button type="reset" class="f-btn f-btn-outline">Reset</button>
+  <span id="autoSaveStatus" style="font-size:.82rem;margin-left:.75rem;transition:opacity 1s;opacity:0"></span>
 </div>
 {% endif %}
 </form>
@@ -198,7 +199,50 @@ function recalc() {
     if(el){ el.textContent=fmt(tot); el.className='f-calc-total'+(tot<0?' f-neg':''); }
   });
 }
-document.querySelectorAll('.f-cell-input').forEach(inp=>inp.addEventListener('input',recalc));
+// ── Auto-save ──────────────────────────────────────────────────────────────
+const BASE = '{{ _base }}';
+const autoStatus = document.getElementById('autoSaveStatus');
+let saveTimer = null;
+
+function showStatus(msg, colour) {
+  if (!autoStatus) return;
+  autoStatus.textContent = msg;
+  autoStatus.style.color = colour;
+  autoStatus.style.opacity = '1';
+}
+
+function autoSave() {
+  // Build FormData manually — avoids picking up nested sub-form fields
+  // (delete-line / add-line forms) which pollute FormData(form).
+  const fd = new FormData();
+  fd.append('fy', '{{ fy }}');
+  document.querySelectorAll('#budgetForm .f-cell-input').forEach(inp => {
+    fd.append(inp.name, inp.value !== '' ? inp.value : '0');
+  });
+  showStatus('Saving…', '#888');
+  fetch(BASE + '/budget/autosave', { method: 'POST', body: fd })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) {
+        showStatus('Saved ✓', '#2e7d32');
+        setTimeout(() => { if (autoStatus) autoStatus.style.opacity = '0'; }, 2000);
+      } else {
+        showStatus('Save failed', '#c62828');
+      }
+    })
+    .catch(() => showStatus('Save failed', '#c62828'));
+}
+
+function scheduleAutoSave() {
+  recalc();
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(autoSave, 600);   // 600 ms debounce
+}
+
+document.querySelectorAll('.f-cell-input').forEach(inp => {
+  inp.addEventListener('input', scheduleAutoSave);
+  inp.addEventListener('change', scheduleAutoSave);  // catches spinner clicks
+});
 recalc();
 
 // Upload helper
@@ -207,8 +251,8 @@ function doUpload(inp) {
   const fd = new FormData();
   fd.append('fy','{{ fy }}');
   fd.append('file', inp.files[0]);
-  fetch('/budget/upload',{method:'POST',body:fd})
-    .then(r=>{if(r.ok)window.location=r.url; else alert('Upload failed.');});
+  fetch(BASE + '/budget/upload', {method:'POST', body:fd})
+    .then(r => { if(r.ok) window.location = r.url; else alert('Upload failed.'); });
 }
 </script>
 {% endblock %}

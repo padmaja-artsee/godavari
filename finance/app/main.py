@@ -206,6 +206,24 @@ async def save_budget(request: Request, fy: int = Form(...)):
     return RedirectResponse(f"{FINANCE_BASE}/budget?fy={fy}&saved=1", status_code=303)
 
 
+@app.post("/budget/autosave")
+async def autosave_budget(request: Request):
+    """Silent auto-save called by JS on every input change — returns JSON, no redirect."""
+    form = await request.form()
+    fy = int(form.get("fy", 0))
+    if not fy:
+        return {"ok": False, "error": "missing fy"}
+    values = {}
+    for k, v in form.items():
+        if k == "fy": continue
+        try:
+            values[k] = float(v) if str(v).strip() else 0.0
+        except (ValueError, AttributeError):
+            values[k] = 0.0
+    save_budget_grid(fy, values)
+    return {"ok": True}
+
+
 @app.get("/budget/template.xlsx")
 async def budget_template(fy: int = Query(0)):
     from finance.app.exports import generate_budget_template

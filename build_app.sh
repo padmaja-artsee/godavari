@@ -22,9 +22,14 @@ echo "  ✓ Tauri shell compiled"
 
 # Locate the Tauri-built .app — check known cargo target locations first.
 TAURI_APP=""
+CARGO_TARGET="$(cd src-tauri && cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['target_directory'])" 2>/dev/null)"
+SANDBOX_TARGET="/var/folders/mh/fqg3v7yn1y538bqtyl28_35r0000gn/T/cursor-sandbox-cache/699536e77528ae1fd82f92108e3cfa33/cargo-target"
 for candidate in \
-    "$(cd src-tauri && cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['target_directory'])" 2>/dev/null)/release/bundle/macos/Leads.app" \
-    "/var/folders/mh/fqg3v7yn1y538bqtyl28_35r0000gn/T/cursor-sandbox-cache/699536e77528ae1fd82f92108e3cfa33/cargo-target/release/bundle/macos/Leads.app" \
+    "$CARGO_TARGET/release/bundle/macos/GodavariLeads.app" \
+    "$CARGO_TARGET/release/bundle/macos/Leads.app" \
+    "$SANDBOX_TARGET/release/bundle/macos/GodavariLeads.app" \
+    "$SANDBOX_TARGET/release/bundle/macos/Leads.app" \
+    "src-tauri/target/release/bundle/macos/GodavariLeads.app" \
     "src-tauri/target/release/bundle/macos/Leads.app"
 do
     if [ -d "$candidate" ]; then
