@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% set page = "expenses" %}
+{% set page = "expenses_list" %}
 {% block title %}Expenses FY{{ fy }}{% endblock %}
 {% block content %}
 
@@ -14,7 +14,7 @@
       <a href="/expenses?fy={{ y }}" class="f-fy-btn {% if y == fy %}active{% endif %}">FY{{ y }}</a>
       {% endfor %}
     </div>
-    <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ New Expense</a>
+    <a href="/expenses/new?fy={{ fy }}{% if filter_account %}&account_id={{ filter_account }}{% endif %}{% if filter_vendor %}&vendor_id={{ filter_vendor }}{% endif %}" class="f-btn f-btn-primary">+ New Expense</a>
   </div>
 </div>
 
@@ -105,7 +105,7 @@
 {% else %}
 <div class="f-empty-state">
   <p>No expenses recorded for FY{{ fy }}.</p>
-  <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ Add First Expense</a>
+    <a href="/expenses/new?fy={{ fy }}{% if filter_account %}&account_id={{ filter_account }}{% endif %}{% if filter_vendor %}&vendor_id={{ filter_vendor }}{% endif %}" class="f-btn f-btn-primary">+ Add First Expense</a>
 </div>
 {% endif %}
 

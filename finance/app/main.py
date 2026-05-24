@@ -342,7 +342,12 @@ async def expenses_list(
 # ---------------------------------------------------------------------------
 
 @app.get("/expenses/new", response_class=HTMLResponse)
-async def expense_new_form(request: Request, fy: int = Query(0)):
+async def expense_new_form(
+    request: Request,
+    fy: int = Query(0),
+    account_id: int = Query(0),
+    vendor_id: int = Query(0),
+):
     from datetime import date
     fiscal_years = get_fiscal_years()
     if not fy:
@@ -355,6 +360,8 @@ async def expense_new_form(request: Request, fy: int = Query(0)):
         expense=None, accounts=accounts, vendors=vendors,
         payment_accounts=payment_accounts,
         today=date.today().isoformat(),
+        prefill_account=account_id,
+        prefill_vendor=vendor_id,
         page="expenses",
     ))
 

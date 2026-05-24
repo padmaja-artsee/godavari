@@ -305,6 +305,13 @@ body { font-family: 'DM Sans', system-ui, sans-serif; background: var(--bg); col
 /* ── Nav divider ── */
 .f-nav-divider { height: 1px; background: rgba(255,255,255,.12); margin: 6px 16px; }
 
+/* Sub nav link (indented) */
+.f-nav-sub {
+  padding-left: 32px !important;
+  font-size: 12px !important;
+  opacity: .8;
+}
+
 /* ── Filter row ── */
 .f-filter-row { margin-bottom: 14px; }
 .f-select-sm  { font-size: 12px; padding: 5px 8px; }

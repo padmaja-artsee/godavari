@@ -40,7 +40,8 @@
           {% set prev_group.v = a.group_label %}
           {% endif %}
           <option value="{{ a.id }}"
-            {% if expense and expense.account_id == a.id %}selected{% endif %}>
+            {% if expense and expense.account_id == a.id %}selected
+            {% elif not expense and prefill_account and prefill_account == a.id %}selected{% endif %}>
             {{ a.name }}
           </option>
           {% endfor %}
@@ -96,7 +97,8 @@
             <option value="">— Select vendor —</option>
             {% for v in vendors %}
             <option value="{{ v.id }}"
-              {% if expense and expense.vendor_id == v.id %}selected{% endif %}>
+              {% if expense and expense.vendor_id == v.id %}selected
+              {% elif not expense and prefill_vendor and prefill_vendor == v.id %}selected{% endif %}>
               {{ v.name }}
             </option>
             {% endfor %}
