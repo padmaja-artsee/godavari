@@ -365,6 +365,34 @@ async def products_page(
     )
 
 
+PRODUCTS_COLUMNS: list[tuple[str, str]] = [
+    ("Product", "name"),
+    ("Trade Name", "trade_name"),
+    ("CAS Number", "cas_number"),
+    ("Category", "category"),
+    ("Status", "status"),
+    ("Biobased Content", "biobased_content"),
+    ("Certifications", "certifications"),
+    ("Applications", "applications"),
+    ("Synonyms", "synonyms"),
+]
+
+
+@app.get("/products/export.xlsx")
+async def products_export_xlsx(
+    q: str = Query(""),
+    category: str = Query(""),
+    status: str = Query(""),
+):
+    rows = list_products_full(q, category, status)
+    fname = export_filename("gbinc-products", status, "xlsx")
+    return _download_response(
+        to_xlsx_bytes([("Products", rows, PRODUCTS_COLUMNS)]),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @app.get("/products/new", response_class=HTMLResponse)
 async def product_new(request: Request):
     return templates.TemplateResponse(
