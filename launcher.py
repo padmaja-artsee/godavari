@@ -135,6 +135,18 @@ def main() -> None:
         # Write errors to a log file so they're visible without a console.
         _setup_logging(user_dir)
 
+        # Clean up stale SQLite WAL/SHM files that can leave DBs read-only.
+        # A -wal file left behind by a crashed previous session prevents
+        # init_db() from running, causing "no such table" errors.
+        for db_name in ("leads.db", "finance.db"):
+            for suffix in ("-wal", "-shm"):
+                stale = os.path.join(user_dir, db_name + suffix)
+                if os.path.exists(stale):
+                    try:
+                        os.remove(stale)
+                    except OSError:
+                        pass
+
         # Kill any stale instance of ourselves on PORT before binding.
         _kill_port(PORT)
     else:

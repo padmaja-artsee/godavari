@@ -8,7 +8,8 @@ cd "$SCRIPT_DIR"
 
 export PATH="$HOME/.cargo/bin:$HOME/Library/Python/3.9/bin:$PATH"
 
-echo "▶ Step 1: Build Python bundle with PyInstaller..."
+echo "▶ Step 1: Build Python bundle with PyInstaller (clean build)..."
+rm -rf build/ dist/
 pyinstaller -y leads.spec
 echo "  ✓ Python bundle built: dist/leads/"
 
@@ -38,6 +39,16 @@ if [ -z "$TAURI_APP" ]; then
 fi
 echo "  ✓ Found bundle at: $TAURI_APP"
 
+# Ensure the bundle is consistently named GodavariLeads.app (Tauri may produce
+# Leads.app when it uses a cached binary from an older productName setting).
+if [[ "$TAURI_APP" == *"/Leads.app" ]]; then
+    RENAMED_APP="${TAURI_APP%/Leads.app}/GodavariLeads.app"
+    rm -rf "$RENAMED_APP"
+    mv "$TAURI_APP" "$RENAMED_APP"
+    TAURI_APP="$RENAMED_APP"
+    echo "  ✓ Renamed bundle to GodavariLeads.app"
+fi
+
 echo ""
 echo "▶ Step 3: Inject Python bundle into app (preserving structure)..."
 RESOURCES="$TAURI_APP/Contents/Resources"
@@ -57,7 +68,7 @@ echo "  ✓ Signed (ad-hoc)"
 
 echo ""
 echo "▶ Step 6: Package into DMG..."
-DMG_NAME="Leads_1.0.0_aarch64.dmg"
+DMG_NAME="GodavariLeads_1.1.0_aarch64.dmg"
 rm -f "$SCRIPT_DIR/$DMG_NAME"
 hdiutil create \
     -volname "Godavari Leads" \

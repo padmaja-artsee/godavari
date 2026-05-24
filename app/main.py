@@ -238,6 +238,20 @@ def startup() -> None:
     except Exception as exc:
         _log.error("init_db failed: %s", exc)
 
+    # Finance is mounted as a sub-app; Starlette does NOT call its startup events.
+    # We must initialise the Finance DB here so its tables exist before any request.
+    try:
+        from finance.app.database import init_db as _finance_init_db, DB_PATH as _FINANCE_DB_PATH
+        import sqlite3 as _sq3
+        _FINANCE_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+        _fw = _sq3.connect(str(_FINANCE_DB_PATH), timeout=30)
+        _fw.execute("PRAGMA journal_mode = WAL")
+        _fw.commit()
+        _fw.close()
+        _finance_init_db()
+    except Exception as exc:
+        _log.error("finance init_db failed: %s", exc)
+
     # Seed loading can be slow (large JSON with hundreds of records).
     # Run it in a background thread so the server accepts requests immediately.
     # The 3-second delay lets the first user interaction complete before any
@@ -362,6 +376,34 @@ async def products_page(
             status=status,
             categories=categories,
         ),
+    )
+
+
+PRODUCTS_COLUMNS: list[tuple[str, str]] = [
+    ("Product", "name"),
+    ("Trade Name", "trade_name"),
+    ("CAS Number", "cas_number"),
+    ("Category", "category"),
+    ("Status", "status"),
+    ("Biobased Content", "biobased_content"),
+    ("Certifications", "certifications"),
+    ("Applications", "applications"),
+    ("Synonyms", "synonyms"),
+]
+
+
+@app.get("/products/export.xlsx")
+async def products_export_xlsx(
+    q: str = Query(""),
+    category: str = Query(""),
+    status: str = Query(""),
+):
+    rows = list_products_full(q, category, status)
+    fname = export_filename("gbinc-products", status, "xlsx")
+    return _download_response(
+        to_xlsx_bytes([("Products", rows, PRODUCTS_COLUMNS)]),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -1238,6 +1280,65 @@ async def shipping_export_xlsx(
     fname = export_filename("gbinc-shipping", status if status != "all" else "", "xlsx")
     return _download_response(
         to_xlsx_bytes([("Shipping", rows, SHIPPING_COLUMNS)]),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+LEADS_COLUMNS: list[tuple[str, str]] = [
+    ("Company", "company"),
+    ("Contact", "contact"),
+    ("Email", "email"),
+    ("Phone", "phone"),
+    ("Website", "website"),
+    ("Products Interested", "products_interested"),
+    ("Notes", "notes"),
+    ("Last Updated", "updated_at"),
+]
+
+DEALS_COLUMNS: list[tuple[str, str]] = [
+    ("Deal Date", "deal_date"),
+    ("Company", "company"),
+    ("Product", "product"),
+    ("Quantity", "quantity"),
+    ("Unit", "quantity_unit"),
+    ("Price", "price"),
+    ("Price Unit", "price_unit"),
+    ("Value", "value"),
+    ("Status", "status"),
+    ("PO Number", "po_number"),
+    ("Quote Ref", "quote_ref"),
+    ("Notes", "notes"),
+]
+
+
+@app.get("/leads/export.xlsx")
+async def leads_export_xlsx(
+    company: str = Query(""),
+    product: str = Query(""),
+    q: str = Query(""),
+):
+    rows = search_leads_contacts(company, product, q)
+    fname = export_filename("gbinc-leads", "", "xlsx")
+    return _download_response(
+        to_xlsx_bytes([("Leads", rows, LEADS_COLUMNS)]),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/deals/export.xlsx")
+async def deals_export_xlsx(
+    status: str = Query("open"),
+    period: str = Query("all"),
+    company: str = Query(""),
+    product: str = Query(""),
+    q: str = Query(""),
+):
+    rows = list_active_leads(status, period, company, product, "", q)
+    fname = export_filename("gbinc-active-leads", status, "xlsx")
+    return _download_response(
+        to_xlsx_bytes([("Active Leads", rows, DEALS_COLUMNS)]),
         fname,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )

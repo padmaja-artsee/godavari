@@ -8,7 +8,7 @@
 
 <div class="f-form-card">
 <form method="post"
-      action="{{ '/expenses/'+transaction.id|string+'/edit' if transaction else '/expenses/new' }}"
+      action="{{ _base+'/expenses/'+transaction.id|string+'/edit' if transaction else _base+'/expenses/new' }}"
       enctype="multipart/form-data">
   <input type="hidden" name="fy" value="{{ fy }}"/>
   <input type="hidden" name="tx_type" value="{{ tx_type }}"/>

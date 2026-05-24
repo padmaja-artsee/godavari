@@ -7,12 +7,13 @@
     <h1 class="f-title">Analysis — FY{{ fy }}</h1>
     <p class="f-subtitle">Budget vs actuals by category.</p>
   </div>
-  <div class="f-header-controls">
+  <div class="f-header-controls" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
     <form method="get" action="{{ _base }}/analysis">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
       </select>
     </form>
+    <a href="{{ _base }}/export/analysis.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
   </div>
 </div>
 
@@ -45,11 +46,17 @@
 <!-- Charts -->
 <div class="f-charts-grid" style="margin-top:1.5rem">
   <div class="f-card f-card-wide">
-    <div class="f-card-header">Monthly Expenses — Budget vs Actuals</div>
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Monthly Expenses — Budget vs Actuals</span>
+      <button onclick="saveChart('expChart','GBInc-Expenses-FY{{ fy }}.png')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+    </div>
     <canvas id="expChart" height="100"></canvas>
   </div>
   <div class="f-card">
-    <div class="f-card-header">Monthly Income</div>
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Monthly Income</span>
+      <button onclick="saveChart('incChart','GBInc-Income-FY{{ fy }}.png')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+    </div>
     <canvas id="incChart" height="100"></canvas>
   </div>
 </div>
@@ -74,5 +81,20 @@ new Chart(document.getElementById('incChart'), {
   options:{responsive:true,plugins:{legend:{position:'bottom'}},
            scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
 });
+
+function saveChart(canvasId, filename) {
+  const canvas = document.getElementById(canvasId);
+  // Draw onto a white-background canvas so PNG isn't transparent
+  const offscreen = document.createElement('canvas');
+  offscreen.width = canvas.width; offscreen.height = canvas.height;
+  const ctx = offscreen.getContext('2d');
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, offscreen.width, offscreen.height);
+  ctx.drawImage(canvas, 0, 0);
+  const link = document.createElement('a');
+  link.download = filename;
+  link.href = offscreen.toDataURL('image/png');
+  link.click();
+}
 </script>
 {% endblock %}

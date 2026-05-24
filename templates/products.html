@@ -6,7 +6,11 @@
     <h1>Products</h1>
     <p class="subtitle">Catalogue from Godavari Biorefineries — CAS, certifications, applications</p>
   </div>
-  <a href="/products/new" class="btn btn-primary">+ Add product</a>
+  <div style="display:flex;gap:.5rem;align-items:center">
+    <a href="/products/export.xlsx?q={{ q | urlencode }}&category={{ category | urlencode }}&status={{ status | urlencode }}"
+       class="btn btn-ghost btn-sm">↓ Export Excel</a>
+    <a href="/products/new" class="btn btn-primary">+ Add product</a>
+  </div>
 </div>
 
 <div class="card">

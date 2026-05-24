@@ -19,6 +19,7 @@
       <input type="file" id="xlUpload" accept=".xlsx" style="display:none" onchange="doUpload(this)"/>
     </label>
     <a href="{{ _base }}/budget/template.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline">↓ Template</a>
+    <a href="{{ _base }}/export/budget.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
     {% endif %}
     {% if saved %}<span class="f-badge f-badge-green">Saved ✓</span>{% endif %}
     {% if uploaded %}<span class="f-badge f-badge-green">Uploaded {{ uploaded }} values ✓</span>{% endif %}

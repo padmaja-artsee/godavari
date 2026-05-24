@@ -12,23 +12,43 @@ use std::time::{Duration, Instant};
 fn kill_port(port: u16) {
     #[cfg(not(target_os = "windows"))]
     {
-        // lsof -ti tcp:8000 returns pids, one per line; kill each one.
+        // lsof -ti tcp:<port> returns pids one per line.
         if let Ok(out) = Command::new("lsof")
             .args(["-ti", &format!("tcp:{}", port)])
             .output()
         {
             let stdout = String::from_utf8_lossy(&out.stdout);
+            let mut killed = false;
             for pid_str in stdout.split_whitespace() {
                 if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    // Don't kill ourselves.
                     if pid != std::process::id() {
+                        // SIGTERM first for a clean shutdown, then SIGKILL to
+                        // guarantee the port is released before we try to bind.
                         let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
+                        killed = true;
                     }
                 }
             }
-            // Give killed processes time to release the port.
-            if !stdout.trim().is_empty() {
-                thread::sleep(Duration::from_millis(800));
+            if killed {
+                // Give SIGTERM a moment, then SIGKILL any survivors.
+                thread::sleep(Duration::from_millis(600));
+                if let Ok(out2) = Command::new("lsof")
+                    .args(["-ti", &format!("tcp:{}", port)])
+                    .output()
+                {
+                    let stdout2 = String::from_utf8_lossy(&out2.stdout);
+                    for pid_str in stdout2.split_whitespace() {
+                        if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                            if pid != std::process::id() {
+                                let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
+                            }
+                        }
+                    }
+                    if !stdout2.trim().is_empty() {
+                        // Wait for SIGKILL to take effect.
+                        thread::sleep(Duration::from_millis(600));
+                    }
+                }
             }
         }
     }
