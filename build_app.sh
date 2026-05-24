@@ -71,14 +71,45 @@ echo "▶ Step 6: Package into DMG..."
 DMG_NAME="GodavariLeads_1.1.0_aarch64.dmg"
 rm -f "$SCRIPT_DIR/$DMG_NAME"
 # Stage app + Applications symlink so users can drag-to-install
+RW_DMG="$SCRIPT_DIR/godavari_rw.dmg"
 DMG_STAGING=$(mktemp -d)
 cp -r "$TAURI_APP" "$DMG_STAGING/GodavariLeads.app"
 ln -s /Applications "$DMG_STAGING/Applications"
-hdiutil create \
-    -volname "Godavari Leads" \
-    -srcfolder "$DMG_STAGING" \
-    -ov -format UDZO \
-    "$SCRIPT_DIR/$DMG_NAME" 2>&1 | tail -3
+
+# Build writable DMG, inject background, position icons, then compress
+hdiutil create -srcfolder "$DMG_STAGING" -volname "Godavari Leads" \
+    -fs HFS+ -format UDRW -size 120m "$RW_DMG" 2>&1 | tail -1
+DEVICE=$(hdiutil attach -readwrite -noverify "$RW_DMG" 2>&1 | awk 'END{print $1}')
+sleep 2
+mkdir -p "/Volumes/Godavari Leads/.background"
+cp "$SCRIPT_DIR/src-tauri/assets/dmg-background.png" "/Volumes/Godavari Leads/.background/bg.png"
+sleep 1
+osascript <<APPLESCRIPT
+tell application "Finder"
+  tell disk "Godavari Leads"
+    open
+    set current view of container window to icon view
+    set toolbar visible of container window to false
+    set statusbar visible of container window to false
+    set bounds of container window to {200, 120, 760, 440}
+    set viewOptions to the icon view options of container window
+    set arrangement of viewOptions to not arranged
+    set icon size of viewOptions to 80
+    set background picture of viewOptions to file ".background:bg.png"
+    set position of item "GodavariLeads.app" to {140, 120}
+    set position of item "Applications" to {420, 120}
+    update without registering applications
+    delay 3
+    close
+  end tell
+end tell
+APPLESCRIPT
+sync
+hdiutil detach "$DEVICE"
+sleep 1
+hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 \
+    -o "$SCRIPT_DIR/$DMG_NAME" 2>&1 | tail -1
+rm -f "$RW_DMG"
 rm -rf "$DMG_STAGING"
 echo "  ✓ DMG created: $DMG_NAME"
 
