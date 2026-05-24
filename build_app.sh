@@ -67,9 +67,8 @@ chmod +x "$RESOURCES/leads-bin/leads"
 echo "  ✓ Permissions set"
 
 echo ""
-echo "▶ Step 5: Re-sign the bundle (ad-hoc, no developer certificate needed)..."
-codesign --force --deep --sign - "$TAURI_APP" 2>&1 | head -5 || true
-echo "  ✓ Signed (ad-hoc)"
+echo "▶ Step 5: Signing deferred to DMG staging step (step 6) for validity after install..."
+echo "  ✓ Skipped early sign"
 
 echo ""
 echo "▶ Step 6: Package into DMG..."
@@ -79,6 +78,8 @@ rm -f "$SCRIPT_DIR/$DMG_NAME"
 RW_DMG="$SCRIPT_DIR/godavari_rw.dmg"
 DMG_STAGING=$(mktemp -d)
 cp -r "$TAURI_APP" "$DMG_STAGING/GodavariLeads.app"
+# Sign AFTER copy so the signature covers the final bundle state
+codesign --force --deep --sign - "$DMG_STAGING/GodavariLeads.app" 2>&1 | head -2 || true
 ln -s /Applications "$DMG_STAGING/Applications"
 
 # Build writable DMG, inject background, position icons, then compress
