@@ -3,7 +3,7 @@
 
   {# ── Header: logo + company name only (no border here) ── #}
   <div class="ci-header-row">
-    <img src="/static/gbbv-logo.png" alt="GBBV logo" class="po-logo" />
+    <img src="/static/logo.png" alt="GBBV logo" class="po-logo" />
     <div class="ci-company-name">
       {% if readonly %}{{ ci.company_name or '' }}
       {% else %}<input class="po-input po-company-title ci-company-input" name="company_name" value="{{ ci.company_name or '' }}" />{% endif %}
