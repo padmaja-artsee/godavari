@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Delivery Notes{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Delivery Notes</h1>
+    <p class="subtitle"><a class="link" href="/generate">← Back to Generate</a></p>
+  </div>
+  <a href="/generate/delivery-notes/new" class="btn btn-primary">New Delivery Note</a>
+</div>
+
+<div class="table-wrap card" style="padding:0;overflow-x:auto">
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Reference No</th>
+        <th>Date</th>
+        <th>Customer</th>
+        <th>Product</th>
+        <th>Qty</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td><a class="link" href="/generate/delivery-notes/{{ row.id }}">{{ row.reference_number or '—' }}</a></td>
+        <td>{{ row.reference_date or '—' }}</td>
+        <td>{{ row.bill_to_name or '—' }}</td>
+        <td>{{ row.product_name or '—' }}</td>
+        <td>{% if row.total_quantity %}{{ row.total_quantity }} {{ row.quantity_unit or '' }}{% else %}—{% endif %}</td>
+        <td><span class="badge">{{ row.status or 'Draft' }}</span></td>
+        <td>{{ (row.created_at or '')[:10] }}</td>
+        <td class="action-links">
+          <a class="link" href="/generate/delivery-notes/{{ row.id }}">View</a>
+          <a class="link" href="/generate/delivery-notes/{{ row.id }}/edit">Edit</a>
+          <form method="post" action="/generate/delivery-notes/{{ row.id }}/duplicate" style="display:inline">
+            <button type="submit" class="link-btn">Duplicate</button>
+          </form>
+          <a class="link" href="/generate/delivery-notes/{{ row.id }}/export.xlsx">XLSX</a>
+          <a class="link" href="/generate/delivery-notes/{{ row.id }}/print" target="_blank">Print</a>
+          <form method="post" action="/generate/delivery-notes/{{ row.id }}/delete" style="display:inline"
+                onsubmit="return confirm('Delete delivery note {{ row.reference_number }}?');">
+            <button type="submit" class="link-btn" style="color:var(--danger,#b91c1c)">Delete</button>
+          </form>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="8" style="text-align:center;color:#666;padding:1.5rem">No delivery notes yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

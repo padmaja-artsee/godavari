@@ -39,4 +39,12 @@ GENERATE_DOCUMENTS = [
         "create_url": "/generate/sales-invoices/new",
         "list_url": "/generate/sales-invoices",
     },
+    # ── Delivery Note ───────────────────────────────────────────────────────
+    {
+        "key": "delivery_note",
+        "title": "Delivery Note",
+        "description": "Delivery Note cum Packing List. Auto-fills product, customer, batch and weight details from deal. Calculates total net/tare/gross weights from pack count × per-pack weights.",
+        "create_url": "/generate/delivery-notes/new",
+        "list_url": "/generate/delivery-notes",
+    },
 ]

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}New Delivery Note{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>New Delivery Note</h1>
+    <p class="subtitle"><a class="link" href="/generate/delivery-notes">← Delivery Notes</a></p>
+  </div>
+  <a href="/generate/delivery-notes/new?blank=1" class="btn btn-ghost">Start blank (no deal)</a>
+</div>
+
+<div style="max-width:680px">
+  <div class="card" style="padding:1.5rem">
+    <p style="margin:0 0 1.25rem;color:#374151;font-size:.93rem">
+      Search for a company, then select a deal to pre-fill the delivery note.
+    </p>
+
+    {# Company search #}
+    <div style="margin-bottom:1rem;position:relative">
+      <label class="form-label" for="company-input">Company</label>
+      <input id="company-input" type="text" class="form-input"
+             placeholder="Type company name…" autocomplete="off" style="width:100%" />
+      <ul id="company-suggestions" class="ci-pick-list" hidden></ul>
+    </div>
+
+    {# Deal list #}
+    <div id="deal-section" hidden>
+      <label class="form-label" id="deal-section-label">Select deal</label>
+      <div id="deal-list" style="display:flex;flex-direction:column;gap:.4rem;margin-top:.4rem"></div>
+    </div>
+  </div>
+
+  <div style="margin-top:1rem;display:flex;gap:.75rem">
+    <a href="/generate/delivery-notes/new?blank=1" class="btn btn-ghost">Start blank (no deal)</a>
+  </div>
+</div>
+
+<style>
+.ci-pick-list {
+  position:absolute; top:100%; left:0; right:0; background:#fff;
+  border:1px solid #c9d2de; border-radius:6px;
+  box-shadow:0 4px 12px rgba(0,0,0,.1); list-style:none;
+  margin:2px 0 0; padding:.25rem 0; z-index:200;
+  max-height:240px; overflow-y:auto;
+}
+.ci-pick-list li { padding:.45rem .85rem; cursor:pointer; font-size:.9rem; }
+.ci-pick-list li:hover { background:#eff6ff; color:#1d4ed8; }
+.dn-deal-card {
+  padding:.6rem .85rem; border-radius:6px; border:1.5px solid #e5e7eb;
+  cursor:pointer; transition:border-color .12s, background .12s;
+  font-size:.88rem;
+}
+.dn-deal-card:hover { border-color:#1A5632; background:#eaf3ec; }
+.dn-deal-meta { font-size:.78rem; color:#6b7280; margin-top:.15rem; }
+</style>
+
+<script>
+(function () {
+  const companyInput = document.getElementById("company-input");
+  const suggestions  = document.getElementById("company-suggestions");
+  const dealSection  = document.getElementById("deal-section");
+  const dealList     = document.getElementById("deal-list");
+  const dealLabel    = document.getElementById("deal-section-label");
+  let allCompanies   = [];
+
+  async function initCompanies() {
+    const res  = await fetch("/api/po-companies?q=");
+    const data = await res.json();
+    allCompanies = data.companies || [];
+  }
+
+  companyInput.addEventListener("input", function () {
+    const q = companyInput.value.trim().toLowerCase();
+    showSuggestions(q ? allCompanies.filter(n => n.toLowerCase().includes(q)) : allCompanies);
+  });
+  companyInput.addEventListener("focus", function () {
+    const q = companyInput.value.trim().toLowerCase();
+    showSuggestions(q ? allCompanies.filter(n => n.toLowerCase().includes(q)) : allCompanies);
+  });
+  document.addEventListener("click", function (e) {
+    if (!companyInput.contains(e.target) && !suggestions.contains(e.target))
+      suggestions.hidden = true;
+  });
+  companyInput.addEventListener("keydown", function (e) {
+    const items = [...suggestions.querySelectorAll("li")];
+    const active = suggestions.querySelector("li.active");
+    const idx = items.indexOf(active);
+    if (e.key === "ArrowDown") { e.preventDefault(); const n = items[idx+1]||items[0]; active&&active.classList.remove("active"); n&&n.classList.add("active"); n&&n.scrollIntoView({block:"nearest"}); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); const p = items[idx-1]||items[items.length-1]; active&&active.classList.remove("active"); p&&p.classList.add("active"); p&&p.scrollIntoView({block:"nearest"}); }
+    else if (e.key === "Enter") { e.preventDefault(); const a = suggestions.querySelector("li.active"); if (a) a.click(); }
+    else if (e.key === "Escape") { suggestions.hidden = true; }
+  });
+
+  function showSuggestions(companies) {
+    suggestions.innerHTML = "";
+    companies.forEach(function (name) {
+      const li = document.createElement("li");
+      li.textContent = name;
+      li.addEventListener("click", function () {
+        companyInput.value = name; suggestions.hidden = true; loadDeals(name);
+      });
+      suggestions.appendChild(li);
+    });
+    suggestions.hidden = !companies.length;
+  }
+
+  async function loadDeals(company) {
+    dealLabel.textContent = `Deals — ${company}`;
+    dealList.innerHTML = '<p style="color:#9ca3af;font-size:.83rem">Loading…</p>';
+    dealSection.hidden = false;
+    const res  = await fetch("/api/po-deals?company=" + encodeURIComponent(company));
+    const data = await res.json();
+    dealList.innerHTML = "";
+    if (!data.deals || !data.deals.length) {
+      dealList.innerHTML = '<p style="color:#9ca3af;font-size:.83rem">No deals found for this company.</p>';
+      return;
+    }
+    data.deals.forEach(function (d) {
+      const card = document.createElement("div");
+      card.className = "dn-deal-card";
+      const meta = [d.product, d.quantity, d.po_number ? "PO " + d.po_number : null, d.status].filter(Boolean).join(" · ");
+      card.innerHTML = `<div style="font-weight:600">${esc(d.label)}</div><div class="dn-deal-meta">${esc(meta)}</div>`;
+      card.addEventListener("click", function () {
+        window.location.href = "/generate/delivery-notes/new?deal_id=" + d.id;
+      });
+      dealList.appendChild(card);
+    });
+  }
+
+  function esc(s) {
+    return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  initCompanies();
+})();
+</script>
+{% endblock %}

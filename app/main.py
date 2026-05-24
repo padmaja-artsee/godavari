@@ -116,6 +116,19 @@ from app.sales_invoices import (
     upgrade_sales_invoices_schema,
 )
 from app.si_exports import export_si_xlsx
+# ── Delivery Note ────────────────────────────────────────────────────────────
+from app.delivery_notes import (
+    DEFAULT_DN,
+    create_delivery_note,
+    create_dn_from_deal,
+    delete_delivery_note,
+    duplicate_delivery_note,
+    get_delivery_note,
+    list_delivery_notes,
+    parse_dn_form,
+    upgrade_delivery_notes_schema,
+)
+from app.dn_exports import export_dn_xlsx
 from app.purchase_orders import (
     DEFAULT_PO,
     calculate_po_totals,
@@ -184,6 +197,7 @@ def startup() -> None:
     fix_legacy_product_names()
     upgrade_commission_invoices_schema()  # CI: remove with CI feature block
     upgrade_sales_invoices_schema()       # SI: remove with SI feature block
+    upgrade_delivery_notes_schema()       # DN: remove with DN feature block
 
 
 def ctx(request: Request, **extra):
@@ -1638,6 +1652,137 @@ async def si_export_xlsx_route(si_id: int):
     if not si:
         return RedirectResponse("/generate/sales-invoices", status_code=303)
     content, fname = export_si_xlsx(si)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+# ── Delivery Note routes ──────────────────────────────────────────────────────
+# Remove this entire block (and the DN imports above) to drop the feature.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.get("/generate/delivery-notes", response_class=HTMLResponse)
+async def dn_list_page(request: Request):
+    rows = list_delivery_notes()
+    return templates.TemplateResponse(
+        "generate/delivery_notes/dn_list.html",
+        {"request": request, "rows": rows},
+    )
+
+
+@app.get("/generate/delivery-notes/new", response_class=HTMLResponse)
+async def dn_new_page(
+    request: Request,
+    deal_id: int = Query(0),
+    blank: str = Query(""),
+):
+    if not deal_id and blank != "1":
+        return templates.TemplateResponse(
+            "generate/delivery_notes/dn_pick_deal.html",
+            {"request": request},
+        )
+    from copy import deepcopy
+    if deal_id:
+        dn = create_dn_from_deal(deal_id) or deepcopy(DEFAULT_DN)
+    else:
+        dn = deepcopy(DEFAULT_DN)
+    return templates.TemplateResponse(
+        "generate/delivery_notes/dn_editor.html",
+        {"request": request, "dn": dn, "editing": False, "errors": []},
+    )
+
+
+@app.post("/generate/delivery-notes/new", response_class=HTMLResponse)
+async def dn_new_post(request: Request):
+    form = await request.form()
+    dn   = parse_dn_form(form)
+    if not dn.get("reference_number"):
+        return templates.TemplateResponse(
+            "generate/delivery_notes/dn_editor.html",
+            {"request": request, "dn": dn, "editing": False,
+             "errors": ["Reference number is required."]},
+            status_code=422,
+        )
+    deal_id     = int(form.get("deal_id") or 0) or None
+    customer_id = int(form.get("customer_id") or 0) or None
+    dn_id = create_delivery_note(dn, deal_id=deal_id, customer_id=customer_id)
+    return RedirectResponse(f"/generate/delivery-notes/{dn_id}?saved=1", status_code=303)
+
+
+@app.get("/generate/delivery-notes/{dn_id}", response_class=HTMLResponse)
+async def dn_detail_page(request: Request, dn_id: int):
+    dn = get_delivery_note(dn_id)
+    if not dn:
+        return RedirectResponse("/generate/delivery-notes", status_code=303)
+    saved_msg = "Saved successfully." if request.query_params.get("saved") else None
+    return templates.TemplateResponse(
+        "generate/delivery_notes/dn_detail.html",
+        {"request": request, "dn": dn, "saved_msg": saved_msg},
+    )
+
+
+@app.get("/generate/delivery-notes/{dn_id}/edit", response_class=HTMLResponse)
+async def dn_edit_page(request: Request, dn_id: int):
+    dn = get_delivery_note(dn_id)
+    if not dn:
+        return RedirectResponse("/generate/delivery-notes", status_code=303)
+    return templates.TemplateResponse(
+        "generate/delivery_notes/dn_editor.html",
+        {"request": request, "dn": dn, "editing": True, "errors": []},
+    )
+
+
+@app.post("/generate/delivery-notes/{dn_id}/edit", response_class=HTMLResponse)
+async def dn_edit_post(request: Request, dn_id: int):
+    form = await request.form()
+    dn   = parse_dn_form(form)
+    if not dn.get("reference_number"):
+        existing = get_delivery_note(dn_id) or {}
+        existing.update(dn)
+        return templates.TemplateResponse(
+            "generate/delivery_notes/dn_editor.html",
+            {"request": request, "dn": existing, "editing": True,
+             "errors": ["Reference number is required."]},
+            status_code=422,
+        )
+    from app.delivery_notes import update_delivery_note
+    update_delivery_note(dn_id, dn)
+    return RedirectResponse(f"/generate/delivery-notes/{dn_id}?saved=1", status_code=303)
+
+
+@app.post("/generate/delivery-notes/{dn_id}/duplicate")
+async def dn_duplicate(dn_id: int):
+    new_id = duplicate_delivery_note(dn_id)
+    if new_id:
+        return RedirectResponse(f"/generate/delivery-notes/{new_id}/edit", status_code=303)
+    return RedirectResponse("/generate/delivery-notes", status_code=303)
+
+
+@app.post("/generate/delivery-notes/{dn_id}/delete")
+async def dn_delete(dn_id: int):
+    delete_delivery_note(dn_id)
+    return RedirectResponse("/generate/delivery-notes", status_code=303)
+
+
+@app.get("/generate/delivery-notes/{dn_id}/print", response_class=HTMLResponse)
+async def dn_print_page(request: Request, dn_id: int):
+    dn = get_delivery_note(dn_id)
+    if not dn:
+        return RedirectResponse("/generate/delivery-notes", status_code=303)
+    return templates.TemplateResponse(
+        "generate/delivery_notes/dn_print.html",
+        {"request": request, "dn": dn},
+    )
+
+
+@app.get("/generate/delivery-notes/{dn_id}/export.xlsx")
+async def dn_export_xlsx_route(dn_id: int):
+    dn = get_delivery_note(dn_id)
+    if not dn:
+        return RedirectResponse("/generate/delivery-notes", status_code=303)
+    content, fname = export_dn_xlsx(dn)
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

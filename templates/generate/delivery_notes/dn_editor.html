@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "generate/delivery_notes/_dn_body.html" import dn_body %}
+{% block title %}{% if editing %}Edit{% else %}New{% endif %} Delivery Note{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/generate.css" />
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+<link rel="stylesheet" href="/static/dn_wysiwyg.css" />
+{% endblock %}
+{% block content %}
+<div class="po-shell">
+  <div class="po-action-bar no-print">
+    <a href="/generate" class="btn btn-ghost btn-sm">← Generate</a>
+    <a href="/generate/delivery-notes" class="btn btn-ghost btn-sm">Saved Notes</a>
+    <div class="po-action-bar-right">
+      {% if editing and dn.id %}
+      <a href="/generate/delivery-notes/{{ dn.id }}" class="btn btn-ghost btn-sm">Preview</a>
+      <a href="/generate/delivery-notes/{{ dn.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
+      <a href="/generate/delivery-notes/{{ dn.id }}/print" class="btn btn-ghost btn-sm" target="_blank">Print</a>
+      {% endif %}
+      <button type="submit" form="dn-editor-form" class="btn btn-primary btn-sm">Save</button>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem">
+    {% for e in errors %}<p style="margin:0.25rem 0">{{ e }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" id="dn-editor-form"
+        action="{% if editing %}/generate/delivery-notes/{{ dn.id }}/edit{% else %}/generate/delivery-notes/new{% endif %}">
+    {% if dn.deal_id %}<input type="hidden" name="deal_id" value="{{ dn.deal_id }}" />{% endif %}
+    {% if dn.customer_id %}<input type="hidden" name="customer_id" value="{{ dn.customer_id }}" />{% endif %}
+    {{ dn_body(dn, readonly=false) }}
+  </form>
+
+  <section class="po-admin-panel no-print card" style="margin-top:1rem;max-width:960px;margin-left:auto;margin-right:auto">
+    <h2 style="margin:0 0 0.75rem;font-size:1rem">Internal Notes <span class="badge">Not printed</span></h2>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div>
+        <label>Status</label>
+        <select name="status" form="dn-editor-form">
+          {% for s in ['Draft','Approved','Sent','Cancelled'] %}
+          <option value="{{ s }}" {% if dn.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div><label>Prepared By</label><input name="prepared_by" form="dn-editor-form" value="{{ dn.prepared_by or '' }}" /></div>
+      <div class="full"><label>Internal Notes</label><textarea name="internal_notes" form="dn-editor-form" rows="3">{{ dn.internal_notes or '' }}</textarea></div>
+    </div>
+  </section>
+</div>
+<script src="/static/dn_wysiwyg.js"></script>
+{% endblock %}

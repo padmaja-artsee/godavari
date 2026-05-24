@@ -1,0 +1,109 @@
+/* Delivery Note styles — self-contained, remove with DN feature */
+
+/* ── Top grid: bill-to left, reference right ─────────────────────── */
+.dn-top-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 1rem;
+  margin-bottom: .75rem;
+  align-items: start;
+}
+
+.dn-bill-col { font-size: .88rem; }
+.dn-bill-col p { margin: 1px 0; }
+.dn-addr-area {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-size: .87rem;
+  font-family: inherit;
+}
+
+.dn-ref-col {
+  background: #f8faf9;
+  border: 1px solid #d1e8da;
+  border-radius: 6px;
+  padding: .5rem .75rem;
+}
+
+/* ── Section title bars ───────────────────────────────────────────── */
+.dn-section-title {
+  background: #e6f4ec;
+  border-left: 4px solid #1A5632;
+  color: #1A5632;
+  font-weight: 700;
+  font-size: .8rem;
+  letter-spacing: .06em;
+  padding: .3rem .7rem;
+  margin: .75rem 0 .35rem;
+}
+
+/* ── Product summary ──────────────────────────────────────────────── */
+.dn-product-summary {
+  background: #f8faf9;
+  border: 1px solid #d1e8da;
+  border-radius: 6px;
+  padding: .5rem .85rem;
+  margin-bottom: .25rem;
+}
+
+.dn-prod-row {
+  display: flex;
+  align-items: center;
+  gap: .6rem;
+  padding: .22rem 0;
+}
+.dn-qty-row { flex-wrap: wrap; }
+.dn-unit-label { color: #374151; font-size: .85rem; }
+
+/* ── Packaging table ──────────────────────────────────────────────── */
+.dn-pack-table { width: 100%; border-collapse: collapse; margin: .35rem 0; }
+.dn-col-type { width: 18%; }
+.dn-col-desc { width: 30%; }
+.dn-col-wt   { width: 17%; text-align: right; }
+
+.dn-calc-row td { background: #f5f9f6; font-size: .84rem; }
+.dn-total-row td { background: #e6f4ec; }
+.dn-calc-label { font-style: italic; color: #374151; padding-left: .5rem; }
+
+/* ── Weight footer (pallet + total gross) ─────────────────────────── */
+.dn-weight-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: .3rem;
+  padding: .4rem .5rem;
+  border-top: 1px solid #d1e8da;
+  margin-bottom: .5rem;
+}
+.dn-wf-row { display: flex; align-items: center; gap: .75rem; }
+.dn-total-gw-row { font-size: .95rem; }
+
+/* ── Batch & details grid ─────────────────────────────────────────── */
+.dn-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: .3rem .75rem;
+  background: #f8faf9;
+  border: 1px solid #d1e8da;
+  border-radius: 6px;
+  padding: .55rem .85rem;
+  margin-bottom: .35rem;
+}
+
+.dn-det-row { display: flex; flex-direction: column; gap: .15rem; }
+.dn-det-label {
+  font-size: .78rem;
+  font-weight: 600;
+  color: #1A5632;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* ── Print ────────────────────────────────────────────────────────── */
+@media print {
+  .dn-ref-col { border: 1px solid #ccc; }
+  .dn-section-title { background: #e8e8e8 !important; color: #000 !important; border-color: #888; }
+  .dn-details-grid, .dn-product-summary { background: transparent; border: 1px solid #ccc; }
+  .dn-calc-row td, .dn-total-row td { background: transparent !important; }
+}

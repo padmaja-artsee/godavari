@@ -1,0 +1,246 @@
+{% macro dn_body(dn, readonly=false) %}
+<div class="po-page po-excel-layout dn-page">
+
+  {# ── Header: logo + company name ── #}
+  <div class="ci-header-row">
+    <img src="/static/gbbv-logo.png" alt="GBBV logo" class="po-logo" />
+    <div class="ci-company-name">
+      {% if readonly %}{{ dn.company_name or '' }}
+      {% else %}<input class="po-input po-company-title ci-company-input" name="company_name" value="{{ dn.company_name or '' }}" />{% endif %}
+    </div>
+  </div>
+
+  {# ── Document title ── #}
+  <div class="ci-title-row">
+    {% if readonly %}
+    <span class="ci-doc-title-text">{{ dn.document_title or 'DELIVERY NOTE CUM PACKING LIST' }}</span>
+    {% else %}
+    <input class="po-input ci-doc-title-input" name="document_title" value="{{ dn.document_title or 'DELIVERY NOTE CUM PACKING LIST' }}" />
+    {% endif %}
+  </div>
+
+  {# ── Bill-to (left) + Reference block (right) ── #}
+  <div class="dn-top-grid">
+    <div class="dn-bill-col">
+      <p class="ci-to-label">TO</p>
+      {% if readonly %}
+      <p><strong>{{ dn.bill_to_name }}</strong></p>
+      <p style="white-space:pre-line">{{ dn.bill_to_address }}</p>
+      {% if dn.bill_to_vat %}<p><strong>VAT Number :</strong> {{ dn.bill_to_vat }}</p>{% endif %}
+      {% if dn.delivery_contact %}<p><strong>Delivery Contact @ Site :</strong> {{ dn.delivery_contact }}</p>{% endif %}
+      {% if dn.transporter_name %}<p><strong>Name of transporter :</strong> {{ dn.transporter_name }}</p>{% endif %}
+      {% else %}
+      <input class="po-input" name="bill_to_name"    value="{{ dn.bill_to_name or '' }}"    placeholder="Customer name" />
+      <textarea class="po-mkinput dn-addr-area" name="bill_to_address" rows="2" placeholder="Billing address">{{ dn.bill_to_address or '' }}</textarea>
+      <div class="ci-order-row"><span class="ci-kv-label">VAT Number</span>
+        <input class="po-mkinput" name="bill_to_vat" value="{{ dn.bill_to_vat or '' }}" placeholder="e.g. DE12443224" /></div>
+      <div class="ci-order-row"><span class="ci-kv-label">Delivery Contact</span>
+        <input class="po-mkinput" name="delivery_contact" value="{{ dn.delivery_contact or '' }}" placeholder="Name @ site" /></div>
+      <div class="ci-order-row"><span class="ci-kv-label">Transporter</span>
+        <input class="po-mkinput" name="transporter_name" value="{{ dn.transporter_name or '' }}" placeholder="Carrier name" /></div>
+      {% endif %}
+    </div>
+
+    <div class="dn-ref-col">
+      {% set ref_fields = [
+        ('Reference No',       'reference_number',   'e.g. 202627 AAA'),
+        ('Date',               'reference_date',     'DD MMM YYYY'),
+        ('Delivery / Pick date','delivery_pick_date','DD MMM YYYY'),
+        ('Order Number',       'order_number',       ''),
+        ('ZMPN',               'zmpn',               ''),
+      ] %}
+      {% for label, field, ph in ref_fields %}
+      <div class="ci-kv-row">
+        <span class="ci-kv-label">{{ label }}</span>
+        {% if readonly %}<span class="ci-kv-val">{{ dn[field] or '—' }}</span>
+        {% else %}<input class="po-mkinput ci-kv-input" name="{{ field }}" value="{{ dn[field] or '' }}" placeholder="{{ ph }}" />{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  {# ── Delivery details ── #}
+  <div class="dn-section-title">DELIVERY DETAILS</div>
+  <div class="si-delivery-grid">
+    {% set del_fields = [
+      ('Delivery Date requested',        'delivery_date_requested', 'DD MMM YYYY'),
+      ('Delivery Address',               'delivery_address',        'Factory / Warehouse address'),
+      ('VAT of delivery address',        'delivery_vat',            'e.g. DE12443224'),
+      ('Slot booking reference',         'slot_booking_ref',        'e.g. 64521490'),
+      ('Delivery time slot / Standard',  'delivery_time_slot',      'e.g. 08:00–10:00 or Standard'),
+    ] %}
+    {% for label, field, ph in del_fields %}
+    <div class="si-del-row">
+      <span class="ci-ship-label">{{ label }}</span>
+      {% if readonly %}{{ dn[field] or '—' }}
+      {% else %}<input class="po-mkinput ci-ship-val-input" name="{{ field }}" value="{{ dn[field] or '' }}" placeholder="{{ ph }}" />{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Product summary ── #}
+  <div class="dn-section-title">PRODUCT</div>
+  <div class="dn-product-summary">
+    <div class="dn-prod-row">
+      <span class="ci-ship-label">Product name</span>
+      {% if readonly %}<strong>{{ dn.product_name or '—' }}</strong>
+      {% else %}<input class="po-mkinput" name="product_name" value="{{ dn.product_name or '' }}" placeholder="e.g. Naturo BG - 1,3 Butylene Glycol" style="flex:1" />{% endif %}
+    </div>
+    <div class="dn-prod-row dn-qty-row">
+      <span class="ci-ship-label">Number of Packs</span>
+      {% if readonly %}<strong>{{ dn.number_of_packs }}</strong>
+      {% else %}<input class="po-number-input dn-num-packs" name="number_of_packs" value="{{ dn.number_of_packs or '' }}" style="width:5rem" />{% endif %}
+      <span class="dn-unit-label">
+        {% if readonly %}{{ dn.pack_unit or 'Drums' }}
+        {% else %}<input class="po-mkinput" name="pack_unit" value="{{ dn.pack_unit or 'Drums' }}" style="width:5rem" />{% endif %}
+      </span>
+      <span class="ci-ship-label" style="margin-left:1.5rem">Total Quantity</span>
+      {% if readonly %}<strong>{{ dn.total_quantity }}</strong>
+      {% else %}<input class="po-number-input dn-total-qty" name="total_quantity" value="{{ dn.total_quantity or '' }}" style="width:6rem" />{% endif %}
+      <span class="dn-unit-label">
+        {% if readonly %}{{ dn.quantity_unit or 'Kgs' }}
+        {% else %}<input class="po-mkinput" name="quantity_unit" value="{{ dn.quantity_unit or 'Kgs' }}" style="width:4rem" />{% endif %}
+      </span>
+    </div>
+  </div>
+
+  {# ── Packaging table ── #}
+  <div class="dn-section-title">PACKAGING</div>
+  <table class="ci-table dn-pack-table">
+    <thead>
+      <tr>
+        <th class="dn-col-type">Type of Packaging</th>
+        <th class="dn-col-desc">Description</th>
+        <th class="dn-col-wt">Net weight<br><span class="ci-subunit">(kg)</span></th>
+        <th class="dn-col-wt">Tare weight<br><span class="ci-subunit">(kg)</span></th>
+        <th class="dn-col-wt">Gross weight<br><span class="ci-subunit">(kg)</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {# Per-pack row #}
+      <tr>
+        <td>
+          {% if readonly %}{{ dn.packaging_type or 'DRUMS' }}
+          {% else %}<input class="po-input" name="packaging_type" value="{{ dn.packaging_type or 'DRUMS' }}" />{% endif %}
+        </td>
+        <td>
+          {% if readonly %}{{ dn.pack_description or 'Each' }}
+          {% else %}<input class="po-input" name="pack_description" value="{{ dn.pack_description or 'Each DRUM' }}" />{% endif %}
+        </td>
+        <td class="ci-num">
+          {% if readonly %}{{ dn.net_weight_each|num }}
+          {% else %}<input class="po-number-input dn-net-each" name="net_weight_each" value="{{ dn.net_weight_each or '' }}" />{% endif %}
+        </td>
+        <td class="ci-num">
+          {% if readonly %}{{ dn.tare_weight_each|num }}
+          {% else %}<input class="po-number-input dn-tare-each" name="tare_weight_each" value="{{ dn.tare_weight_each or '' }}" />{% endif %}
+        </td>
+        <td class="ci-num">
+          {% if readonly %}{{ dn.gross_weight_each|num }}
+          {% else %}<input class="po-number-input dn-gross-each" name="gross_weight_each" value="{{ dn.gross_weight_each or '' }}" />{% endif %}
+        </td>
+      </tr>
+      {# Number of packs row (auto) #}
+      <tr class="dn-calc-row">
+        <td></td>
+        <td class="dn-calc-label">Number of packs</td>
+        <td class="ci-num"><output class="dn-out-npacks">{{ dn.number_of_packs or 0 }}</output></td>
+        <td class="ci-num"><output class="dn-out-npacks2">{{ dn.number_of_packs or 0 }}</output></td>
+        <td class="ci-num"><output class="dn-out-npacks3">{{ dn.number_of_packs or 0 }}</output></td>
+      </tr>
+      {# Totals row (auto-calculated) #}
+      <tr class="dn-calc-row dn-total-row">
+        <td></td>
+        <td class="dn-calc-label"><strong>Total weight</strong></td>
+        <td class="ci-num"><output class="dn-out-tnet"><strong>{{ dn.total_net_weight|num if dn.total_net_weight else '0.00' }}</strong></output></td>
+        <td class="ci-num"><output class="dn-out-ttar"><strong>{{ dn.total_tare_weight|num if dn.total_tare_weight else '0.00' }}</strong></output></td>
+        <td class="ci-num"><output class="dn-out-tgro"><strong>{{ dn.total_gross_weight|num if dn.total_gross_weight else '0.00' }}</strong></output></td>
+      </tr>
+    </tbody>
+  </table>
+
+  {# Pallet + total gross #}
+  <div class="dn-weight-footer">
+    <div class="dn-wf-row">
+      <span class="ci-ship-label">Pallet weight extra</span>
+      {% if readonly %}{{ dn.pallet_weight_extra or '0' }} kg
+      {% else %}<input class="po-number-input dn-pallet-wt" name="pallet_weight_extra" value="{{ dn.pallet_weight_extra or '' }}" style="width:6rem" /> kg{% endif %}
+    </div>
+    <div class="dn-wf-row dn-total-gw-row">
+      <span class="ci-ship-label"><strong>Total Gross weight</strong></span>
+      <strong><output id="dn-total-gross">{{ dn.total_gross_weight|num if dn.total_gross_weight else '0.00' }}</output> kg</strong>
+    </div>
+  </div>
+
+  {# ── Batch & product details ── #}
+  <div class="dn-section-title">BATCH & PRODUCT DETAILS</div>
+  <div class="dn-details-grid">
+    {% set batch_fields = [
+      ('Batch Number',             'batch_number',       'e.g. BGC/L08/26'),
+      ('Manufacturing Date',       'manufacturing_date', 'DD.MM.YYYY'),
+      ('Expiry Date',              'expiry_date',        'DD.MM.YYYY'),
+      ('Net weight of each pack',  'net_weight_each',    ''),
+      ('Tare weight of each pack', 'tare_weight_each',   ''),
+      ('Gross weight of each pack','gross_weight_each',  ''),
+    ] %}
+    {% for label, field, ph in batch_fields %}
+    <div class="dn-det-row">
+      <span class="dn-det-label">{{ label }}</span>
+      {% if readonly %}<span>{{ dn[field] or '—' }}{% if field.endswith('_each') %} kg{% endif %}</span>
+      {% else %}<input class="po-mkinput" name="{{ field }}_detail" value="{{ dn[field] or '' }}" placeholder="{{ ph }}"
+               {% if field.endswith('_each') %}class="po-number-input"{% endif %} />{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+
+  {# ── Additional info ── #}
+  <div class="dn-section-title">ADDITIONAL INFO</div>
+  <div class="si-delivery-grid">
+    <div class="si-del-row">
+      <span class="ci-ship-label">Number of Pallets</span>
+      {% if readonly %}{{ dn.number_of_pallets or '—' }}
+      {% else %}<input class="po-number-input" name="number_of_pallets" value="{{ dn.number_of_pallets or '' }}" style="width:5rem" />{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">Pallet wt extra at actual</span>
+      {% if readonly %}{{ dn.pallet_weight_actual or '—' }}
+      {% else %}<input class="po-number-input" name="pallet_weight_actual" value="{{ dn.pallet_weight_actual or '' }}" style="width:5rem" /> kg{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">Manufacturer</span>
+      {% if readonly %}{{ dn.manufacturer or '—' }}
+      {% else %}<input class="po-mkinput ci-ship-val-input" name="manufacturer" value="{{ dn.manufacturer or '' }}" />{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">Made in</span>
+      {% if readonly %}{{ dn.made_in or '—' }}
+      {% else %}<input class="po-mkinput ci-ship-val-input" name="made_in" value="{{ dn.made_in or 'India' }}" />{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">Handling instruction</span>
+      {% if readonly %}{{ dn.handling_instruction or '—' }}
+      {% else %}<input class="po-mkinput ci-ship-val-input" name="handling_instruction" value="{{ dn.handling_instruction or '' }}" />{% endif %}
+    </div>
+  </div>
+
+  {# ── Signature + Footer ── #}
+  <div class="po-footer" style="margin-top:1.5rem">
+    <div class="po-sig-block">
+      <p class="po-sig-for">For Godavari Biorefineries B.V.</p>
+      <div class="po-sig-line"></div>
+      <p class="po-sig-label">Authorised Signatory</p>
+    </div>
+    <div class="po-footer-company">
+      <img src="/static/footer logo.png" alt="Footer logo" class="po-footer-logo" />
+      <div class="po-footer-details">
+        <p>Commercial Register Number 34325188</p>
+        <p>VAT : NL8203.86.157.B.01</p>
+        <p>Bank : Rabobank – Haarlem / IBAN NL83RABO 0311323650 / BIC : RABONL2U</p>
+        <p>Address : Opaallaan 1180, &nbsp; 2132 LN &nbsp; Hoofddorp. &nbsp; The Netherlands.</p>
+        <p>Tel : +31 6 11 12 61 66</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endmacro %}
