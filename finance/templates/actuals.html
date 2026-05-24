@@ -1,139 +1,132 @@
 {% extends "base.html" %}
-{% block title %}Actuals FY{{ fy }}{% endblock %}
-{% block content %}
 {% set page = "actuals" %}
-
+{% block title %}Actuals — FY{{ fy }}{% endblock %}
+{% block content %}
 <div class="f-page-header">
   <div>
-    <h1>Actuals</h1>
-    <p class="f-subtitle">GBInc · FY{{ fy }} · Consolidated from recorded expenses</p>
+    <h1 class="f-title">Actuals — FY{{ fy }}</h1>
+    <p class="f-subtitle">Auto-populated from recorded transactions. Manual additions can be appended below each cell.</p>
   </div>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    <div class="f-fy-picker">
-      {% for y in fiscal_years %}
-      <a href="/actuals?fy={{ y }}" class="f-fy-btn {% if y == fy %}active{% endif %}">FY{{ y }}</a>
-      {% endfor %}
-    </div>
-    <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ Record Expense</a>
+  <div class="f-header-controls">
+    <form method="get" action="/actuals">
+      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
+        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
+      </select>
+    </form>
+    <a href="/expenses/new?fy={{ fy }}" class="f-btn-sm f-btn-primary">+ Record Expense</a>
+    {% if saved %}<span class="f-badge f-badge-green">Saved ✓</span>{% endif %}
+    {% if archived %}<span class="f-badge f-badge-warning">Archived</span>{% endif %}
   </div>
 </div>
 
-<div class="f-legend-bar" style="margin-bottom:16px">
-  <span class="f-legend-item"><span class="f-dot" style="background:#c4d9c9"></span>Auto-rolled from expenses</span>
-  <span class="f-legend-item"><span class="f-dot" style="background:#e8f4ff;border:1px solid #93c5fd"></span>Manual addition</span>
-  <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">
-    To change actuals, <a href="/expenses?fy={{ fy }}" class="f-link-small">record or edit expenses</a>.
-    Manual additions for items not in expenses can be added below.
-  </span>
+<div class="f-legend-bar">
+  <span class="f-rollup-badge">$0</span> From transactions &nbsp;
+  <span class="f-manual-badge">+$0</span> Manual addition
 </div>
 
-<div class="f-grid-wrapper">
-  <table class="f-grid">
-    <thead>
-      <tr>
-        <th class="f-col-label">Particulars</th>
-        {% for m in months %}
-        <th>{{ month_labels[m] }}</th>
-        {% endfor %}
-        <th class="f-col-total">Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% set ns = namespace(prev_sec='') %}
-      {% for row in rows %}
-      {% set line = row.line %}
-      {% set sec  = line.section %}
-
-      {% if sec == 'income' and ns.prev_sec != 'income' %}
-      <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">INCOME</td></tr>
-      {% elif sec == 'expense' and ns.prev_sec != 'expense' %}
-      <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">EXPENSES</td></tr>
-      {% elif sec == 'below_ebitda' and ns.prev_sec not in ('below_ebitda','ebitda') %}
-      <tr class="f-section-header"><td colspan="{{ months|length + 2 }}">BELOW EBITDA</td></tr>
-      {% endif %}
-      {% set ns.prev_sec = sec %}
-
-      <tr class="f-row-{{ row.style if row.style else 'normal' }}">
-        <td class="f-col-label {% if line.is_calculated %}f-calc{% endif %}">
-          {% if not line.is_calculated %}&nbsp;&nbsp;{% endif %}{{ line.name }}
-        </td>
-        {% for m in months %}
-        {% set rollup = row.monthly_rollup[m] %}
-        {% set manual = row.monthly_manual[m] %}
-        {% set total  = row.monthly_total[m]  %}
-        <td style="text-align:right;padding:4px 6px;">
-          {% if line.is_calculated %}
-            <span class="f-ro-val {% if total < 0 %}f-neg{% endif %}">
-              {{ "%.1f"|format(total) if total else '—' }}
+<div class="f-grid-scroll">
+<table class="f-grid">
+  <thead>
+    <tr>
+      <th class="f-col-label">Line Item</th>
+      {% for m in months %}<th class="f-col-month">{{ month_labels[m] }}</th>{% endfor %}
+      <th class="f-col-total">Total</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for sec in sections %}
+    {% if sec.section != 'totals' %}
+    <tr class="f-section-header-row">
+      <td colspan="{{ months|length + 2 }}">{{ sec.label }}</td>
+    </tr>
+    {% for row in sec.rows %}
+    <tr class="f-row-{{ row.style or 'normal' }}">
+      <td class="f-row-name">{{ row.item.name }}</td>
+      {% for m in months %}
+      <td>
+        <div class="f-hybrid-cell">
+          {% if row.item.is_calculated %}
+            <span class="f-ro-val f-calc-cell" data-lid="{{ row.item.id }}" data-month="{{ m }}">
+              {{ "${:,.0f}".format(row.monthly_t[m]) if row.monthly_t[m] else '—' }}
             </span>
           {% else %}
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px;">
-              {% if rollup %}
-              <span class="f-rollup-badge" title="From expenses">{{ "%.1f"|format(rollup) }}</span>
-              {% endif %}
-              {% if manual %}
-              <span class="f-manual-badge" title="Manual addition">+{{ "%.1f"|format(manual) }}</span>
-              {% endif %}
-              {% if not rollup and not manual %}
-              <span style="color:#cbd5e1;font-size:11px">—</span>
-              {% endif %}
-            </div>
+            {% if row.monthly_r[m] %}
+            <span class="f-rollup-badge">${{ "{:,.0f}".format(row.monthly_r[m]) }}</span>
+            {% endif %}
+            {% if row.monthly_m[m] %}
+            <span class="f-manual-badge">+${{ "{:,.0f}".format(row.monthly_m[m]) }}</span>
+            {% endif %}
+            {% if not row.monthly_r[m] and not row.monthly_m[m] %}
+            <span class="f-text-muted">—</span>
+            {% endif %}
           {% endif %}
-        </td>
-        {% endfor %}
-        <td class="f-col-total">
-          <span class="{% if row.total < 0 %}f-neg{% endif %}">
-            {{ "%.1f"|format(row.total) if row.total else '—' }}
-          </span>
-        </td>
-      </tr>
+        </div>
+      </td>
       {% endfor %}
-    </tbody>
-  </table>
+      <td class="f-col-total">
+        <span class="{% if row.item.is_calculated %}f-calc-total-cell{% else %}f-ro-total{% endif %}"
+              data-lid="{{ row.item.id }}">
+          {{ "${:,.0f}".format(row.total) if row.total else '—' }}
+        </span>
+      </td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+  {% endfor %}
+
+  {% for sec in sections %}
+    {% if sec.section == 'totals' %}
+    <tr class="f-section-spacer"><td colspan="{{ months|length + 2 }}"></td></tr>
+    {% for row in sec.rows %}
+    <tr class="f-row-{{ row.style or 'total' }}">
+      <td class="f-row-name">{{ row.item.name }}</td>
+      {% for m in months %}
+      <td><span class="f-ro-val">${{ "{:,.0f}".format(row.monthly_t[m]) if row.monthly_t[m] else '—' }}</span></td>
+      {% endfor %}
+      <td class="f-col-total"><span class="f-ro-val">${{ "{:,.0f}".format(row.total) if row.total else '—' }}</span></td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
 </div>
 
-<!-- Manual additions (collapsed accordion) -->
-<details class="f-manual-details">
-  <summary>Add manual adjustments <span class="f-text-muted" style="font-size:12px">(for items not captured as individual expenses)</span></summary>
-  <div style="margin-top:14px">
-    <form method="POST" action="/actuals" id="actuals-form">
-      <input type="hidden" name="fy" value="{{ fy }}" />
-      <div class="f-grid-wrapper">
-        <table class="f-grid">
-          <thead>
-            <tr>
-              <th class="f-col-label">Particulars</th>
-              {% for m in months %}
-              <th>{{ month_labels[m] }}</th>
-              {% endfor %}
-              <th class="f-col-total">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for row in rows %}
-            {% set line = row.line %}
-            {% if not line.is_calculated %}
-            <tr>
-              <td class="f-col-label">&nbsp;&nbsp;{{ line.name }}</td>
-              {% for m in months %}
-              <td>
-                <input type="number" step="0.01" name="{{ line.id }}_{{ m }}"
-                       value="{{ row.monthly_manual[m] if row.monthly_manual[m] else '' }}"
-                       class="f-cell-input" placeholder="0" />
-              </td>
-              {% endfor %}
-              <td class="f-col-total f-text-muted" style="font-size:11px">manual only</td>
-            </tr>
-            {% endif %}
+<!-- Manual adjustments accordion -->
+{% if not archived %}
+<details class="f-manual-details" style="margin-top:1.5rem">
+  <summary class="f-section-title">Manual Additions (amounts not entered as transactions)</summary>
+  <form method="post" action="/actuals/manual">
+    <input type="hidden" name="fy" value="{{ fy }}"/>
+    <div class="f-grid-scroll">
+    <table class="f-grid f-grid-compact">
+      <thead><tr>
+        <th class="f-col-label">Line Item</th>
+        {% for m in months %}<th class="f-col-month">{{ month_labels[m] }}</th>{% endfor %}
+      </tr></thead>
+      <tbody>
+      {% for sec in sections %}
+        {% if sec.section not in ('totals',) %}
+        {% for row in sec.rows %}
+          {% if not row.item.is_calculated %}
+          <tr>
+            <td class="f-row-name">{{ row.item.name }}</td>
+            {% for m in months %}
+            <td><input type="number" step="0.01" min="0"
+                        name="{{ row.item.id }}_{{ m }}"
+                        value="{{ row.monthly_m[m] | round(2) if row.monthly_m[m] else '' }}"
+                        class="f-cell-input" placeholder="0"/></td>
             {% endfor %}
-          </tbody>
-        </table>
-      </div>
-      <div class="f-form-actions" style="margin-top:8px">
-        <button type="submit" class="f-btn f-btn-primary">Save Adjustments</button>
-      </div>
-    </form>
-  </div>
+          </tr>
+          {% endif %}
+        {% endfor %}
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <div class="f-form-actions"><button class="f-btn f-btn-primary">Save Manual Additions</button></div>
+  </form>
 </details>
-
+{% endif %}
 {% endblock %}

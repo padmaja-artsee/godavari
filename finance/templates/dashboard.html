@@ -1,112 +1,114 @@
 {% extends "base.html" %}
-{% block title %}Dashboard FY{{ fy }}{% endblock %}
-{% block extra_css %}
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-{% endblock %}
+{% block title %}Dashboard — GBInc Finance{% endblock %}
 {% block content %}
-{% set page = "dashboard" %}
-
 <div class="f-page-header">
   <div>
-    <h1>Financial Dashboard</h1>
-    <p class="f-subtitle">GBInc · FY{{ fy }} (Apr {{ fy - 1 }} – Mar {{ fy }}) · USD $1000s</p>
+    <h1 class="f-title">Dashboard</h1>
+    <p class="f-subtitle">FY{{ fy }} &mdash; Apr {{ fy-1 }}–Mar {{ fy }}</p>
   </div>
-  <div class="f-fy-picker">
-    {% for y in fiscal_years %}
-    <a href="/?fy={{ y }}" class="f-fy-btn {% if y == fy %}active{% endif %}">FY{{ y }}</a>
-    {% endfor %}
+  <div class="f-header-controls">
+    <form method="get" action="/">
+      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
+        {% for y in fiscal_years %}
+        <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% if archived %}
+    <span class="f-badge f-badge-warning">Archived</span>
+    <form method="post" action="/fy/unarchive" style="display:inline">
+      <input type="hidden" name="fy" value="{{ fy }}"/>
+      <button class="f-btn-sm f-btn-outline">Unarchive</button>
+    </form>
+    {% else %}
+    <form method="post" action="/fy/archive"
+          onsubmit="return confirm('Archive FY{{ fy }}? It will become read-only.')">
+      <input type="hidden" name="fy" value="{{ fy }}"/>
+      <button class="f-btn-sm f-btn-outline">Archive Year</button>
+    </form>
+    {% endif %}
+    <a href="/budget?fy={{ fy+1 }}" class="f-btn-sm f-btn-primary">+ New Year (FY{{ fy+1 }})</a>
   </div>
 </div>
 
-<!-- KPI Cards -->
+<!-- KPI strip -->
 <div class="f-kpi-row">
-  <div class="f-kpi">
-    <div class="f-kpi-label">Total Income (Actual)</div>
-    <div class="f-kpi-value">${{ "%.1f"|format(total_income_actual) }}k</div>
+  <div class="f-kpi {% if total_income > 0 %}f-kpi-green{% endif %}">
+    <span class="f-kpi-label">Total Income</span>
+    <span class="f-kpi-val">${{ "{:,.0f}".format(total_income) }}</span>
   </div>
-  <div class="f-kpi">
-    <div class="f-kpi-label">Total Expenses (Actual)</div>
-    <div class="f-kpi-value">${{ "%.1f"|format(total_expenses_actual) }}k</div>
+  <div class="f-kpi {% if total_expenses > 0 %}f-kpi-red{% endif %}">
+    <span class="f-kpi-label">Total Expenses</span>
+    <span class="f-kpi-val">${{ "{:,.0f}".format(total_expenses) }}</span>
   </div>
-  <div class="f-kpi {% if ebitda_actual_total >= 0 %}f-kpi-positive{% else %}f-kpi-negative{% endif %}">
-    <div class="f-kpi-label">EBITDA (Actual)</div>
-    <div class="f-kpi-value">${{ "%.1f"|format(ebitda_actual_total) }}k</div>
+  <div class="f-kpi {% if budget_expenses > 0 %}f-kpi-blue{% endif %}">
+    <span class="f-kpi-label">Budgeted Expenses</span>
+    <span class="f-kpi-val">${{ "{:,.0f}".format(budget_expenses) }}</span>
   </div>
-  <div class="f-kpi">
-    <div class="f-kpi-label">EBITDA (Budget)</div>
-    <div class="f-kpi-value">${{ "%.1f"|format(ebitda_budget_total) }}k</div>
+  <div class="f-kpi {% if net >= 0 %}f-kpi-green{% else %}f-kpi-red{% endif %}">
+    <span class="f-kpi-label">Net (Income − Expenses)</span>
+    <span class="f-kpi-val">${{ "{:,.0f}".format(net) }}</span>
   </div>
-  {% if ebitda_budget_total %}
-  <div class="f-kpi {% if ebitda_actual_total >= ebitda_budget_total %}f-kpi-positive{% else %}f-kpi-negative{% endif %}">
-    <div class="f-kpi-label">EBITDA vs Budget</div>
-    {% set var = ebitda_actual_total - ebitda_budget_total %}
-    {% set var_pct = (var / ebitda_budget_total * 100) %}
-    <div class="f-kpi-value">{{ "%.1f"|format(var_pct) }}%</div>
+</div>
+
+<!-- Charts row -->
+<div class="f-charts-grid">
+  <div class="f-card f-card-wide">
+    <div class="f-card-header">Monthly Expenses — Budget vs Actuals</div>
+    <canvas id="expChart" height="90"></canvas>
   </div>
+  <div class="f-card">
+    <div class="f-card-header">Monthly Income — Actuals</div>
+    <canvas id="incChart" height="90"></canvas>
+  </div>
+</div>
+
+<!-- Recent transactions -->
+<div class="f-card" style="margin-top:1rem">
+  <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
+    <span>Recent Transactions</span>
+    <a href="/expenses/new?fy={{ fy }}" class="f-btn-sm f-btn-primary">+ Record Expense</a>
+  </div>
+  {% if recent %}
+  <table class="f-expense-table">
+    <thead><tr><th>Date</th><th>Account</th><th>Vendor</th><th>Type</th><th class="num">Amount</th></tr></thead>
+    <tbody>
+    {% for t in recent %}
+    <tr>
+      <td>{{ t.date | fmtdate }}</td>
+      <td>{{ t.account_name }}</td>
+      <td>{{ t.vendor_name or "—" }}</td>
+      <td><span class="f-badge {% if t.transaction_type=='income' %}f-badge-green{% else %}f-badge-blue{% endif %}">{{ t.transaction_type }}</span></td>
+      <td class="num">${{ "{:,.2f}".format(t.amount) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div style="padding:.5rem 1rem"><a href="/expenses?fy={{ fy }}" class="f-link-small">View all →</a></div>
+  {% else %}
+  <p class="f-empty-state">No transactions recorded yet. <a href="/expenses/new">Record one now.</a></p>
   {% endif %}
 </div>
 
-<!-- Charts -->
-<div class="f-charts-grid">
-  <div class="f-card">
-    <h3>EBITDA — Budget vs Actual ($k)</h3>
-    <div id="chart-ebitda"></div>
-  </div>
-  <div class="f-card">
-    <h3>Income vs Expenses — Actual ($k)</h3>
-    <div id="chart-ie"></div>
-  </div>
-</div>
-
-<div class="f-actions-row" style="margin-bottom:28px">
-  <a href="/expenses/new?fy={{ fy }}" class="f-btn f-btn-primary">+ Record Expense</a>
-  <a href="/budget?fy={{ fy }}"       class="f-btn f-btn-ghost">Budget</a>
-  <a href="/actuals?fy={{ fy }}"      class="f-btn f-btn-ghost">Actuals</a>
-  <a href="/report?fy={{ fy }}"       class="f-btn f-btn-ghost">Report</a>
-  <a href="/report/export.xlsx?fy={{ fy }}" class="f-btn f-btn-ghost">Export Excel</a>
-</div>
-
-{% if recent_expenses %}
-<div class="f-card" style="max-width:640px">
-  <h3 style="margin-bottom:12px">Recent Expenses</h3>
-  <ul class="f-recent-list">
-    {% for e in recent_expenses %}
-    <li>
-      <div>
-        <span class="f-acct-tag">{{ e.account_name }}</span>
-        {% if e.vendor_name %}<span style="margin-left:6px;font-size:12px;color:var(--text-muted)">{{ e.vendor_name }}</span>{% endif %}
-        <span style="margin-left:6px;font-size:11px;color:var(--text-muted)">{{ e.date | fmtdate }}</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px">
-        <span class="f-recent-amount">${{ "%.2f"|format(e.amount) }}</span>
-        <a href="/expenses/{{ e.id }}/edit?fy={{ fy }}" class="f-link-small">edit</a>
-      </div>
-    </li>
-    {% endfor %}
-  </ul>
-  <a href="/expenses?fy={{ fy }}" class="f-link-small" style="display:inline-block;margin-top:8px">View all expenses →</a>
-</div>
-{% endif %}
-
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 const months = {{ chart_months | tojson }};
-const ebitdaBudget = {{ ebitda_budget | tojson }};
-const ebitdaActual = {{ ebitda_actual | tojson }};
-const incomeActual  = {{ income_actual  | tojson }};
-const expenseActual = {{ expense_actual | tojson }};
-
-Plotly.newPlot('chart-ebitda', [
-  { x: months, y: ebitdaBudget, name: 'Budget',  type: 'bar', marker: { color: '#94a3b8' } },
-  { x: months, y: ebitdaActual, name: 'Actual',  type: 'bar', marker: { color: '#1C5631' } },
-], { barmode: 'group', margin: { t: 10, r: 10, b: 40, l: 50 }, legend: { orientation: 'h' },
-     plot_bgcolor: 'transparent', paper_bgcolor: 'transparent',
-     font: { family: 'DM Sans', size: 11 } }, { responsive: true });
-
-Plotly.newPlot('chart-ie', [
-  { x: months, y: incomeActual,  name: 'Income',   type: 'bar', marker: { color: '#1C5631' } },
-  { x: months, y: expenseActual, name: 'Expenses', type: 'bar', marker: { color: '#dc2626' } },
-], { barmode: 'group', margin: { t: 10, r: 10, b: 40, l: 50 }, legend: { orientation: 'h' },
-     plot_bgcolor: 'transparent', paper_bgcolor: 'transparent',
-     font: { family: 'DM Sans', size: 11 } }, { responsive: true });
+new Chart(document.getElementById('expChart'), {
+  type:'bar',
+  data:{labels:months, datasets:[
+    {label:'Budget',  data:{{ exp_budget | tojson }}, backgroundColor:'rgba(28,86,49,.25)', borderColor:'#1C5631', borderWidth:1},
+    {label:'Actuals', data:{{ exp_actual | tojson }}, backgroundColor:'rgba(192,57,43,.45)', borderColor:'#C0392B', borderWidth:1}
+  ]},
+  options:{responsive:true,plugins:{legend:{position:'bottom'}},
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+});
+new Chart(document.getElementById('incChart'), {
+  type:'bar',
+  data:{labels:months, datasets:[
+    {label:'Income', data:{{ income_actual | tojson }}, backgroundColor:'rgba(28,86,49,.5)', borderColor:'#1C5631', borderWidth:1}
+  ]},
+  options:{responsive:true,plugins:{legend:{position:'bottom'}},
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+});
 </script>
 {% endblock %}

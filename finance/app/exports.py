@@ -1,315 +1,192 @@
-"""Excel export for the Finance P&L — matches GBINC-STL-FY27 template style."""
-from pathlib import Path
+"""Excel export — matches Budget vs Actuals.xlsx structure."""
+from __future__ import annotations
+from io import BytesIO
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from finance.app.database import FY_MONTHS, MONTH_LABELS, calendar_year_for
+from finance.app.database import FY_MONTHS, MONTH_LABELS, SECTION_LABELS
 
-# ---------------------------------------------------------------------------
-# Style helpers
-# ---------------------------------------------------------------------------
+_GREEN   = "1C5631"
+_GREEN_D = "134023"
+_GREEN_L = "D9EAD3"
+_GREY    = "F2F2F2"
+_WHITE   = "FFFFFF"
+_BLACK   = "000000"
+_RED_L   = "FCE4E4"
+_RED     = "C0392B"
+_GREEN_C = "E8F5E9"
 
-_GREEN    = "1C5631"
-_GREEN_LT = "D9EAD3"
-_GREY     = "F2F2F2"
-_WHITE    = "FFFFFF"
-_BLACK    = "000000"
 
-def _font(bold=False, size=9, color=_BLACK, name="Calibri"):
+def _f(bold=False, size=9, color=_BLACK, name="Calibri"):
     return Font(name=name, size=size, bold=bold, color=color)
 
-def _fill(hex_color):
-    return PatternFill("solid", fgColor=hex_color)
+def _fill(c):
+    return PatternFill("solid", fgColor=c)
 
-def _thin():
-    s = Side(style="thin", color=_BLACK)
+def _border():
+    s = Side(style="thin", color="CCCCCC")
     return Border(left=s, right=s, top=s, bottom=s)
 
-def _align(h="right", v="center", wrap=False):
+def _al(h="right", v="center", wrap=False):
     return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
 
 
-# ---------------------------------------------------------------------------
-# Main export
-# ---------------------------------------------------------------------------
-
-def export_pl_xlsx(
-    lines: list[dict],
-    b_grid: dict,
-    a_grid: dict,
-    fiscal_year: int,
-) -> tuple[bytes, str]:
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = f"FY{str(fiscal_year)[-2:]}"
-
-    # ── Title row ──────────────────────────────────────────────────────────
-    ws.merge_cells("A1:AQ1")
-    c = ws["A1"]
-    c.value = f"Profit and Loss Statement — GBInc  ($, 1000s)  FY{fiscal_year}"
-    c.font  = _font(bold=True, size=11, color=_WHITE)
-    c.fill  = _fill(_GREEN)
-    c.alignment = _align(h="center")
-    ws.row_dimensions[1].height = 22
-
-    # ── Header row ─────────────────────────────────────────────────────────
-    # Columns: Particulars | Apr Budget | Apr Actual | Apr Var | … × 12 | Total Budget | Total Actual | Total Var
-    headers = ["Particulars"]
-    for m in FY_MONTHS:
-        lbl = MONTH_LABELS[m]
-        headers += [f"{lbl} Budget", f"{lbl} Actual", f"{lbl} Var"]
-    headers += ["FY Budget", "FY Actual", "FY Var"]
-
-    for col, h in enumerate(headers, start=1):
-        c = ws.cell(row=2, column=col, value=h)
-        c.font      = _font(bold=True, size=8, color=_WHITE)
-        c.fill      = _fill(_GREEN)
-        c.alignment = _align(h="center", wrap=True)
-        c.border    = _thin()
-
-    ws.row_dimensions[2].height = 28
-    ws.column_dimensions["A"].width = 30
-    for col in range(2, len(headers) + 1):
-        ws.column_dimensions[get_column_letter(col)].width = 10
-
-    # ── Data rows ──────────────────────────────────────────────────────────
-    SECTION_HEADERS = {
-        "income":       ("INCOME", _GREEN, _WHITE),
-        "expense":      ("EXPENSES", _GREEN, _WHITE),
-        "below_ebitda": None,
-    }
-    prev_section = None
-
-    data_row = 3
-    for line in lines:
-        sec = line["section"]
-        is_calc = line["is_calculated"]
-        name    = line["name"]
-
-        # Section header row
-        if sec in ("income", "expense") and sec != prev_section:
-            ws.merge_cells(f"A{data_row}:{get_column_letter(len(headers))}{data_row}")
-            hdr_info = SECTION_HEADERS[sec]
-            if hdr_info:
-                label, bg, fg = hdr_info
-                c = ws.cell(row=data_row, column=1, value=label)
-                c.font = _font(bold=True, size=9, color=fg)
-                c.fill = _fill(bg)
-                ws.row_dimensions[data_row].height = 16
-                data_row += 1
-        prev_section = sec
-
-        # Determine row style
-        if sec in ("income_total", "expense_total"):
-            row_fill = _fill(_GREEN_LT)
-            row_font = _font(bold=True)
-        elif sec in ("ebitda", "ebt", "net_ebt"):
-            row_fill = _fill(_GREEN)
-            row_font = _font(bold=True, color=_WHITE)
-        elif data_row % 2 == 0:
-            row_fill = _fill(_GREY)
-            row_font = _font()
-        else:
-            row_fill = _fill(_WHITE)
-            row_font = _font()
-
-        lid = line["id"]
-        row_data = [name]
-        b_total = a_total = 0.0
-        for m in FY_MONTHS:
-            bud = b_grid.get((lid, m), 0.0)
-            act = a_grid.get((lid, m), 0.0)
-            var = act - bud
-            b_total += bud
-            a_total += act
-            row_data += [bud or "", act or "", var or ""]
-        v_total = a_total - b_total
-        row_data += [b_total or "", a_total or "", v_total or ""]
-
-        for col, val in enumerate(row_data, start=1):
-            c = ws.cell(row=data_row, column=col, value=val)
-            c.font      = row_font
-            c.fill      = row_fill
-            c.border    = _thin()
-            if col == 1:
-                indent = 2 if not is_calc and sec not in ("ebitda","ebt","net_ebt") else 0
-                c.alignment = _align(h="left")
-                c.value = ("  " * indent) + str(val)
-            else:
-                c.alignment = _align(h="right")
-                if isinstance(val, float) and val != 0:
-                    c.number_format = "#,##0.00"
-
-        ws.row_dimensions[data_row].height = 15
-        data_row += 1
-
-    # Freeze header rows
-    ws.freeze_panes = "B3"
-
-    fname = f"GBInc-PL-FY{fiscal_year}.xlsx"
-    from io import BytesIO
-    buf = BytesIO()
-    wb.save(buf)
-    return buf.getvalue(), fname
+def _write_section_header(ws, row, label, ncols):
+    ws.merge_cells(f"B{row}:{get_column_letter(ncols)}{row}")
+    c = ws.cell(row=row, column=2, value=label)
+    c.font = _f(bold=True, size=9, color=_WHITE)
+    c.fill = _fill(_GREEN_D)
+    c.alignment = _al(h="left")
+    ws.row_dimensions[row].height = 14
 
 
-# ---------------------------------------------------------------------------
-# Budget template (downloadable blank)
-# ---------------------------------------------------------------------------
-
-def generate_budget_template(lines: list[dict], fiscal_year: int) -> tuple[bytes, str]:
-    """Generate a blank budget upload template pre-filled with P&L line names."""
+def generate_budget_template(items: list[dict], fiscal_year: int) -> tuple[bytes, str]:
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = f"Budget FY{str(fiscal_year)[-2:]}"
 
+    ncols = 15  # B=label, C-N=months, O=Total
+    month_col = {m: 3 + i for i, m in enumerate(FY_MONTHS)}
+
     # Title
-    last_col = get_column_letter(14)
-    ws.merge_cells(f"A1:{last_col}1")
-    c = ws["A1"]
-    c.value = (
-        f"GBInc Budget Template — FY{fiscal_year} (Apr {fiscal_year-1} – Mar {fiscal_year})\n"
-        "Enter amounts in USD. Do NOT change row names or column headers. "
-        "Calculated rows (Total Income, EBITDA etc.) are locked — leave blank."
-    )
-    c.font = _font(bold=True, size=9, color=_WHITE)
+    ws.merge_cells(f"B1:{get_column_letter(ncols)}1")
+    c = ws["B1"]
+    c.value = f"Godavari Biorefineries Inc"
+    c.font = _f(bold=True, size=12, color=_WHITE)
     c.fill = _fill(_GREEN)
-    c.alignment = Alignment(horizontal="left", vertical="center", wrap_text=True)
-    ws.row_dimensions[1].height = 36
+    c.alignment = _al(h="left")
+    ws.row_dimensions[1].height = 22
+
+    ws.merge_cells(f"B2:{get_column_letter(ncols)}2")
+    c = ws["B2"]
+    c.value = f"PLANNED EXPENSES — FY{fiscal_year} (Apr {fiscal_year-1}–Mar {fiscal_year})"
+    c.font = _f(bold=True, size=10, color=_WHITE)
+    c.fill = _fill(_GREEN)
+    c.alignment = _al(h="left")
+    ws.row_dimensions[2].height = 18
 
     # Column headers
-    headers = ["Particulars"] + [MONTH_LABELS[m] for m in FY_MONTHS]
-    for col, h in enumerate(headers, 1):
-        c = ws.cell(row=2, column=col, value=h)
-        c.font = _font(bold=True, size=9, color=_WHITE)
+    hdr_row = 4
+    ws.cell(row=hdr_row, column=2, value="").fill = _fill(_GREEN)
+    for m in FY_MONTHS:
+        c = ws.cell(row=hdr_row, column=month_col[m],
+                    value=MONTH_LABELS[m].upper())
+        c.font = _f(bold=True, size=8, color=_WHITE)
         c.fill = _fill(_GREEN)
-        c.alignment = _align(h="center")
-        c.border = _thin()
+        c.alignment = _al(h="center")
+        c.border = _border()
+    c = ws.cell(row=hdr_row, column=ncols, value="TOTAL")
+    c.font = _f(bold=True, size=8, color=_WHITE)
+    c.fill = _fill(_GREEN_D)
+    c.alignment = _al(h="center")
+    c.border = _border()
+    ws.row_dimensions[hdr_row].height = 16
 
-    ws.column_dimensions["A"].width = 34
-    for col in range(2, 14):
-        ws.column_dimensions[get_column_letter(col)].width = 11
+    ws.column_dimensions["A"].width = 2
+    ws.column_dimensions["B"].width = 30
+    for col in range(3, ncols + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 10
 
-    # Data rows — only editable (non-calculated) lines
-    row = 3
+    # Data rows
+    data_row = hdr_row + 1
     prev_sec = None
-    for line in lines:
-        sec = line["section"]
-        is_calc = line["is_calculated"]
+    for item in items:
+        sec = item["section"]
+        if sec in ("income", "totals"):
+            continue  # template is expense-only (matches original)
+        is_calc = item["is_calculated"]
+        if sec != prev_sec:
+            _write_section_header(ws, data_row, SECTION_LABELS.get(sec, sec).upper(), ncols)
+            data_row += 1
+            # Sub-header
+            ws.cell(row=data_row, column=2, value=SECTION_LABELS.get(sec, sec).upper()).font = _f(bold=True, size=8)
+            for m in FY_MONTHS:
+                c = ws.cell(row=data_row, column=month_col[m], value=MONTH_LABELS[m].upper())
+                c.font = _f(bold=True, size=8)
+                c.alignment = _al(h="center")
+            ws.cell(row=data_row, column=ncols, value="TOTAL").font = _f(bold=True, size=8)
+            data_row += 1
+            prev_sec = sec
 
-        # Section header rows
-        if sec == "income" and prev_sec != "income":
-            ws.merge_cells(f"A{row}:{last_col}{row}")
-            c = ws.cell(row=row, column=1, value="INCOME")
-            c.font = _font(bold=True, size=9, color=_WHITE)
-            c.fill = _fill(_GREEN)
-            row += 1
-        elif sec == "expense" and prev_sec != "expense":
-            ws.merge_cells(f"A{row}:{last_col}{row}")
-            c = ws.cell(row=row, column=1, value="EXPENSES")
-            c.font = _font(bold=True, size=9, color=_WHITE)
-            c.fill = _fill(_GREEN)
-            row += 1
-        elif sec == "below_ebitda" and prev_sec not in ("below_ebitda", "ebitda"):
-            ws.merge_cells(f"A{row}:{last_col}{row}")
-            c = ws.cell(row=row, column=1, value="BELOW EBITDA")
-            c.font = _font(bold=True, size=9, color=_WHITE)
-            c.fill = _fill(_GREEN)
-            row += 1
-        prev_sec = sec
+        row_fill = _fill(_GREEN_L) if is_calc else (_fill(_GREY) if data_row % 2 == 0 else _fill(_WHITE))
+        row_font = _f(bold=is_calc)
 
-        if is_calc:
-            row_fill = _fill(_GREEN_LT) if sec in ("income_total", "expense_total") else _fill(_GREEN)
-            row_font = _font(bold=True, color=_BLACK if sec in ("income_total", "expense_total") else _WHITE)
-        elif row % 2 == 0:
-            row_fill = _fill(_GREY)
-            row_font = _font()
-        else:
-            row_fill = _fill(_WHITE)
-            row_font = _font()
+        c = ws.cell(row=data_row, column=2, value=item["name"])
+        c.font = row_font; c.fill = row_fill
+        c.alignment = _al(h="left"); c.border = _border()
 
-        # Row label
-        c = ws.cell(row=row, column=1, value=line["name"])
-        c.font = row_font
-        c.fill = row_fill
-        c.alignment = _align(h="left")
-        c.border = _thin()
-
-        # Month columns
-        for col_idx, m in enumerate(FY_MONTHS, 2):
-            c = ws.cell(row=row, column=col_idx)
-            c.fill = row_fill
-            c.border = _thin()
-            c.alignment = _align(h="right")
+        for m in FY_MONTHS:
+            c = ws.cell(row=data_row, column=month_col[m])
+            c.fill = row_fill; c.border = _border()
             if is_calc:
-                c.value = "(auto)"
-                c.font = _font(size=8, color="888888")
-                c.protection = openpyxl.styles.Protection(locked=True)
+                c.value = "(auto)"; c.font = _f(size=8, color="999999")
             else:
-                c.number_format = "#,##0.00"
-                c.font = row_font
+                c.number_format = "#,##0.00"; c.font = row_font
+            c.alignment = _al(h="right")
 
-        row += 1
+        c = ws.cell(row=data_row, column=ncols)
+        c.fill = _fill(_GREEN_L) if is_calc else _fill(_GREY)
+        c.font = _f(bold=True)
+        if not is_calc: c.value = 0; c.number_format = "#,##0.00"
+        c.alignment = _al(h="right"); c.border = _border()
+        ws.row_dimensions[data_row].height = 14
+        data_row += 1
 
-    ws.freeze_panes = "B3"
-    ws.sheet_protection.sheet = False  # keep editable
+    # Monthly Total row
+    data_row += 1
+    ws.merge_cells(f"B{data_row}:{get_column_letter(ncols)}{data_row}")
+    pass  # left blank for user totals
 
+    ws.freeze_panes = "C5"
     fname = f"GBInc-Budget-Template-FY{fiscal_year}.xlsx"
-    from io import BytesIO
     buf = BytesIO()
     wb.save(buf)
     return buf.getvalue(), fname
 
 
-# ---------------------------------------------------------------------------
-# Budget upload parser
-# ---------------------------------------------------------------------------
-
-def parse_budget_upload(file_bytes: bytes, lines: list[dict]) -> dict[str, float]:
-    """
-    Parse an uploaded budget Excel file.
-    Returns {"{pl_line_id}_{month}": amount} ready for save_grid().
-    Matches rows by the 'Particulars' column name (case-insensitive, stripped).
-    """
-    from io import BytesIO
+def parse_budget_upload(file_bytes: bytes, items: list[dict]) -> dict:
     wb = openpyxl.load_workbook(BytesIO(file_bytes), data_only=True)
     ws = wb.active
+    name_to_item = {i["name"].strip().lower(): i for i in items if not i["is_calculated"]}
+    values: dict = {}
 
-    name_to_line = {l["name"].strip().lower(): l for l in lines if not l["is_calculated"]}
-    values: dict[str, float] = {}
-
-    # Find header row: look for a row whose first cell contains "Particulars"
+    # Find header row
     header_row = None
     for r in ws.iter_rows():
-        first = str(r[0].value or "").strip().lower()
-        if first == "particulars":
+        vals = [str(c.value or "").strip().lower() for c in r]
+        if any(v in ("jan", "january", "apr", "april") for v in vals):
             header_row = r
             break
-
     if not header_row:
-        raise ValueError("Could not find 'Particulars' header row in uploaded file.")
+        raise ValueError("Could not find month header row.")
 
-    # Map column index → calendar month
-    col_to_month: dict[int, int] = {}
-    label_to_month = {v.lower(): k for k, v in MONTH_LABELS.items()}
-    for cell in header_row[1:]:
+    label_to_month = {v.lower()[:3]: k for k, v in MONTH_LABELS.items()}
+    label_to_month.update({v.lower(): k for k, v in MONTH_LABELS.items()})
+    # also map full month names
+    full = {"january":1,"february":2,"march":3,"april":4,"may":5,"june":6,
+            "july":7,"august":8,"september":9,"october":10,"november":11,"december":12}
+    label_to_month.update(full)
+
+    col_to_month = {}
+    for cell in header_row:
         lbl = str(cell.value or "").strip().lower()
         if lbl in label_to_month:
             col_to_month[cell.column] = label_to_month[lbl]
 
     if not col_to_month:
-        raise ValueError("No month columns (Apr–Mar) found in header row.")
+        raise ValueError("No month columns found.")
 
-    # Parse data rows
     for row in ws.iter_rows(min_row=header_row[0].row + 1):
         name = str(row[0].value or "").strip().lower()
-        line = name_to_line.get(name)
-        if not line:
+        if not name:
+            name = str(row[1].value or "").strip().lower() if len(row) > 1 else ""
+        item = name_to_item.get(name)
+        if not item:
             continue
-        lid = line["id"]
-        for cell in row[1:]:
+        lid = item["id"]
+        for cell in row:
             month = col_to_month.get(cell.column)
             if month is None:
                 continue
@@ -319,5 +196,4 @@ def parse_budget_upload(file_bytes: bytes, lines: list[dict]) -> dict[str, float
                 val = 0.0
             if val:
                 values[f"{lid}_{month}"] = val
-
     return values

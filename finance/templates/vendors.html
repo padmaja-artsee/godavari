@@ -1,63 +1,57 @@
 {% extends "base.html" %}
 {% set page = "vendors" %}
-{% block title %}All Vendors{% endblock %}
+{% block title %}Vendors{% endblock %}
 {% block content %}
-
 <div class="f-page-header">
-  <div>
-    <h1>Vendors</h1>
-    <p class="f-subtitle">{{ vendors|length }} vendor{% if vendors|length != 1 %}s{% endif %}</p>
+  <h1 class="f-title">Vendors</h1>
+  <div class="f-header-controls">
+    {% if saved %}<span class="f-badge f-badge-green">Saved ✓</span>{% endif %}
+    <a href="/vendors/new" class="f-btn-sm f-btn-primary">+ Add Vendor</a>
   </div>
-  <a href="/vendors/new" class="f-btn f-btn-primary">+ Add Vendor</a>
 </div>
 
-{% if saved %}
-<div class="f-toast f-toast-ok">Vendor saved successfully.</div>
-{% endif %}
+<div id="f-confirm-modal" class="f-modal-overlay" style="display:none">
+  <div class="f-modal">
+    <p>Delete this vendor?</p>
+    <div style="display:flex;gap:.75rem;justify-content:flex-end;margin-top:1rem">
+      <button class="f-btn f-btn-outline" onclick="document.getElementById('f-confirm-modal').style.display='none'">Cancel</button>
+      <button class="f-btn f-btn-danger" id="f-modal-confirm-btn">Delete</button>
+    </div>
+  </div>
+</div>
 
 {% if vendors %}
-<div class="f-grid-wrapper">
-  <table class="f-grid" style="font-size:13px">
-    <thead>
-      <tr>
-        <th style="text-align:left">Name</th>
-        <th style="text-align:left">Email</th>
-        <th style="text-align:left">Phone</th>
-        <th style="text-align:left">Notes</th>
-        <th style="text-align:center">Actions</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for v in vendors %}
-      <tr>
-        <td style="font-weight:600">{{ v.name }}</td>
-        <td class="f-text-muted">{{ v.email or '—' }}</td>
-        <td class="f-text-muted">{{ v.phone or '—' }}</td>
-        <td class="f-text-muted" style="max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-          {{ v.notes or '—' }}
-        </td>
-        <td style="text-align:center;white-space:nowrap">
-          <a href="/vendors/{{ v.id }}/edit" class="f-action-btn">Edit</a>
-          <form method="POST" action="/vendors/{{ v.id }}/delete" style="display:inline"
-                data-confirm="Delete vendor '{{ v.name }}'?">
-            <button type="submit" class="f-action-btn f-action-danger">Delete</button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
+<table class="f-expense-table">
+  <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Notes</th><th>Actions</th></tr></thead>
+  <tbody>
+  {% for v in vendors %}
+  <tr>
+    <td class="f-bold">{{ v.name }}</td>
+    <td>{{ v.email or "—" }}</td>
+    <td>{{ v.phone or "—" }}</td>
+    <td class="f-text-muted">{{ v.notes or "" }}</td>
+    <td>
+      <a href="/vendors/{{ v.id }}/edit" class="f-action-btn">Edit</a>
+      <form method="post" action="/vendors/{{ v.id }}/delete" id="vdel-{{ v.id }}" style="display:inline">
+        <button type="button" class="f-action-btn f-action-del"
+                onclick="showConfirm('vdel-{{ v.id }}')">Delete</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
 {% else %}
-<div class="f-empty-state">
-  <p>No vendors yet.</p>
-  <a href="/vendors/new" class="f-btn f-btn-primary">+ Add First Vendor</a>
-</div>
+<div class="f-empty-state">No vendors yet. <a href="/vendors/new">Add one.</a></div>
 {% endif %}
 
 <script>
-document.querySelectorAll('form[data-confirm]').forEach(f => {
-  f.addEventListener('submit', e => { if (!confirm(f.dataset.confirm)) e.preventDefault(); });
+function showConfirm(id) {
+  const m = document.getElementById('f-confirm-modal');
+  m.dataset.target = id; m.style.display = 'flex';
+}
+document.getElementById('f-modal-confirm-btn').addEventListener('click', function() {
+  document.getElementById(document.getElementById('f-confirm-modal').dataset.target).submit();
 });
 </script>
 {% endblock %}

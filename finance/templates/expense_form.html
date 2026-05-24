@@ -1,190 +1,152 @@
 {% extends "base.html" %}
-{% set page = "expenses" %}
-{% block title %}{% if expense %}Edit Expense{% else %}New Expense{% endif %}{% endblock %}
+{% set page = "income_new" if tx_type == "income" else "expense_new" %}
+{% block title %}{{ "Record Income" if tx_type=="income" else "Record Expense" }}{% endblock %}
 {% block content %}
-
 <div class="f-page-header">
-  <div>
-    <h1>{% if expense %}Edit Expense{% else %}Record Expense{% endif %}</h1>
-    <p class="f-subtitle">GBInc · FY{{ fy }}</p>
-  </div>
-  <a href="/expenses?fy={{ fy }}" class="f-btn f-btn-ghost">← Back to Expenses</a>
+  <h1 class="f-title">{{ "Edit Income" if transaction else ("Record Income" if tx_type=="income" else "Record Expense") }}</h1>
 </div>
 
 <div class="f-form-card">
-  <form method="POST"
-        action="{% if expense %}/expenses/{{ expense.id }}/edit{% else %}/expenses/new{% endif %}"
-        enctype="multipart/form-data"
-        id="expense-form">
-    <input type="hidden" name="fy" value="{{ fy }}" />
+<form method="post"
+      action="{{ '/expenses/'+transaction.id|string+'/edit' if transaction else '/expenses/new' }}"
+      enctype="multipart/form-data">
+  <input type="hidden" name="fy" value="{{ fy }}"/>
+  <input type="hidden" name="tx_type" value="{{ tx_type }}"/>
 
-    <div class="f-form-grid">
+  <div class="f-form-grid">
+    <div class="f-field">
+      <label class="f-label">Date <span class="f-required">*</span></label>
+      <input type="date" name="date" class="f-input" required
+             value="{{ transaction.date if transaction else today }}"/>
+    </div>
 
-      <!-- Date -->
-      <div class="f-field">
-        <label class="f-label">Date <span class="f-required">*</span></label>
-        <input type="date" name="date" class="f-input"
-               value="{{ expense.date if expense else today }}" required />
-      </div>
-
-      <!-- Expense Account -->
-      <div class="f-field">
-        <label class="f-label">Expense Account <span class="f-required">*</span></label>
-        <select name="account_id" class="f-select" required>
-          <option value="">— Select an account —</option>
-          {% set prev_group = namespace(v='') %}
-          {% for a in accounts %}
-          {% if a.group_label != prev_group.v %}
-          {% if prev_group.v %}</optgroup>{% endif %}
-          <optgroup label="{{ a.group_label }}">
-          {% set prev_group.v = a.group_label %}
+    <div class="f-field">
+      <label class="f-label">
+        {{ "Income Account" if tx_type=="income" else "Expense Account" }}
+        <span class="f-required">*</span>
+      </label>
+      <select name="account_id" class="f-select" required>
+        <option value="">Select account…</option>
+        {% set cur_section = namespace(v="") %}
+        {% for a in accounts %}
+          {% if a.section != cur_section.v %}
+          {% if cur_section.v %}</optgroup>{% endif %}
+          {% set cur_section.v = a.section %}
+          <optgroup label="{{ a.section|upper }}">
           {% endif %}
           <option value="{{ a.id }}"
-            {% if expense and expense.account_id == a.id %}selected
-            {% elif not expense and prefill_account and prefill_account == a.id %}selected{% endif %}>
+            {% if transaction and a.id==transaction.account_id %}selected
+            {% elif prefill_account and a.id==prefill_account %}selected{% endif %}>
             {{ a.name }}
           </option>
-          {% endfor %}
-          {% if accounts %}</optgroup>{% endif %}
-        </select>
-        <div class="f-field-hint">
-          <a href="/settings" target="_blank" class="f-link-small">Manage accounts →</a>
-        </div>
-      </div>
-
-      <!-- Amount -->
-      <div class="f-field">
-        <label class="f-label">Amount <span class="f-required">*</span></label>
-        <div style="display:flex;gap:6px;">
-          <select name="currency" class="f-select" style="width:80px">
-            <option value="USD" {% if not expense or expense.currency=='USD' %}selected{% endif %}>USD</option>
-            <option value="EUR" {% if expense and expense.currency=='EUR' %}selected{% endif %}>EUR</option>
-            <option value="INR" {% if expense and expense.currency=='INR' %}selected{% endif %}>INR</option>
-            <option value="GBP" {% if expense and expense.currency=='GBP' %}selected{% endif %}>GBP</option>
-          </select>
-          <input type="number" name="amount" step="0.01" min="0" class="f-input" style="flex:1"
-                 value="{{ '%.2f'|format(expense.amount) if expense else '' }}"
-                 placeholder="0.00" required />
-        </div>
-      </div>
-
-      <!-- Paid Through -->
-      <div class="f-field">
-        <label class="f-label">Paid Through</label>
-        <select name="payment_account_id" class="f-select">
-          <option value="">— Select account —</option>
-          {% set prev_type = namespace(v='') %}
-          {% for p in payment_accounts %}
-          {% if p.account_type != prev_type.v %}
-          {% if prev_type.v %}</optgroup>{% endif %}
-          <optgroup label="{{ p.account_type | title }}">
-          {% set prev_type.v = p.account_type %}
-          {% endif %}
-          <option value="{{ p.id }}"
-            {% if expense and expense.payment_account_id == p.id %}selected{% endif %}>
-            {{ p.name }}
-          </option>
-          {% endfor %}
-          {% if payment_accounts %}</optgroup>{% endif %}
-        </select>
-      </div>
-
-      <!-- Vendor -->
-      <div class="f-field">
-        <label class="f-label">Vendor</label>
-        <div style="display:flex;gap:6px;">
-          <select name="vendor_id" class="f-select" style="flex:1">
-            <option value="">— Select vendor —</option>
-            {% for v in vendors %}
-            <option value="{{ v.id }}"
-              {% if expense and expense.vendor_id == v.id %}selected
-              {% elif not expense and prefill_vendor and prefill_vendor == v.id %}selected{% endif %}>
-              {{ v.name }}
-            </option>
-            {% endfor %}
-          </select>
-          <a href="/vendors" target="_blank" class="f-btn f-btn-ghost" style="padding:6px 10px;font-size:12px">+ Add</a>
-        </div>
-      </div>
-
-      <!-- Reference -->
-      <div class="f-field">
-        <label class="f-label">Reference #</label>
-        <input type="text" name="reference" class="f-input"
-               value="{{ expense.reference if expense else '' }}"
-               placeholder="Invoice no., receipt no., etc." />
-      </div>
-
-    </div><!-- /f-form-grid -->
-
-    <!-- Notes -->
-    <div class="f-field" style="margin-top:16px">
-      <label class="f-label">Notes</label>
-      <textarea name="notes" class="f-textarea" rows="3"
-                placeholder="Optional description or context…">{{ expense.notes if expense else '' }}</textarea>
+        {% endfor %}
+        {% if cur_section.v %}</optgroup>{% endif %}
+      </select>
     </div>
 
-    <!-- Receipt Upload -->
-    <div class="f-field f-upload-area" style="margin-top:16px" id="upload-area">
-      <label class="f-label">Receipt / PDF</label>
-      {% if expense and expense.receipt_filename %}
-      <div class="f-existing-receipt">
-        <span>📎 Existing receipt:</span>
-        <a href="/expenses/{{ expense.id }}/receipt" target="_blank" class="f-link-small">View current file</a>
-        <span class="f-text-muted" style="font-size:11px">(upload below to replace)</span>
-      </div>
-      {% endif %}
-      <div class="f-dropzone" id="dropzone">
-        <input type="file" name="receipt" id="receipt-input"
-               accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
-               style="display:none" />
-        <div class="f-dropzone-inner" id="dropzone-label">
-          <span class="f-drop-icon">📂</span>
-          <span class="f-drop-text">Drag &amp; drop or <span class="f-link-small" id="browse-link">browse</span></span>
-          <span class="f-drop-hint">PDF, PNG, JPG up to 20 MB</span>
-        </div>
-      </div>
+    <div class="f-field">
+      <label class="f-label">Amount <span class="f-required">*</span></label>
+      <input type="number" step="0.01" min="0" name="amount" class="f-input" required
+             value="{{ transaction.amount if transaction else '' }}" placeholder="0.00"/>
     </div>
 
-    <div class="f-form-actions" style="margin-top:24px">
-      <button type="submit" class="f-btn f-btn-primary">
-        {% if expense %}Save Changes{% else %}Save Expense{% endif %}
-      </button>
-      <a href="/expenses?fy={{ fy }}" class="f-btn f-btn-ghost">Cancel</a>
+    <div class="f-field">
+      <label class="f-label">Currency</label>
+      <select name="currency" class="f-select">
+        {% for cur in ['USD','EUR','GBP','INR','CAD','AUD'] %}
+        <option value="{{ cur }}" {% if (transaction and transaction.currency==cur) or (not transaction and cur=='USD') %}selected{% endif %}>{{ cur }}</option>
+        {% endfor %}
+      </select>
     </div>
 
-  </form>
+    {% if tx_type != "income" %}
+    <div class="f-field">
+      <label class="f-label">Vendor
+        <a href="/vendors/new" class="f-link-small" target="_blank">+ New</a>
+      </label>
+      <select name="vendor_id" class="f-select">
+        <option value="">No vendor</option>
+        {% for v in vendors %}
+        <option value="{{ v.id }}"
+          {% if transaction and v.id==transaction.vendor_id %}selected
+          {% elif prefill_vendor and v.id==prefill_vendor %}selected{% endif %}>
+          {{ v.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
+
+    <div class="f-field">
+      <label class="f-label">Payment Account</label>
+      <select name="payment_account_id" class="f-select">
+        <option value="">Not specified</option>
+        {% for p in payment_accounts %}
+        <option value="{{ p.id }}" {% if transaction and p.id==transaction.payment_account_id %}selected{% endif %}>
+          {{ p.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="f-field">
+      <label class="f-label">Reference / Invoice #</label>
+      <input type="text" name="reference" class="f-input"
+             value="{{ transaction.reference if transaction else '' }}" placeholder="INV-0001"/>
+    </div>
+  </div>
+
+  <div class="f-field" style="margin-top:.75rem">
+    <label class="f-label">Notes</label>
+    <textarea name="notes" class="f-textarea" rows="2"
+              placeholder="Optional notes…">{{ transaction.notes if transaction else '' }}</textarea>
+  </div>
+
+  <!-- Receipt upload -->
+  {% if tx_type != "income" %}
+  <div class="f-field" style="margin-top:.75rem">
+    <label class="f-label">Receipt (PDF/Image)</label>
+    {% if transaction and transaction.receipt_filename %}
+    <div class="f-existing-receipt">
+      <a href="/expenses/{{ transaction.id }}/receipt" target="_blank">📎 View current receipt</a>
+      <span class="f-text-muted"> — upload a new file to replace</span>
+    </div>
+    {% endif %}
+    <div class="f-dropzone" id="dz" onclick="document.getElementById('rzInp').click()">
+      <div class="f-dropzone-inner">
+        <span class="f-drop-icon">📄</span>
+        <span class="f-drop-text" id="dzLabel">Drag & drop or click to upload</span>
+        <span class="f-drop-hint">PDF, PNG, JPG up to 10 MB</span>
+      </div>
+    </div>
+    <input type="file" id="rzInp" name="receipt" accept=".pdf,.png,.jpg,.jpeg"
+           style="display:none" onchange="dzPick(this)"/>
+  </div>
+  {% endif %}
+
+  <div class="f-form-actions">
+    <button type="submit" class="f-btn f-btn-primary">
+      {{ "Update" if transaction else "Save" }}
+    </button>
+    <a href="/expenses?fy={{ fy }}&tx_type={{ tx_type }}" class="f-btn f-btn-outline">Cancel</a>
+  </div>
+</form>
 </div>
 
 <script>
-const dropzone   = document.getElementById('dropzone');
-const fileInput  = document.getElementById('receipt-input');
-const browseLink = document.getElementById('browse-link');
-const dropLabel  = document.getElementById('dropzone-label');
-
-browseLink.addEventListener('click', () => fileInput.click());
-dropzone.addEventListener('click', () => fileInput.click());
-
-fileInput.addEventListener('change', () => {
-  if (fileInput.files[0]) showFile(fileInput.files[0].name);
-});
-
-dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
-dropzone.addEventListener('dragleave', ()  => dropzone.classList.remove('dragover'));
-dropzone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropzone.classList.remove('dragover');
-  const file = e.dataTransfer.files[0];
-  if (file) {
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    fileInput.files = dt.files;
-    showFile(file.name);
-  }
-});
-
-function showFile(name) {
-  dropLabel.innerHTML = `<span class="f-drop-icon">✅</span><span class="f-drop-text">${name}</span>`;
+function dzPick(inp) {
+  const lbl = document.getElementById('dzLabel');
+  lbl.textContent = inp.files[0] ? inp.files[0].name : 'Drag & drop or click to upload';
+}
+const dz = document.getElementById('dz');
+if (dz) {
+  ['dragover','dragenter'].forEach(e => dz.addEventListener(e, ev=>{ev.preventDefault();dz.classList.add('dz-hover');}));
+  ['dragleave','drop'].forEach(e => dz.addEventListener(e, ev=>{dz.classList.remove('dz-hover');}));
+  dz.addEventListener('drop', ev=>{
+    ev.preventDefault();
+    const f = ev.dataTransfer.files[0];
+    if(f){ const dt=new DataTransfer(); dt.items.add(f); document.getElementById('rzInp').files=dt.files; dzPick(document.getElementById('rzInp')); }
+  });
 }
 </script>
 {% endblock %}

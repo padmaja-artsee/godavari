@@ -1,7 +1,6 @@
-from typing import Optional
 """Finance FastAPI application — runs on port 8001."""
-import os
-import sys
+from __future__ import annotations
+import os, sys
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
@@ -10,81 +9,56 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from finance.app.database import (
-    FY_MONTHS, MONTH_LABELS,
-    computed_grid, delete_account, delete_payment_account, delete_vendor,
-    get_expense_rollup, get_fiscal_years, get_grid, init_db,
-    list_accounts, list_payment_accounts, list_pl_lines, list_vendors,
-    save_account, save_grid, save_payment_account, save_vendor,
+    FY_MONTHS, MONTH_LABELS, SECTION_LABELS, SECTION_ORDER,
+    add_line_item, archive_year, compute_grid, delete_account,
+    delete_line_item, delete_payment_account, delete_vendor,
+    get_actuals_manual, get_budget_grid, get_fiscal_years,
+    get_transaction_rollup, init_db, is_archived,
+    list_accounts, list_line_items, list_payment_accounts, list_vendors,
+    save_account, save_actuals_manual, save_budget_grid,
+    save_payment_account, save_vendor, unarchive_year,
 )
 from finance.app.expenses import (
-    create_expense, delete_expense, get_expense,
-    list_expenses, receipt_path, save_receipt, update_expense,
+    create_transaction, delete_transaction, get_transaction,
+    list_transactions, receipt_path, save_receipt, update_transaction,
 )
 
-# ---------------------------------------------------------------------------
-# App setup
-# ---------------------------------------------------------------------------
-
 BASE = Path(__file__).resolve().parent.parent
-
 app = FastAPI(title="GBInc Finance")
 
-_static = BASE / "static"
-if _static.exists():
-    app.mount("/static", StaticFiles(directory=str(_static)), name="static")
-
-_leads_static = BASE.parent / "static"
-if _leads_static.exists():
-    app.mount("/leads-static", StaticFiles(directory=str(_leads_static)), name="leads_static")
+if (BASE / "static").exists():
+    app.mount("/static", StaticFiles(directory=str(BASE / "static")), name="static")
+if (BASE.parent / "static").exists():
+    app.mount("/leads-static", StaticFiles(directory=str(BASE.parent / "static")), name="leads_static")
 
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 
 
 @app.on_event("startup")
-def startup() -> None:
+def startup():
     init_db()
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Template helpers
 # ---------------------------------------------------------------------------
 
-SECTION_STYLE = {
-    "income_total":  "subtotal",
-    "expense_total": "subtotal",
-    "ebitda":        "highlight",
-    "ebt":           "highlight",
-    "net_ebt":       "total",
+SECTION_STYLES = {
+    "Total Income":            "subtotal",
+    "Total Employee Costs":    "subtotal",
+    "Total Office Costs":      "subtotal",
+    "Total Admin":             "subtotal",
+    "Total Travel":            "subtotal",
+    "Total Expenses":          "highlight",
+    "Net (Income - Expenses)": "total",
 }
 
 
-def _ctx(request: Request, **extra):
-    return {"request": request, "leads_port": 8000, **extra}
-
-
-def _build_table(grid: dict, lines: list[dict]) -> list[dict]:
-    full = computed_grid(grid, lines)
-    rows = []
-    for line in lines:
-        lid = line["id"]
-        monthly = {m: full.get((lid, m), 0.0) for m in FY_MONTHS}
-        total = sum(monthly.values())
-        rows.append({
-            "line": line, "monthly": monthly, "total": total,
-            "style": SECTION_STYLE.get(line["section"], ""),
-        })
-    return rows
-
-
-def _or_none(v: str) -> Optional[int]:
-    try:
-        return int(v) if v and v.strip() else None
-    except ValueError:
-        return None
+def _ctx(request: Request, **kw):
+    return {"request": request, "leads_port": 8000, **kw}
 
 
 def _fmt_date(d: str) -> str:
-    """Format YYYY-MM-DD to 'd Mon YYYY'."""
     try:
         from datetime import date as _d
         dt = _d.fromisoformat(d)
@@ -96,52 +70,70 @@ def _fmt_date(d: str) -> str:
 templates.env.filters["fmtdate"] = _fmt_date
 
 
+def _build_rows(grid: dict, items: list[dict]) -> list[dict]:
+    full = compute_grid(grid, items)
+    rows = []
+    for item in items:
+        lid = item["id"]
+        monthly = {m: full.get((lid, m), 0.0) for m in FY_MONTHS}
+        total = sum(monthly.values())
+        rows.append({
+            "item": item, "monthly": monthly, "total": total,
+            "style": SECTION_STYLES.get(item["name"], ""),
+        })
+    return rows
+
+
+def _combined_actuals(fiscal_year: int, items: list[dict]) -> dict:
+    rollup = get_transaction_rollup(fiscal_year)
+    manual = get_actuals_manual(fiscal_year)
+    combined = {}
+    for k in set(list(rollup.keys()) + list(manual.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    return compute_grid(combined, items)
+
+
+def _or_none(v: str):
+    try:
+        return int(v) if v and v.strip() else None
+    except ValueError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Dashboard
 # ---------------------------------------------------------------------------
 
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request, fy: int = Query(0)):
-    fiscal_years = get_fiscal_years()
+    fys = get_fiscal_years()
     if not fy:
-        fy = fiscal_years[0]
-    lines   = list_pl_lines()
-    rollup  = get_expense_rollup(fy)
-    manual  = get_grid("actuals", fy)
-    # Combined actuals = rollup + manual additions
-    combined: dict = {}
-    for k in set(list(rollup.keys()) + list(manual.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
-    a_grid = computed_grid(combined, lines)
-    b_grid = computed_grid(get_grid("budget", fy), lines)
+        fy = fys[0]
+    items  = list_line_items()
+    a_grid = _combined_actuals(fy, items)
+    b_grid = compute_grid(get_budget_grid(fy), items)
+    by_name = {i["name"]: i["id"] for i in items}
 
-    ebitda_line = next((l for l in lines if l["name"] == "EBITDA"), None)
-    ti_line     = next((l for l in lines if l["name"] == "Total Income"),   None)
-    te_line     = next((l for l in lines if l["name"] == "Total Expenses"), None)
+    def _tot(g, name):
+        lid = by_name.get(name)
+        return sum(g.get((lid, m), 0) for m in FY_MONTHS) if lid else 0
 
-    chart_months    = [MONTH_LABELS[m] for m in FY_MONTHS]
-    ebitda_budget   = [b_grid.get((ebitda_line["id"], m), 0) for m in FY_MONTHS] if ebitda_line else []
-    ebitda_actual   = [a_grid.get((ebitda_line["id"], m), 0) for m in FY_MONTHS] if ebitda_line else []
-    income_actual   = [a_grid.get((ti_line["id"],  m), 0) for m in FY_MONTHS] if ti_line  else []
-    expense_actual  = [a_grid.get((te_line["id"],  m), 0) for m in FY_MONTHS] if te_line  else []
+    chart_months   = [MONTH_LABELS[m] for m in FY_MONTHS]
+    exp_budget     = [b_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
+    exp_actual     = [a_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
+    income_actual  = [a_grid.get((by_name.get("Total Income"),   m), 0) for m in FY_MONTHS]
 
-    def fy_total(g, line):
-        if not line: return 0
-        return sum(g.get((line["id"], m), 0) for m in FY_MONTHS)
-
-    recent = list_expenses(fiscal_year=fy, limit=5)
+    recent = list_transactions(fiscal_year=fy, limit=5)
 
     return templates.TemplateResponse("dashboard.html", _ctx(
-        request,
-        fy=fy, fiscal_years=fiscal_years,
-        total_income_actual   = fy_total(a_grid, ti_line),
-        total_expenses_actual = fy_total(a_grid, te_line),
-        ebitda_actual_total   = fy_total(a_grid, ebitda_line),
-        ebitda_budget_total   = fy_total(b_grid, ebitda_line),
-        chart_months=chart_months,
-        ebitda_budget=ebitda_budget, ebitda_actual=ebitda_actual,
-        income_actual=income_actual, expense_actual=expense_actual,
-        recent_expenses=recent,
+        request, fy=fy, fiscal_years=fys, archived=is_archived(fy),
+        total_income    = _tot(a_grid, "Total Income"),
+        total_expenses  = _tot(a_grid, "Total Expenses"),
+        net             = _tot(a_grid, "Net (Income - Expenses)"),
+        budget_expenses = _tot(b_grid, "Total Expenses"),
+        chart_months=chart_months, exp_budget=exp_budget,
+        exp_actual=exp_actual, income_actual=income_actual,
+        recent=recent,
     ))
 
 
@@ -151,65 +143,37 @@ async def dashboard(request: Request, fy: int = Query(0)):
 
 @app.get("/budget", response_class=HTMLResponse)
 async def budget_page(
-    request: Request,
-    fy: int = Query(0),
-    saved: int = Query(0),
-    uploaded: int = Query(0),
+    request: Request, fy: int = Query(0),
+    saved: int = Query(0), uploaded: int = Query(0),
     upload_error: str = Query(""),
 ):
-    fiscal_years = get_fiscal_years()
-    if not fy:
-        fy = fiscal_years[0]
-    lines = list_pl_lines()
-    grid  = get_grid("budget", fy)
-    rows  = _build_table(grid, lines)
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0]
+    items = list_line_items()
+    grid  = get_budget_grid(fy)
+    rows  = _build_rows(grid, items)
+    archived = is_archived(fy)
+    # Group rows by section for template
+    sections = []
+    current_sec = None
+    current_rows = []
+    for row in rows:
+        sec = row["item"]["section"]
+        if sec != current_sec:
+            if current_sec is not None:
+                sections.append({"section": current_sec, "label": SECTION_LABELS.get(current_sec, ""), "rows": current_rows})
+            current_sec = sec
+            current_rows = []
+        current_rows.append(row)
+    if current_sec:
+        sections.append({"section": current_sec, "label": SECTION_LABELS.get(current_sec, ""), "rows": current_rows})
+
     return templates.TemplateResponse("budget.html", _ctx(
-        request, fy=fy, fiscal_years=fiscal_years,
-        lines=lines, rows=rows,
+        request, fy=fy, fiscal_years=fys, archived=archived,
+        sections=sections, items=items,
         months=FY_MONTHS, month_labels=MONTH_LABELS,
         saved=saved, uploaded=uploaded, upload_error=upload_error,
     ))
-
-
-@app.get("/budget/template.xlsx")
-async def budget_template(fy: int = Query(0)):
-    from finance.app.exports import generate_budget_template
-    fiscal_years = get_fiscal_years()
-    if not fy:
-        fy = fiscal_years[0] if fiscal_years else 2027
-    lines = list_pl_lines()
-    content, fname = generate_budget_template(lines, fy)
-    bundle_base = os.environ.get("LEADS_BUNDLE_BASE") or getattr(sys, "frozen", False)
-    if bundle_base:
-        import subprocess
-        dest = Path.home() / "Downloads" / fname
-        dest.write_bytes(content)
-        try:
-            subprocess.Popen(["open", str(dest)])
-        except Exception:
-            pass
-        return Response(status_code=204)
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
-    )
-
-
-@app.post("/budget/upload")
-async def budget_upload(
-    fy: int = Form(...),
-    file: UploadFile = File(...),
-):
-    from finance.app.exports import parse_budget_upload
-    data = await file.read()
-    lines = list_pl_lines()
-    try:
-        values = parse_budget_upload(data, lines)
-        save_grid("budget", fy, values)
-        return RedirectResponse(f"/budget?fy={fy}&saved=1&uploaded={len(values)}", status_code=303)
-    except Exception as exc:
-        return RedirectResponse(f"/budget?fy={fy}&upload_error={str(exc)[:120]}", status_code=303)
 
 
 @app.post("/budget")
@@ -217,199 +181,230 @@ async def save_budget(request: Request, fy: int = Form(...)):
     form = await request.form()
     values = {}
     for k, v in form.items():
-        if k == "fy":
-            continue
+        if k == "fy": continue
         try:
             values[k] = float(v) if v.strip() else 0.0
-        except ValueError:
+        except (ValueError, AttributeError):
             values[k] = 0.0
-    save_grid("budget", fy, values)
+    save_budget_grid(fy, values)
     return RedirectResponse(f"/budget?fy={fy}&saved=1", status_code=303)
 
 
+@app.get("/budget/template.xlsx")
+async def budget_template(fy: int = Query(0)):
+    from finance.app.exports import generate_budget_template
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0] if fys else 2027
+    items = list_line_items()
+    content, fname = generate_budget_template(items, fy)
+    bundle = os.environ.get("LEADS_BUNDLE_BASE") or getattr(sys, "frozen", False)
+    if bundle:
+        import subprocess
+        dest = Path.home() / "Downloads" / fname
+        dest.write_bytes(content)
+        try: subprocess.Popen(["open", str(dest)])
+        except Exception: pass
+        return Response(status_code=204)
+    return Response(content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+
+@app.post("/budget/upload")
+async def budget_upload(fy: int = Form(...), file: UploadFile = File(...)):
+    from finance.app.exports import parse_budget_upload
+    data = await file.read()
+    items = list_line_items()
+    try:
+        values = parse_budget_upload(data, items)
+        save_budget_grid(fy, values)
+        return RedirectResponse(f"/budget?fy={fy}&saved=1&uploaded={len(values)}", status_code=303)
+    except Exception as exc:
+        return RedirectResponse(f"/budget?fy={fy}&upload_error={str(exc)[:120]}", status_code=303)
+
+
+@app.post("/budget/add-line")
+async def budget_add_line(fy: int = Form(...), section: str = Form(...), name: str = Form(...)):
+    add_line_item(section, name.strip())
+    return RedirectResponse(f"/budget?fy={fy}", status_code=303)
+
+
+@app.post("/budget/delete-line")
+async def budget_delete_line(fy: int = Form(...), lid: int = Form(...)):
+    delete_line_item(lid)
+    return RedirectResponse(f"/budget?fy={fy}", status_code=303)
+
+
 # ---------------------------------------------------------------------------
-# Actuals (hybrid: expense rollup + manual)
+# Actuals (read-only report)
 # ---------------------------------------------------------------------------
 
 @app.get("/actuals", response_class=HTMLResponse)
 async def actuals_page(request: Request, fy: int = Query(0), saved: int = Query(0)):
-    fiscal_years = get_fiscal_years()
-    if not fy:
-        fy = fiscal_years[0]
-    lines   = list_pl_lines()
-    rollup  = get_expense_rollup(fy)
-    manual  = get_grid("actuals", fy)
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0]
+    items   = list_line_items()
+    rollup  = get_transaction_rollup(fy)
+    manual  = get_actuals_manual(fy)
+    combined = {}
+    for k in set(list(rollup.keys()) + list(manual.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    full = compute_grid(combined, items)
 
     rows = []
-    for line in lines:
-        lid = line["id"]
-        monthly_rollup = {m: rollup.get((lid, m), 0.0)  for m in FY_MONTHS}
-        monthly_manual = {m: manual.get((lid, m), 0.0)  for m in FY_MONTHS}
-        monthly_total  = {m: monthly_rollup[m] + monthly_manual[m] for m in FY_MONTHS}
-        total = sum(monthly_total.values())
+    for item in items:
+        lid = item["id"]
+        monthly_r = {m: rollup.get((lid, m), 0.0)  for m in FY_MONTHS}
+        monthly_m = {m: manual.get((lid, m), 0.0)  for m in FY_MONTHS}
+        monthly_t = {m: full.get((lid, m), 0.0)    for m in FY_MONTHS}
         rows.append({
-            "line": line,
-            "monthly_rollup": monthly_rollup,
-            "monthly_manual": monthly_manual,
-            "monthly_total":  monthly_total,
-            "total": total,
-            "style": SECTION_STYLE.get(line["section"], ""),
+            "item": item, "monthly_r": monthly_r,
+            "monthly_m": monthly_m, "monthly_t": monthly_t,
+            "total": sum(monthly_t.values()),
+            "style": SECTION_STYLES.get(item["name"], ""),
         })
+
+    sections = _group_by_section(rows)
     return templates.TemplateResponse("actuals.html", _ctx(
-        request, fy=fy, fiscal_years=fiscal_years,
-        lines=lines, rows=rows,
+        request, fy=fy, fiscal_years=fys, archived=is_archived(fy),
+        sections=sections, items=items,
         months=FY_MONTHS, month_labels=MONTH_LABELS, saved=saved,
     ))
 
 
-@app.post("/actuals")
-async def save_actuals(request: Request, fy: int = Form(...)):
+@app.post("/actuals/manual")
+async def save_manual(request: Request, fy: int = Form(...)):
     form = await request.form()
     values = {}
     for k, v in form.items():
-        if k == "fy":
-            continue
+        if k == "fy": continue
         try:
             values[k] = float(v) if v.strip() else 0.0
-        except ValueError:
+        except (ValueError, AttributeError):
             values[k] = 0.0
-    save_grid("actuals", fy, values)
+    save_actuals_manual(fy, values)
     return RedirectResponse(f"/actuals?fy={fy}&saved=1", status_code=303)
 
 
 # ---------------------------------------------------------------------------
-# Budget vs Actuals report
+# Expense Variances (view-only)
 # ---------------------------------------------------------------------------
 
-@app.get("/report", response_class=HTMLResponse)
-async def report_page(request: Request, fy: int = Query(0)):
-    fiscal_years = get_fiscal_years()
-    if not fy:
-        fy = fiscal_years[0]
-    lines   = list_pl_lines()
-    rollup  = get_expense_rollup(fy)
-    manual  = get_grid("actuals", fy)
-    combined: dict = {}
-    for k in set(list(rollup.keys()) + list(manual.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
-    b_grid = computed_grid(get_grid("budget", fy), lines)
-    a_grid = computed_grid(combined, lines)
+@app.get("/variances", response_class=HTMLResponse)
+async def variances_page(request: Request, fy: int = Query(0)):
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0]
+    items  = list_line_items()
+    b_grid = compute_grid(get_budget_grid(fy), items)
+    a_grid = _combined_actuals(fy, items)
 
     rows = []
-    for line in lines:
-        lid = line["id"]
-        monthly = []
+    for item in items:
+        lid = item["id"]
+        monthly = {}
         for m in FY_MONTHS:
             bud = b_grid.get((lid, m), 0.0)
             act = a_grid.get((lid, m), 0.0)
-            var = act - bud
-            var_pct = (var / bud * 100) if bud else None
-            monthly.append({"month": m, "budget": bud, "actual": act,
-                             "variance": var, "var_pct": var_pct})
-        b_total = sum(b_grid.get((lid, m), 0) for m in FY_MONTHS)
-        a_total = sum(a_grid.get((lid, m), 0) for m in FY_MONTHS)
-        v_total = a_total - b_total
-        vp_total = (v_total / b_total * 100) if b_total else None
+            # For expenses: negative = over budget; for income: positive = above plan
+            var = bud - act if item["section"] != "income" else act - bud
+            monthly[m] = {"budget": bud, "actual": act, "variance": var}
+        b_tot = sum(b_grid.get((lid, m), 0) for m in FY_MONTHS)
+        a_tot = sum(a_grid.get((lid, m), 0) for m in FY_MONTHS)
+        v_tot = b_tot - a_tot if item["section"] != "income" else a_tot - b_tot
         rows.append({
-            "line": line, "monthly": monthly,
-            "b_total": b_total, "a_total": a_total,
-            "v_total": v_total, "vp_total": vp_total,
-            "style": SECTION_STYLE.get(line["section"], ""),
+            "item": item, "monthly": monthly,
+            "b_total": b_tot, "a_total": a_tot, "v_total": v_tot,
+            "style": SECTION_STYLES.get(item["name"], ""),
         })
-    return templates.TemplateResponse("report.html", _ctx(
-        request, fy=fy, fiscal_years=fiscal_years,
-        rows=rows, months=FY_MONTHS, month_labels=MONTH_LABELS,
+    sections = _group_by_section(rows)
+    return templates.TemplateResponse("variances.html", _ctx(
+        request, fy=fy, fiscal_years=fys, archived=is_archived(fy),
+        sections=sections, months=FY_MONTHS, month_labels=MONTH_LABELS,
     ))
 
 
-@app.get("/report/export.xlsx")
-async def export_report(fy: int = Query(0)):
-    from finance.app.exports import export_pl_xlsx
-    fiscal_years = get_fiscal_years()
-    if not fy:
-        fy = fiscal_years[0] if fiscal_years else 2027
-    lines  = list_pl_lines()
-    rollup = get_expense_rollup(fy)
-    manual = get_grid("actuals", fy)
-    combined: dict = {}
-    for k in set(list(rollup.keys()) + list(manual.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
-    b_grid = computed_grid(get_grid("budget", fy), lines)
-    a_grid = computed_grid(combined, lines)
-    content, fname = export_pl_xlsx(lines, b_grid, a_grid, fy)
+# ---------------------------------------------------------------------------
+# Expenses Analysis (summary)
+# ---------------------------------------------------------------------------
 
-    bundle_base = os.environ.get("LEADS_BUNDLE_BASE") or getattr(sys, "frozen", False)
-    if bundle_base:
-        import subprocess
-        dest = Path.home() / "Downloads" / fname
-        dest.write_bytes(content)
-        try:
-            subprocess.Popen(["open", str(dest)])
-        except Exception:
-            pass
-        return Response(status_code=204)
-    return Response(
-        content=content,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
-    )
+@app.get("/analysis", response_class=HTMLResponse)
+async def analysis_page(request: Request, fy: int = Query(0)):
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0]
+    items  = list_line_items()
+    b_grid = compute_grid(get_budget_grid(fy), items)
+    a_grid = _combined_actuals(fy, items)
+
+    SUMMARY_LINES = [
+        ("income",   "Income"),
+        ("employee", "Employee Costs"),
+        ("office",   "Office Costs"),
+        ("admin",    "Bank/Legal/Admin"),
+        ("travel",   "Conference/Travel"),
+    ]
+    summary = []
+    for sec, label in SUMMARY_LINES:
+        sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
+        planned = sum(b_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
+        actual  = sum(a_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
+        var     = planned - actual if sec != "income" else actual - planned
+        var_pct = (var / planned * 100) if planned else None
+        summary.append({"label": label, "planned": planned, "actual": actual,
+                         "variance": var, "var_pct": var_pct, "section": sec})
+
+    # Monthly chart data — Total Expenses and Income
+    by_name = {i["name"]: i["id"] for i in items}
+    chart_months  = [MONTH_LABELS[m] for m in FY_MONTHS]
+    exp_budget    = [b_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
+    exp_actual    = [a_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
+    income_actual = [a_grid.get((by_name.get("Total Income"),   m), 0) for m in FY_MONTHS]
+
+    return templates.TemplateResponse("analysis.html", _ctx(
+        request, fy=fy, fiscal_years=fys,
+        summary=summary, chart_months=chart_months,
+        exp_budget=exp_budget, exp_actual=exp_actual, income_actual=income_actual,
+    ))
 
 
 # ---------------------------------------------------------------------------
-# Expenses — list
+# Transactions (expenses + income)
 # ---------------------------------------------------------------------------
 
 @app.get("/expenses", response_class=HTMLResponse)
 async def expenses_list(
-    request: Request,
-    fy: int = Query(0),
-    account_id: int = Query(0),
-    vendor_id: int = Query(0),
+    request: Request, fy: int = Query(0),
+    account_id: int = Query(0), vendor_id: int = Query(0),
+    tx_type: str = Query("expense"),
 ):
-    fiscal_years = get_fiscal_years()
-    if not fy:
-        fy = fiscal_years[0]
-    expenses = list_expenses(
-        fiscal_year=fy,
-        account_id=account_id or None,
-        vendor_id=vendor_id or None,
-    )
-    total = sum(e["amount"] for e in expenses)
-    accounts = list_accounts()
-    vendors  = list_vendors()
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0]
+    txs   = list_transactions(fiscal_year=fy, transaction_type=tx_type,
+                               account_id=account_id or None, vendor_id=vendor_id or None)
+    total = sum(t["amount"] for t in txs)
     return templates.TemplateResponse("expenses.html", _ctx(
-        request, fy=fy, fiscal_years=fiscal_years,
-        expenses=expenses, total=total,
-        accounts=accounts, vendors=vendors,
+        request, fy=fy, fiscal_years=fys,
+        transactions=txs, total=total, tx_type=tx_type,
+        accounts=list_accounts(), vendors=list_vendors(),
         filter_account=account_id, filter_vendor=vendor_id,
     ))
 
 
-# ---------------------------------------------------------------------------
-# Expenses — new / edit
-# ---------------------------------------------------------------------------
-
 @app.get("/expenses/new", response_class=HTMLResponse)
 async def expense_new_form(
-    request: Request,
-    fy: int = Query(0),
-    account_id: int = Query(0),
-    vendor_id: int = Query(0),
+    request: Request, fy: int = Query(0),
+    account_id: int = Query(0), vendor_id: int = Query(0),
+    tx_type: str = Query("expense"),
 ):
     from datetime import date
-    fiscal_years = get_fiscal_years()
-    if not fy:
-        fy = fiscal_years[0]
-    accounts         = list_accounts()
-    vendors          = list_vendors()
-    payment_accounts = list_payment_accounts()
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0]
     return templates.TemplateResponse("expense_form.html", _ctx(
-        request, fy=fy, fiscal_years=fiscal_years,
-        expense=None, accounts=accounts, vendors=vendors,
-        payment_accounts=payment_accounts,
+        request, fy=fy, fiscal_years=fys, transaction=None,
+        tx_type=tx_type,
+        accounts=list_accounts(), vendors=list_vendors(),
+        payment_accounts=list_payment_accounts(),
         today=date.today().isoformat(),
-        prefill_account=account_id,
-        prefill_vendor=vendor_id,
+        prefill_account=account_id, prefill_vendor=vendor_id,
         page="expenses",
     ))
 
@@ -417,120 +412,104 @@ async def expense_new_form(
 @app.post("/expenses/new")
 async def expense_new_save(
     request: Request,
-    fy: int = Form(...),
-    date: str = Form(...),
-    account_id: int = Form(...),
-    amount: float = Form(...),
-    currency: str = Form("USD"),
-    payment_account_id: str = Form(""),
-    vendor_id: str = Form(""),
-    reference: str = Form(""),
-    notes: str = Form(""),
+    fy: int = Form(...), tx_type: str = Form("expense"),
+    date: str = Form(...), account_id: int = Form(...),
+    amount: float = Form(...), currency: str = Form("USD"),
+    payment_account_id: str = Form(""), vendor_id: str = Form(""),
+    reference: str = Form(""), notes: str = Form(""),
     receipt: UploadFile = File(None),
 ):
-    receipt_filename = ""
+    rfname = ""
     if receipt and receipt.filename:
         data = await receipt.read()
-        if data:
-            receipt_filename = save_receipt(data, receipt.filename)
-
-    create_expense(
-        date=date,
-        account_id=account_id,
-        amount=amount,
-        currency=currency,
+        if data: rfname = save_receipt(data, receipt.filename)
+    create_transaction(
+        date=date, account_id=account_id, amount=amount, currency=currency,
+        transaction_type=tx_type,
         payment_account_id=_or_none(payment_account_id),
         vendor_id=_or_none(vendor_id),
-        reference=reference,
-        notes=notes,
-        receipt_filename=receipt_filename,
+        reference=reference, notes=notes, receipt_filename=rfname,
     )
-    return RedirectResponse(f"/expenses?fy={fy}", status_code=303)
+    return RedirectResponse(f"/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
 
 
-@app.get("/expenses/{expense_id}/edit", response_class=HTMLResponse)
-async def expense_edit_form(request: Request, expense_id: int):
-    expense = get_expense(expense_id)
-    if not expense:
-        return RedirectResponse("/expenses", status_code=303)
-    fiscal_years     = get_fiscal_years()
-    accounts         = list_accounts()
-    vendors          = list_vendors()
-    payment_accounts = list_payment_accounts()
+@app.get("/expenses/{tx_id}/edit", response_class=HTMLResponse)
+async def expense_edit_form(request: Request, tx_id: int):
+    tx = get_transaction(tx_id)
+    if not tx: return RedirectResponse("/expenses", status_code=303)
+    fys = get_fiscal_years()
     return templates.TemplateResponse("expense_form.html", _ctx(
-        request, fy=expense["fiscal_year"],
-        fiscal_years=fiscal_years,
-        expense=expense, accounts=accounts, vendors=vendors,
-        payment_accounts=payment_accounts,
-        today=expense["date"],
+        request, fy=tx["fiscal_year"], fiscal_years=fys,
+        transaction=tx, tx_type=tx["transaction_type"],
+        accounts=list_accounts(), vendors=list_vendors(),
+        payment_accounts=list_payment_accounts(),
+        today=tx["date"], prefill_account=0, prefill_vendor=0,
         page="expenses",
     ))
 
 
-@app.post("/expenses/{expense_id}/edit")
+@app.post("/expenses/{tx_id}/edit")
 async def expense_edit_save(
-    expense_id: int,
-    fy: int = Form(...),
-    date: str = Form(...),
-    account_id: int = Form(...),
-    amount: float = Form(...),
-    currency: str = Form("USD"),
-    payment_account_id: str = Form(""),
-    vendor_id: str = Form(""),
-    reference: str = Form(""),
-    notes: str = Form(""),
+    tx_id: int,
+    fy: int = Form(...), tx_type: str = Form("expense"),
+    date: str = Form(...), account_id: int = Form(...),
+    amount: float = Form(...), currency: str = Form("USD"),
+    payment_account_id: str = Form(""), vendor_id: str = Form(""),
+    reference: str = Form(""), notes: str = Form(""),
     receipt: UploadFile = File(None),
 ):
-    existing = get_expense(expense_id)
-    receipt_filename = None
+    existing = get_transaction(tx_id)
+    rfname = None
     if receipt and receipt.filename:
         data = await receipt.read()
         if data:
-            # Remove old receipt
             if existing and existing.get("receipt_filename"):
                 from finance.app.expenses import delete_receipt
                 delete_receipt(existing["receipt_filename"])
-            receipt_filename = save_receipt(data, receipt.filename)
-
-    update_expense(
-        expense_id=expense_id,
-        date=date,
-        account_id=account_id,
-        amount=amount,
-        currency=currency,
+            rfname = save_receipt(data, receipt.filename)
+    update_transaction(
+        tx_id=tx_id, date=date, account_id=account_id, amount=amount,
+        currency=currency, transaction_type=tx_type,
         payment_account_id=_or_none(payment_account_id),
         vendor_id=_or_none(vendor_id),
-        reference=reference,
-        notes=notes,
-        receipt_filename=receipt_filename,
+        reference=reference, notes=notes, receipt_filename=rfname,
     )
-    return RedirectResponse(f"/expenses?fy={fy}", status_code=303)
+    return RedirectResponse(f"/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
 
 
-@app.post("/expenses/{expense_id}/delete")
-async def expense_delete(expense_id: int, fy: int = Form(0)):
-    delete_expense(expense_id)
-    return RedirectResponse(f"/expenses?fy={fy}", status_code=303)
+@app.post("/expenses/{tx_id}/delete")
+async def expense_delete(tx_id: int, fy: int = Form(0), tx_type: str = Form("expense")):
+    delete_transaction(tx_id)
+    return RedirectResponse(f"/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
 
 
-@app.get("/expenses/{expense_id}/receipt")
-async def expense_receipt(expense_id: int):
-    expense = get_expense(expense_id)
-    if not expense or not expense.get("receipt_filename"):
+@app.get("/expenses/{tx_id}/receipt")
+async def expense_receipt(tx_id: int):
+    tx = get_transaction(tx_id)
+    if not tx or not tx.get("receipt_filename"):
         return Response(status_code=404)
-    path = receipt_path(expense["receipt_filename"])
-    if not path.exists():
-        return Response(status_code=404)
+    path = receipt_path(tx["receipt_filename"])
+    if not path.exists(): return Response(status_code=404)
     suffix = path.suffix.lower()
-    media = {
-        ".pdf": "application/pdf",
-        ".png": "image/png",
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".gif": "image/gif",
-        ".webp": "image/webp",
-    }.get(suffix, "application/octet-stream")
+    media = {".pdf":"application/pdf",".png":"image/png",
+             ".jpg":"image/jpeg",".jpeg":"image/jpeg"}.get(suffix,"application/octet-stream")
     return FileResponse(str(path), media_type=media)
+
+
+# ---------------------------------------------------------------------------
+# FY archive / new year
+# ---------------------------------------------------------------------------
+
+@app.post("/fy/archive")
+async def fy_archive(fy: int = Form(...)):
+    archive_year(fy)
+    return RedirectResponse(f"/?fy={fy}", status_code=303)
+
+
+@app.post("/fy/unarchive")
+async def fy_unarchive(fy: int = Form(...)):
+    unarchive_year(fy)
+    return RedirectResponse(f"/?fy={fy}", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -539,49 +518,33 @@ async def expense_receipt(expense_id: int):
 
 @app.get("/vendors", response_class=HTMLResponse)
 async def vendors_page(request: Request, saved: int = Query(0)):
-    vendors = list_vendors()
     return templates.TemplateResponse("vendors.html", _ctx(
-        request, vendors=vendors, saved=saved, page="vendors",
+        request, vendors=list_vendors(), saved=saved, page="vendors",
     ))
 
 
 @app.get("/vendors/new", response_class=HTMLResponse)
 async def vendor_new_form(request: Request):
-    return templates.TemplateResponse("vendor_form.html", _ctx(
-        request, vendor=None, page="vendor_new",
-    ))
+    return templates.TemplateResponse("vendor_form.html", _ctx(request, vendor=None, page="vendor_new"))
 
 
 @app.post("/vendors/new")
-async def vendor_new(
-    name: str = Form(...),
-    email: str = Form(""),
-    phone: str = Form(""),
-    notes: str = Form(""),
-):
+async def vendor_new(name: str = Form(...), email: str = Form(""),
+                     phone: str = Form(""), notes: str = Form("")):
     save_vendor(name, email, phone, notes)
     return RedirectResponse("/vendors?saved=1", status_code=303)
 
 
 @app.get("/vendors/{vid}/edit", response_class=HTMLResponse)
 async def vendor_edit_form(request: Request, vid: int):
-    vendors = list_vendors()
-    vendor = next((v for v in vendors if v["id"] == vid), None)
-    if not vendor:
-        return RedirectResponse("/vendors", status_code=303)
-    return templates.TemplateResponse("vendor_form.html", _ctx(
-        request, vendor=vendor, page="vendor_new",
-    ))
+    v = next((x for x in list_vendors() if x["id"] == vid), None)
+    if not v: return RedirectResponse("/vendors", status_code=303)
+    return templates.TemplateResponse("vendor_form.html", _ctx(request, vendor=v, page="vendor_new"))
 
 
 @app.post("/vendors/{vid}/edit")
-async def vendor_edit(
-    vid: int,
-    name: str = Form(...),
-    email: str = Form(""),
-    phone: str = Form(""),
-    notes: str = Form(""),
-):
+async def vendor_edit(vid: int, name: str = Form(...), email: str = Form(""),
+                      phone: str = Form(""), notes: str = Form("")):
     save_vendor(name, email, phone, notes, vid=vid)
     return RedirectResponse("/vendors?saved=1", status_code=303)
 
@@ -593,42 +556,29 @@ async def vendor_delete(vid: int):
 
 
 # ---------------------------------------------------------------------------
-# Settings: Chart of Accounts + Payment Accounts
+# Settings
 # ---------------------------------------------------------------------------
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request, saved: int = Query(0)):
-    accounts         = list_accounts()
-    payment_accounts = list_payment_accounts()
-    pl_lines         = list_pl_lines()
     return templates.TemplateResponse("settings.html", _ctx(
-        request,
-        accounts=accounts,
-        payment_accounts=payment_accounts,
-        pl_lines=pl_lines,
-        saved=saved,
-        page="settings",
+        request, accounts=list_accounts(), payment_accounts=list_payment_accounts(),
+        line_items=list_line_items(), section_labels=SECTION_LABELS,
+        saved=saved, page="settings",
     ))
 
 
 @app.post("/settings/accounts/new")
-async def account_new(
-    name: str = Form(...),
-    group_label: str = Form(""),
-    pl_line_id: str = Form(""),
-):
-    save_account(name, group_label, _or_none(pl_line_id))
+async def account_new(name: str = Form(...), section: str = Form(""),
+                      line_item_id: str = Form("")):
+    save_account(name, section, _or_none(line_item_id))
     return RedirectResponse("/settings?saved=1", status_code=303)
 
 
 @app.post("/settings/accounts/{aid}/edit")
-async def account_edit(
-    aid: int,
-    name: str = Form(...),
-    group_label: str = Form(""),
-    pl_line_id: str = Form(""),
-):
-    save_account(name, group_label, _or_none(pl_line_id), aid=aid)
+async def account_edit(aid: int, name: str = Form(...), section: str = Form(""),
+                       line_item_id: str = Form("")):
+    save_account(name, section, _or_none(line_item_id), aid=aid)
     return RedirectResponse("/settings?saved=1", status_code=303)
 
 
@@ -639,10 +589,7 @@ async def account_delete(aid: int):
 
 
 @app.post("/settings/payment-accounts/new")
-async def payment_account_new(
-    name: str = Form(...),
-    account_type: str = Form("bank"),
-):
+async def payment_account_new(name: str = Form(...), account_type: str = Form("bank")):
     save_payment_account(name, account_type)
     return RedirectResponse("/settings?saved=1", status_code=303)
 
@@ -651,3 +598,23 @@ async def payment_account_new(
 async def payment_account_delete(paid: int):
     delete_payment_account(paid)
     return RedirectResponse("/settings", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Helper
+# ---------------------------------------------------------------------------
+
+def _group_by_section(rows: list[dict]) -> list[dict]:
+    sections = []
+    cur_sec = None
+    cur_rows = []
+    for row in rows:
+        sec = row["item"]["section"]
+        if sec != cur_sec:
+            if cur_sec is not None:
+                sections.append({"section": cur_sec, "label": SECTION_LABELS.get(cur_sec, ""), "rows": cur_rows})
+            cur_sec, cur_rows = sec, []
+        cur_rows.append(row)
+    if cur_sec:
+        sections.append({"section": cur_sec, "label": SECTION_LABELS.get(cur_sec, ""), "rows": cur_rows})
+    return sections

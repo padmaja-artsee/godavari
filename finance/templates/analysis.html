@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% set page = "analysis" %}
+{% block title %}Analysis — FY{{ fy }}{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Analysis — FY{{ fy }}</h1>
+    <p class="f-subtitle">Budget vs actuals by category.</p>
+  </div>
+  <div class="f-header-controls">
+    <form method="get" action="/analysis">
+      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
+        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
+      </select>
+    </form>
+  </div>
+</div>
+
+<!-- Summary cards -->
+<div class="f-summary-grid">
+{% for s in summary %}
+<div class="f-summary-card {% if s.section == 'income' %}f-card-income{% endif %}">
+  <div class="f-summary-label">{{ s.label }}</div>
+  <div class="f-summary-row">
+    <span class="f-sum-key">Planned</span>
+    <span class="f-sum-val">${{ "{:,.0f}".format(s.planned) }}</span>
+  </div>
+  <div class="f-summary-row">
+    <span class="f-sum-key">Actual</span>
+    <span class="f-sum-val">${{ "{:,.0f}".format(s.actual) }}</span>
+  </div>
+  <div class="f-summary-row">
+    <span class="f-sum-key">Variance</span>
+    <span class="f-sum-val {% if s.variance >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+      {% if s.variance >= 0 %}+{% endif %}${{ "{:,.0f}".format(s.variance) }}
+      {% if s.var_pct is not none %}
+      <small>({{ "{:.0f}".format(s.var_pct) }}%)</small>
+      {% endif %}
+    </span>
+  </div>
+</div>
+{% endfor %}
+</div>
+
+<!-- Charts -->
+<div class="f-charts-grid" style="margin-top:1.5rem">
+  <div class="f-card f-card-wide">
+    <div class="f-card-header">Monthly Expenses — Budget vs Actuals</div>
+    <canvas id="expChart" height="100"></canvas>
+  </div>
+  <div class="f-card">
+    <div class="f-card-header">Monthly Income</div>
+    <canvas id="incChart" height="100"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+const months = {{ chart_months | tojson }};
+new Chart(document.getElementById('expChart'), {
+  type:'bar',
+  data:{labels:months, datasets:[
+    {label:'Budget',  data:{{ exp_budget  | tojson }}, backgroundColor:'rgba(28,86,49,.25)', borderColor:'#1C5631', borderWidth:1},
+    {label:'Actuals', data:{{ exp_actual  | tojson }}, backgroundColor:'rgba(192,57,43,.45)', borderColor:'#C0392B', borderWidth:1}
+  ]},
+  options:{responsive:true,plugins:{legend:{position:'bottom'}},
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+});
+new Chart(document.getElementById('incChart'), {
+  type:'bar',
+  data:{labels:months, datasets:[
+    {label:'Income Actual',data:{{ income_actual | tojson }},backgroundColor:'rgba(28,86,49,.5)',borderColor:'#1C5631',borderWidth:1}
+  ]},
+  options:{responsive:true,plugins:{legend:{position:'bottom'}},
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+});
+</script>
+{% endblock %}

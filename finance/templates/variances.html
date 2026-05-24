@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% set page = "variances" %}
+{% block title %}Budget vs Actuals — FY{{ fy }}{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Budget vs Actuals — FY{{ fy }}</h1>
+    <p class="f-subtitle">Positive variance = under budget (favorable for expenses, above plan for income).</p>
+  </div>
+  <div class="f-header-controls">
+    <form method="get" action="/variances">
+      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
+        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
+      </select>
+    </form>
+    {% if archived %}<span class="f-badge f-badge-warning">Archived</span>{% endif %}
+  </div>
+</div>
+
+<div class="f-grid-scroll">
+<table class="f-grid f-var-table">
+  <thead>
+    <tr>
+      <th class="f-col-label" rowspan="2">Line Item</th>
+      {% for m in months %}
+      <th class="f-col-var" colspan="3">{{ month_labels[m] }}</th>
+      {% endfor %}
+      <th class="f-col-var" colspan="3">Total</th>
+    </tr>
+    <tr>
+      {% for m in months %}
+      <th class="f-col-var-sub">Bud</th>
+      <th class="f-col-var-sub">Act</th>
+      <th class="f-col-var-sub">Var</th>
+      {% endfor %}
+      <th class="f-col-var-sub">Bud</th>
+      <th class="f-col-var-sub">Act</th>
+      <th class="f-col-var-sub">Var</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for sec in sections %}
+    {% if sec.section != 'totals' %}
+    <tr class="f-section-header-row">
+      <td colspan="{{ months|length * 3 + 4 }}">{{ sec.label }}</td>
+    </tr>
+    {% for row in sec.rows %}
+    <tr class="f-row-{{ row.style or 'normal' }}">
+      <td class="f-row-name">{{ row.item.name }}</td>
+      {% for m in months %}
+      {% set mv = row.monthly[m] %}
+      <td class="num">{{ "${:,.0f}".format(mv.budget) if mv.budget else '—' }}</td>
+      <td class="num">{{ "${:,.0f}".format(mv.actual) if mv.actual else '—' }}</td>
+      <td class="num {% if mv.variance > 0 %}f-var-pos{% elif mv.variance < 0 %}f-var-neg{% endif %}">
+        {% if mv.variance %}{{ "${:,.0f}".format(mv.variance) }}{% else %}—{% endif %}
+      </td>
+      {% endfor %}
+      <td class="num f-bold">{{ "${:,.0f}".format(row.b_total) if row.b_total else '—' }}</td>
+      <td class="num f-bold">{{ "${:,.0f}".format(row.a_total) if row.a_total else '—' }}</td>
+      <td class="num f-bold {% if row.v_total > 0 %}f-var-pos{% elif row.v_total < 0 %}f-var-neg{% endif %}">
+        {% if row.v_total %}{{ "${:,.0f}".format(row.v_total) }}{% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+  {% endfor %}
+
+  {% for sec in sections %}
+    {% if sec.section == 'totals' %}
+    <tr class="f-section-spacer"><td colspan="{{ months|length * 3 + 4 }}"></td></tr>
+    {% for row in sec.rows %}
+    <tr class="f-row-{{ row.style or 'total' }}">
+      <td class="f-row-name">{{ row.item.name }}</td>
+      {% for m in months %}
+      {% set mv = row.monthly[m] %}
+      <td class="num">{{ "${:,.0f}".format(mv.budget) if mv.budget else '—' }}</td>
+      <td class="num">{{ "${:,.0f}".format(mv.actual) if mv.actual else '—' }}</td>
+      <td class="num {% if mv.variance > 0 %}f-var-pos{% elif mv.variance < 0 %}f-var-neg{% endif %}">
+        {% if mv.variance %}{{ "${:,.0f}".format(mv.variance) }}{% else %}—{% endif %}
+      </td>
+      {% endfor %}
+      <td class="num f-bold">{{ "${:,.0f}".format(row.b_total) if row.b_total else '—' }}</td>
+      <td class="num f-bold">{{ "${:,.0f}".format(row.a_total) if row.a_total else '—' }}</td>
+      <td class="num f-bold {% if row.v_total > 0 %}f-var-pos{% elif row.v_total < 0 %}f-var-neg{% endif %}">
+        {% if row.v_total %}{{ "${:,.0f}".format(row.v_total) }}{% else %}—{% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    {% endif %}
+  {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}

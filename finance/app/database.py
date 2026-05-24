@@ -1,8 +1,10 @@
 """
-Finance module database — fully independent from Leads.
-Fiscal year = April–March (Indian FY). FY27 = Apr 2026 – Mar 2027.
-All monetary values stored in USD to match source.
+Finance module database.
+Structure matches 'Budget vs Actuals.xlsx' — expense categories with line items.
+Fiscal year = April–March (FY27 = Apr 2026 – Mar 2027).
+Months stored as calendar integers (1–12).
 """
+from __future__ import annotations
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -46,107 +48,113 @@ def get_db():
 
 
 # ---------------------------------------------------------------------------
-# Fiscal year helpers
+# Fiscal year helpers  (Apr–Mar, FY stored as ending year)
 # ---------------------------------------------------------------------------
 
 FY_MONTHS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
 MONTH_LABELS = {
-    4: "Apr", 5: "May", 6: "Jun", 7: "Jul", 8: "Aug", 9: "Sep",
-    10: "Oct", 11: "Nov", 12: "Dec", 1: "Jan", 2: "Feb", 3: "Mar",
+    4:"Apr", 5:"May", 6:"Jun", 7:"Jul", 8:"Aug", 9:"Sep",
+    10:"Oct", 11:"Nov", 12:"Dec", 1:"Jan", 2:"Feb", 3:"Mar",
 }
 
 
-def fiscal_year_for_date(date_str: str) -> tuple[int, int]:
-    """Return (fiscal_year, calendar_month) for a YYYY-MM-DD date string.
-    FY27 = Apr 2026 – Mar 2027.
-    """
-    year, month, _ = map(int, date_str.split("-"))
-    fy = year + 1 if month >= 4 else year
-    return fy, month
+def fiscal_year_for_date(date_str: str) -> tuple:
+    """Return (fiscal_year, calendar_month)."""
+    y, m, _ = map(int, date_str.split("-"))
+    return (y + 1 if m >= 4 else y), m
 
 
-def calendar_year_for(fiscal_year: int, month: int) -> int:
-    if month >= 4:
-        return fiscal_year - 1
-    return fiscal_year
+def cal_year_for(fiscal_year: int, month: int) -> int:
+    return fiscal_year - 1 if month >= 4 else fiscal_year
 
 
 # ---------------------------------------------------------------------------
-# P&L line seeds
+# Seed data — matches Budget vs Actuals.xlsx structure + income
 # ---------------------------------------------------------------------------
 
-PL_LINES = [
-    ("Revenue",                      "income",        0, 10),
-    ("Increase / Decrease in Stock", "income",        0, 20),
-    ("Other Income",                 "income",        0, 30),
-    ("Total Income",                 "income_total",  1, 40),
-    ("Raw Material Cost",            "expense",       0, 50),
-    ("Power & Fuel Cost",            "expense",       0, 60),
-    ("Stores, Spares & Chemicals",   "expense",       0, 70),
-    ("Packing Cost",                 "expense",       0, 80),
-    ("Repairs & Maintenance",        "expense",       0, 90),
-    ("Employee Cost",                "expense",       0, 100),
-    ("Selling Expenses",             "expense",       0, 110),
-    ("General & Admin Expenses",     "expense",       0, 120),
-    ("Total Expenses",               "expense_total", 1, 130),
-    ("EBITDA",                       "ebitda",        1, 140),
-    ("Interest",                     "below_ebitda",  0, 150),
-    ("Depreciation",                 "below_ebitda",  0, 160),
-    ("EBT",                          "ebt",           1, 170),
-    ("Extraordinary Items",          "below_ebitda",  0, 180),
-    ("Net EBT",                      "net_ebt",       1, 190),
+# (section, name, is_calculated, is_system, sort_order)
+LINE_ITEMS_SEED = [
+    # ── Income ──────────────────────────────────────────────────────────────
+    ("income", "Commission Income",       0, 1, 10),
+    ("income", "Other Income",            0, 1, 20),
+    ("income", "Total Income",            1, 1, 99),
+    # ── Employee Costs ──────────────────────────────────────────────────────
+    ("employee", "Compensation",          0, 1, 10),
+    ("employee", "Payroll Tax",           0, 1, 80),
+    ("employee", "Total Employee Costs",  1, 1, 99),
+    # ── Office Costs ────────────────────────────────────────────────────────
+    ("office", "Office lease",            0, 1, 10),
+    ("office", "Equipment",               0, 1, 20),
+    ("office", "Subscriptions/Software",  0, 1, 30),
+    ("office", "Telephone",               0, 1, 40),
+    ("office", "Office supplies",         0, 1, 50),
+    ("office", "Security",                0, 1, 60),
+    ("office", "Miscellaneous expenses",  0, 1, 70),
+    ("office", "Total Office Costs",      1, 1, 99),
+    # ── Bank/Legal/Admin ────────────────────────────────────────────────────
+    ("admin", "Bank charges",             0, 1, 10),
+    ("admin", "Insurance expense",        0, 1, 20),
+    ("admin", "Accounting",               0, 1, 30),
+    ("admin", "Legal",                    0, 1, 40),
+    ("admin", "LLC",                      0, 1, 50),
+    ("admin", "Payroll services",         0, 1, 60),
+    ("admin", "Total Admin",              1, 1, 99),
+    # ── Conference/Travel ───────────────────────────────────────────────────
+    ("travel", "Registration",            0, 1, 10),
+    ("travel", "Travel costs",            0, 1, 20),
+    ("travel", "Total Travel",            1, 1, 99),
+    # ── Grand totals ────────────────────────────────────────────────────────
+    ("totals", "Total Expenses",          1, 1, 10),
+    ("totals", "Net (Income - Expenses)", 1, 1, 20),
 ]
 
-# Standard US Chart of Accounts → maps to P&L line names above
-# (account_name, group_label, pl_line_name_or_None, is_system, sort_order)
+SECTION_LABELS = {
+    "income":   "INCOME",
+    "employee": "EMPLOYEE COSTS",
+    "office":   "OFFICE COSTS",
+    "admin":    "BANK / LEGAL / ADMIN",
+    "travel":   "CONFERENCE / TRAVEL",
+    "totals":   "",
+}
+
+SECTION_ORDER = ["income", "employee", "office", "admin", "travel", "totals"]
+
+# Default account → line item mapping
 ACCOUNTS_SEED = [
-    # ── Income ──────────────────────────────────────────────────────────
-    ("Sales Revenue",              "Income",              "Revenue",                    1, 10),
-    ("Commission Income",          "Income",              "Revenue",                    1, 20),
-    ("Other Income",               "Income",              "Other Income",               1, 30),
-    # ── Cost of Goods Sold ──────────────────────────────────────────────
-    ("Cost of Goods Sold",         "Cost of Goods Sold",  "Raw Material Cost",          1, 40),
-    ("Freight & Shipping",         "Cost of Goods Sold",  "Packing Cost",               1, 50),
-    # ── Employee ────────────────────────────────────────────────────────
-    ("Employee Salary",            "Employee",            "Employee Cost",              1, 60),
-    ("Payroll Taxes",              "Employee",            "Employee Cost",              1, 70),
-    ("Employee Benefits",          "Employee",            "Employee Cost",              1, 80),
-    # ── Facilities ──────────────────────────────────────────────────────
-    ("Rent Expense",               "Facilities",          "General & Admin Expenses",   1, 90),
-    ("Utilities",                  "Facilities",          "Power & Fuel Cost",          1, 100),
-    ("Repairs & Maintenance",      "Facilities",          "Repairs & Maintenance",      1, 110),
-    # ── Selling ─────────────────────────────────────────────────────────
-    ("Advertising & Marketing",    "Selling",             "Selling Expenses",           1, 120),
-    ("Travel Expense",             "Selling",             "Selling Expenses",           1, 130),
-    ("Meals & Entertainment",      "Selling",             "Selling Expenses",           1, 140),
-    ("Trade Shows & Events",       "Selling",             "Selling Expenses",           1, 150),
-    # ── General & Admin ─────────────────────────────────────────────────
-    ("Office Supplies",            "General & Admin",     "General & Admin Expenses",   1, 160),
-    ("Computer & Software",        "General & Admin",     "General & Admin Expenses",   1, 170),
-    ("Professional Fees",          "General & Admin",     "General & Admin Expenses",   1, 180),
-    ("Consultant Expense",         "General & Admin",     "General & Admin Expenses",   1, 190),
-    ("Accounting & Audit",         "General & Admin",     "General & Admin Expenses",   1, 200),
-    ("Legal Fees",                 "General & Admin",     "General & Admin Expenses",   1, 210),
-    ("Insurance",                  "General & Admin",     "General & Admin Expenses",   1, 220),
-    ("Bank Charges",               "General & Admin",     "General & Admin Expenses",   1, 230),
-    ("Subscriptions",              "General & Admin",     "General & Admin Expenses",   1, 240),
-    ("Postage & Courier",          "General & Admin",     "General & Admin Expenses",   1, 250),
-    ("Miscellaneous Expense",      "General & Admin",     "General & Admin Expenses",   1, 260),
-    # ── Stores / Spares ─────────────────────────────────────────────────
-    ("Stores & Spares",            "Operations",          "Stores, Spares & Chemicals", 1, 270),
-    ("Chemicals",                  "Operations",          "Stores, Spares & Chemicals", 1, 280),
-    # ── Below EBITDA ─────────────────────────────────────────────────────
-    ("Interest Expense",           "Below EBITDA",        "Interest",                   1, 290),
-    ("Depreciation",               "Below EBITDA",        "Depreciation",               1, 300),
-    ("Tax",                        "Below EBITDA",        "Extraordinary Items",        1, 310),
-    ("Bad Debt",                   "Below EBITDA",        "Extraordinary Items",        1, 320),
+    # Income
+    ("Commission Income",       "income",   "Commission Income",      1, 10),
+    ("Other Income",            "income",   "Other Income",           1, 20),
+    # Employee
+    ("Compensation",            "employee", "Compensation",           1, 30),
+    ("Payroll Tax",             "employee", "Payroll Tax",            1, 40),
+    ("Employee Benefits",       "employee", "Payroll Tax",            1, 50),
+    # Office
+    ("Office Lease / Rent",     "office",   "Office lease",           1, 60),
+    ("Equipment",               "office",   "Equipment",              1, 70),
+    ("Subscriptions/Software",  "office",   "Subscriptions/Software", 1, 80),
+    ("Telephone",               "office",   "Telephone",              1, 90),
+    ("Office Supplies",         "office",   "Office supplies",        1, 100),
+    ("Security",                "office",   "Security",               1, 110),
+    ("Miscellaneous",           "office",   "Miscellaneous expenses", 1, 120),
+    # Admin
+    ("Bank Charges",            "admin",    "Bank charges",           1, 130),
+    ("Insurance",               "admin",    "Insurance expense",      1, 140),
+    ("Accounting & Audit",      "admin",    "Accounting",             1, 150),
+    ("Legal Fees",              "admin",    "Legal",                  1, 160),
+    ("Professional Fees",       "admin",    "Legal",                  1, 170),
+    ("Consultant Expense",      "admin",    "Legal",                  1, 175),
+    ("LLC / State Fees",        "admin",    "LLC",                    1, 180),
+    ("Payroll Services",        "admin",    "Payroll services",       1, 190),
+    # Travel
+    ("Registration / Events",   "travel",   "Registration",           1, 200),
+    ("Travel Expense",          "travel",   "Travel costs",           1, 210),
+    ("Meals & Entertainment",   "travel",   "Travel costs",           1, 220),
 ]
 
 PAYMENT_ACCOUNTS_SEED = [
-    ("Sathgen Therapeutics Bank",  "bank"),
-    ("Petty Cash",                 "cash"),
-    ("Credit Card",                "credit_card"),
-    ("Undeposited Funds",          "other"),
+    ("GBInc Bank Account", "bank"),
+    ("Petty Cash",         "cash"),
+    ("Credit Card",        "credit_card"),
 ]
 
 
@@ -157,19 +165,21 @@ PAYMENT_ACCOUNTS_SEED = [
 def init_db() -> None:
     with get_db() as conn:
         conn.executescript("""
-            CREATE TABLE IF NOT EXISTS pl_lines (
+            CREATE TABLE IF NOT EXISTS line_items (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                name          TEXT    NOT NULL UNIQUE,
                 section       TEXT    NOT NULL,
+                name          TEXT    NOT NULL,
                 is_calculated INTEGER NOT NULL DEFAULT 0,
-                sort_order    INTEGER NOT NULL DEFAULT 0
+                is_system     INTEGER NOT NULL DEFAULT 0,
+                sort_order    INTEGER NOT NULL DEFAULT 0,
+                UNIQUE(section, name)
             );
 
             CREATE TABLE IF NOT EXISTS accounts (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 name          TEXT    NOT NULL UNIQUE,
-                group_label   TEXT    NOT NULL DEFAULT '',
-                pl_line_id    INTEGER REFERENCES pl_lines(id),
+                section       TEXT    NOT NULL DEFAULT '',
+                line_item_id  INTEGER REFERENCES line_items(id),
                 is_system     INTEGER NOT NULL DEFAULT 0,
                 sort_order    INTEGER NOT NULL DEFAULT 0
             );
@@ -190,12 +200,14 @@ def init_db() -> None:
                 is_system    INTEGER NOT NULL DEFAULT 0
             );
 
-            CREATE TABLE IF NOT EXISTS expenses (
+            -- Expense transactions (type='expense') and income (type='income')
+            CREATE TABLE IF NOT EXISTS transactions (
                 id                  INTEGER PRIMARY KEY AUTOINCREMENT,
                 date                TEXT    NOT NULL,
                 account_id          INTEGER NOT NULL REFERENCES accounts(id),
                 amount              REAL    NOT NULL,
                 currency            TEXT    NOT NULL DEFAULT 'USD',
+                transaction_type    TEXT    NOT NULL DEFAULT 'expense',
                 payment_account_id  INTEGER REFERENCES payment_accounts(id),
                 vendor_id           INTEGER REFERENCES vendors(id),
                 reference           TEXT    DEFAULT '',
@@ -207,163 +219,255 @@ def init_db() -> None:
                 updated_at          TEXT
             );
 
+            -- Budget entries (planned amounts)
             CREATE TABLE IF NOT EXISTS budget (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                pl_line_id   INTEGER NOT NULL REFERENCES pl_lines(id),
+                line_item_id INTEGER NOT NULL REFERENCES line_items(id),
                 fiscal_year  INTEGER NOT NULL,
                 month        INTEGER NOT NULL,
                 amount       REAL    NOT NULL DEFAULT 0,
                 updated_at   TEXT,
-                UNIQUE(pl_line_id, fiscal_year, month)
+                UNIQUE(line_item_id, fiscal_year, month)
             );
 
-            -- actuals stores MANUAL ADDITIONS only;
-            -- true actual = expense rollup + this amount.
-            CREATE TABLE IF NOT EXISTS actuals (
+            -- Manual actuals additions (for items not entered as transactions)
+            CREATE TABLE IF NOT EXISTS actuals_manual (
                 id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                pl_line_id   INTEGER NOT NULL REFERENCES pl_lines(id),
+                line_item_id INTEGER NOT NULL REFERENCES line_items(id),
                 fiscal_year  INTEGER NOT NULL,
                 month        INTEGER NOT NULL,
                 amount       REAL    NOT NULL DEFAULT 0,
-                notes        TEXT    DEFAULT '',
                 updated_at   TEXT,
-                UNIQUE(pl_line_id, fiscal_year, month)
+                UNIQUE(line_item_id, fiscal_year, month)
+            );
+
+            -- Archived fiscal years (read-only flag)
+            CREATE TABLE IF NOT EXISTS fy_archive (
+                fiscal_year INTEGER PRIMARY KEY,
+                archived_at TEXT
             );
         """)
+        _seed_line_items(conn)
+        _seed_accounts(conn)
+        _seed_payment_accounts(conn)
 
-        # Seed P&L lines
-        if conn.execute("SELECT COUNT(*) FROM pl_lines").fetchone()[0] == 0:
-            conn.executemany(
-                "INSERT INTO pl_lines (name, section, is_calculated, sort_order) VALUES (?,?,?,?)",
-                PL_LINES,
-            )
 
-        # Seed accounts (resolve pl_line_id by name)
-        if conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0] == 0:
-            for name, group, pl_name, is_sys, srt in ACCOUNTS_SEED:
-                pl_id = None
-                if pl_name:
-                    row = conn.execute(
-                        "SELECT id FROM pl_lines WHERE name = ?", (pl_name,)
-                    ).fetchone()
-                    if row:
-                        pl_id = row["id"]
-                conn.execute(
-                    "INSERT INTO accounts (name, group_label, pl_line_id, is_system, sort_order) VALUES (?,?,?,?,?)",
-                    (name, group, pl_id, is_sys, srt),
-                )
+def _seed_line_items(conn) -> None:
+    if conn.execute("SELECT COUNT(*) FROM line_items").fetchone()[0]:
+        return
+    conn.executemany(
+        "INSERT INTO line_items (section,name,is_calculated,is_system,sort_order) VALUES (?,?,?,?,?)",
+        LINE_ITEMS_SEED,
+    )
 
-        # Seed payment accounts
-        if conn.execute("SELECT COUNT(*) FROM payment_accounts").fetchone()[0] == 0:
-            conn.executemany(
-                "INSERT INTO payment_accounts (name, account_type, is_system) VALUES (?,?,1)",
-                PAYMENT_ACCOUNTS_SEED,
-            )
+
+def _seed_accounts(conn) -> None:
+    if conn.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]:
+        return
+    for name, section, li_name, is_sys, srt in ACCOUNTS_SEED:
+        row = conn.execute("SELECT id FROM line_items WHERE name=?", (li_name,)).fetchone()
+        li_id = row["id"] if row else None
+        conn.execute(
+            "INSERT INTO accounts (name,section,line_item_id,is_system,sort_order) VALUES (?,?,?,?,?)",
+            (name, section, li_id, is_sys, srt),
+        )
+
+
+def _seed_payment_accounts(conn) -> None:
+    if conn.execute("SELECT COUNT(*) FROM payment_accounts").fetchone()[0]:
+        return
+    conn.executemany(
+        "INSERT INTO payment_accounts (name,account_type,is_system) VALUES (?,?,1)",
+        PAYMENT_ACCOUNTS_SEED,
+    )
 
 
 # ---------------------------------------------------------------------------
-# P&L grid queries
+# Line item queries
 # ---------------------------------------------------------------------------
 
-def list_pl_lines() -> list[dict]:
+def list_line_items() -> list[dict]:
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
-            "SELECT * FROM pl_lines ORDER BY sort_order"
+            "SELECT * FROM line_items ORDER BY "
+            "CASE section WHEN 'income' THEN 1 WHEN 'employee' THEN 2 "
+            "WHEN 'office' THEN 3 WHEN 'admin' THEN 4 WHEN 'travel' THEN 5 "
+            "ELSE 6 END, sort_order"
         ).fetchall()]
 
 
-def get_grid(table: str, fiscal_year: int) -> dict[tuple, float]:
-    assert table in ("budget", "actuals")
+def add_line_item(section: str, name: str) -> int:
+    """Add a user-defined line item (e.g. extra comp line)."""
+    with get_db() as conn:
+        # Insert before the section total (sort_order 90, total is 99)
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO line_items (section,name,is_calculated,is_system,sort_order) "
+            "VALUES (?,?,0,0,90)",
+            (section, name),
+        )
+        return cur.lastrowid
+
+
+def delete_line_item(lid: int) -> None:
+    with get_db() as conn:
+        conn.execute("DELETE FROM line_items WHERE id=? AND is_system=0", (lid,))
+
+
+# ---------------------------------------------------------------------------
+# Budget grid
+# ---------------------------------------------------------------------------
+
+def get_budget_grid(fiscal_year: int) -> dict:
+    """{(line_item_id, month): amount}"""
     with get_db() as conn:
         rows = conn.execute(
-            f"SELECT pl_line_id, month, amount FROM {table} WHERE fiscal_year = ?",
+            "SELECT line_item_id, month, amount FROM budget WHERE fiscal_year=?",
             (fiscal_year,)
         ).fetchall()
-    return {(r["pl_line_id"], r["month"]): r["amount"] for r in rows}
+    return {(r["line_item_id"], r["month"]): r["amount"] for r in rows}
 
 
-def get_expense_rollup(fiscal_year: int) -> dict[tuple, float]:
-    """Return {(pl_line_id, month): sum_of_expenses} for all expenses in fiscal_year."""
-    with get_db() as conn:
-        rows = conn.execute(
-            """SELECT a.pl_line_id, e.month, SUM(e.amount) AS total
-               FROM expenses e
-               JOIN accounts a ON e.account_id = a.id
-               WHERE e.fiscal_year = ? AND a.pl_line_id IS NOT NULL
-               GROUP BY a.pl_line_id, e.month""",
-            (fiscal_year,)
-        ).fetchall()
-    return {(r["pl_line_id"], r["month"]): r["total"] for r in rows}
-
-
-def save_grid(table: str, fiscal_year: int, values: dict[str, float]) -> None:
-    assert table in ("budget", "actuals")
+def save_budget_grid(fiscal_year: int, values: dict) -> None:
+    """{"{lid}_{month}": amount}"""
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     with get_db() as conn:
         for key, amount in values.items():
-            line_id, month = map(int, key.split("_"))
+            lid, month = map(int, key.split("_"))
             conn.execute(
-                f"""INSERT INTO {table} (pl_line_id, fiscal_year, month, amount, updated_at)
-                    VALUES (?,?,?,?,?)
-                    ON CONFLICT(pl_line_id, fiscal_year, month)
-                    DO UPDATE SET amount=excluded.amount, updated_at=excluded.updated_at""",
-                (line_id, fiscal_year, month, amount, now),
+                """INSERT INTO budget (line_item_id,fiscal_year,month,amount,updated_at)
+                   VALUES (?,?,?,?,?)
+                   ON CONFLICT(line_item_id,fiscal_year,month)
+                   DO UPDATE SET amount=excluded.amount,updated_at=excluded.updated_at""",
+                (lid, fiscal_year, month, amount, now),
             )
 
 
-def computed_grid(raw: dict[tuple, float], lines: list[dict]) -> dict[tuple, float]:
+# ---------------------------------------------------------------------------
+# Actuals: transaction rollup + manual
+# ---------------------------------------------------------------------------
+
+def get_transaction_rollup(fiscal_year: int) -> dict:
+    """{(line_item_id, month): sum_amount} from transactions."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """SELECT a.line_item_id, t.month, SUM(t.amount) AS total
+               FROM transactions t
+               JOIN accounts a ON t.account_id = a.id
+               WHERE t.fiscal_year=? AND a.line_item_id IS NOT NULL
+               GROUP BY a.line_item_id, t.month""",
+            (fiscal_year,)
+        ).fetchall()
+    return {(r["line_item_id"], r["month"]): r["total"] for r in rows}
+
+
+def get_actuals_manual(fiscal_year: int) -> dict:
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT line_item_id, month, amount FROM actuals_manual WHERE fiscal_year=?",
+            (fiscal_year,)
+        ).fetchall()
+    return {(r["line_item_id"], r["month"]): r["amount"] for r in rows}
+
+
+def save_actuals_manual(fiscal_year: int, values: dict) -> None:
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with get_db() as conn:
+        for key, amount in values.items():
+            lid, month = map(int, key.split("_"))
+            conn.execute(
+                """INSERT INTO actuals_manual (line_item_id,fiscal_year,month,amount,updated_at)
+                   VALUES (?,?,?,?,?)
+                   ON CONFLICT(line_item_id,fiscal_year,month)
+                   DO UPDATE SET amount=excluded.amount,updated_at=excluded.updated_at""",
+                (lid, fiscal_year, month, amount, now),
+            )
+
+
+def compute_grid(raw: dict, items: list[dict]) -> dict:
+    """Add calculated rows to a raw {(lid,month): amount} grid."""
     result = dict(raw)
-    by_name = {l["name"]: l["id"] for l in lines}
-    income_lines  = [l["id"] for l in lines if l["section"] == "income"]
-    expense_lines = [l["id"] for l in lines if l["section"] == "expense"]
-    ti_id  = by_name.get("Total Income")
-    te_id  = by_name.get("Total Expenses")
-    eb_id  = by_name.get("EBITDA")
-    int_id = by_name.get("Interest")
-    dep_id = by_name.get("Depreciation")
-    ebt_id = by_name.get("EBT")
-    ext_id = by_name.get("Extraordinary Items")
-    net_id = by_name.get("Net EBT")
+    by_name = {i["name"]: i["id"] for i in items}
+
+    def sec_sum(section: str, month: int) -> float:
+        return sum(
+            result.get((i["id"], month), 0)
+            for i in items
+            if i["section"] == section and not i["is_calculated"]
+        )
+
     for month in FY_MONTHS:
-        ti  = sum(result.get((lid, month), 0) for lid in income_lines)
-        te  = sum(result.get((lid, month), 0) for lid in expense_lines)
-        eb  = ti - te
-        interest     = result.get((int_id,  month), 0)
-        depreciation = result.get((dep_id,  month), 0)
-        ebt = eb - interest - depreciation
-        ext = result.get((ext_id, month), 0)
-        net = ebt - ext
-        if ti_id:  result[(ti_id,  month)] = ti
-        if te_id:  result[(te_id,  month)] = te
-        if eb_id:  result[(eb_id,  month)] = eb
-        if ebt_id: result[(ebt_id, month)] = ebt
-        if net_id: result[(net_id, month)] = net
+        ti  = sec_sum("income",   month)
+        tec = sec_sum("employee", month)
+        toc = sec_sum("office",   month)
+        tad = sec_sum("admin",    month)
+        ttr = sec_sum("travel",   month)
+        tex = tec + toc + tad + ttr
+        net = ti - tex
+
+        for name, val in [
+            ("Total Income",            ti),
+            ("Total Employee Costs",    tec),
+            ("Total Office Costs",      toc),
+            ("Total Admin",             tad),
+            ("Total Travel",            ttr),
+            ("Total Expenses",          tex),
+            ("Net (Income - Expenses)", net),
+        ]:
+            if name in by_name:
+                result[(by_name[name], month)] = val
+
     return result
 
+
+# ---------------------------------------------------------------------------
+# Fiscal year helpers
+# ---------------------------------------------------------------------------
 
 def get_fiscal_years() -> list[int]:
     from datetime import date
     today = date.today()
-    current_fy = today.year + 1 if today.month >= 4 else today.year
+    current = today.year + 1 if today.month >= 4 else today.year
     with get_db() as conn:
         rows = conn.execute(
-            """SELECT DISTINCT fiscal_year FROM budget
-               UNION SELECT DISTINCT fiscal_year FROM actuals
-               UNION SELECT DISTINCT fiscal_year FROM expenses"""
+            "SELECT DISTINCT fiscal_year FROM budget "
+            "UNION SELECT DISTINCT fiscal_year FROM transactions"
         ).fetchall()
-    return sorted({r[0] for r in rows} | {current_fy}, reverse=True)
+    return sorted({r[0] for r in rows} | {current}, reverse=True)
+
+
+def is_archived(fiscal_year: int) -> bool:
+    with get_db() as conn:
+        return bool(conn.execute(
+            "SELECT 1 FROM fy_archive WHERE fiscal_year=?", (fiscal_year,)
+        ).fetchone())
+
+
+def archive_year(fiscal_year: int) -> None:
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO fy_archive (fiscal_year,archived_at) VALUES (?,?)",
+            (fiscal_year, now),
+        )
+
+
+def unarchive_year(fiscal_year: int) -> None:
+    with get_db() as conn:
+        conn.execute("DELETE FROM fy_archive WHERE fiscal_year=?", (fiscal_year,))
 
 
 # ---------------------------------------------------------------------------
 # Account / Vendor / Payment account queries
 # ---------------------------------------------------------------------------
 
-def list_accounts(include_inactive: bool = False) -> list[dict]:
+def list_accounts() -> list[dict]:
     with get_db() as conn:
         return [dict(r) for r in conn.execute(
-            "SELECT a.*, p.name AS pl_line_name FROM accounts a "
-            "LEFT JOIN pl_lines p ON a.pl_line_id = p.id "
+            "SELECT a.*, l.name AS line_item_name FROM accounts a "
+            "LEFT JOIN line_items l ON a.line_item_id = l.id "
             "ORDER BY a.sort_order, a.name"
         ).fetchall()]
 
@@ -382,7 +486,7 @@ def list_payment_accounts() -> list[dict]:
         ).fetchall()]
 
 
-def save_vendor(name: str, email: str, phone: str, notes: str, vid: "int | None" = None) -> int:
+def save_vendor(name: str, email: str, phone: str, notes: str, vid: int = None) -> int:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     with get_db() as conn:
@@ -404,20 +508,18 @@ def delete_vendor(vid: int) -> None:
         conn.execute("DELETE FROM vendors WHERE id=?", (vid,))
 
 
-def save_account(name: str, group_label: str, pl_line_id: "int | None",
-                 aid: "int | None" = None) -> int:
+def save_account(name: str, section: str, line_item_id: int = None, aid: int = None) -> int:
     with get_db() as conn:
         if aid:
             conn.execute(
-                "UPDATE accounts SET name=?,group_label=?,pl_line_id=? WHERE id=?",
-                (name, group_label, pl_line_id, aid)
+                "UPDATE accounts SET name=?,section=?,line_item_id=? WHERE id=?",
+                (name, section, line_item_id, aid)
             )
             return aid
-        # sort at end
-        max_sort = conn.execute("SELECT MAX(sort_order) FROM accounts").fetchone()[0] or 0
+        mx = conn.execute("SELECT MAX(sort_order) FROM accounts").fetchone()[0] or 0
         cur = conn.execute(
-            "INSERT INTO accounts (name,group_label,pl_line_id,is_system,sort_order) VALUES (?,?,?,0,?)",
-            (name, group_label, pl_line_id, max_sort + 10)
+            "INSERT INTO accounts (name,section,line_item_id,is_system,sort_order) VALUES (?,?,?,0,?)",
+            (name, section, line_item_id, mx + 10)
         )
         return cur.lastrowid
 
@@ -427,7 +529,7 @@ def delete_account(aid: int) -> None:
         conn.execute("DELETE FROM accounts WHERE id=? AND is_system=0", (aid,))
 
 
-def save_payment_account(name: str, account_type: str, paid: "int | None" = None) -> int:
+def save_payment_account(name: str, account_type: str, paid: int = None) -> int:
     with get_db() as conn:
         if paid:
             conn.execute(
@@ -444,4 +546,6 @@ def save_payment_account(name: str, account_type: str, paid: "int | None" = None
 
 def delete_payment_account(paid: int) -> None:
     with get_db() as conn:
-        conn.execute("DELETE FROM payment_accounts WHERE id=? AND is_system=0", (paid,))
+        conn.execute(
+            "DELETE FROM payment_accounts WHERE id=? AND is_system=0", (paid,)
+        )
