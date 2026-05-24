@@ -124,6 +124,15 @@
   margin-top: .45rem;
   margin-bottom: .15rem;
 }
+.ci-order-row .ci-kv-label {
+  min-width: 140px;
+  text-align: right;
+  flex-shrink: 0;
+}
+.ci-order-row .po-mkinput {
+  flex: 1;
+  min-width: 0;
+}
 
 /* ── Transaction section ─────────────────────────────────────────── */
 .ci-section-head {
