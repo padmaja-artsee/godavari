@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# build_app.sh — Build the complete Godavari Leads desktop app
+# Usage: ./build_app.sh
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$SCRIPT_DIR"
+
+export PATH="$HOME/.cargo/bin:$HOME/Library/Python/3.9/bin:$PATH"
+
+echo "▶ Step 1: Build Python bundle with PyInstaller..."
+pyinstaller -y leads.spec
+echo "  ✓ Python bundle built: dist/leads/"
+
+echo ""
+echo "▶ Step 2: Build Tauri Rust shell (no Python resources)..."
+rm -rf src-tauri/leads-bin
+cp -r dist/leads src-tauri/leads-bin
+(cd src-tauri && cargo tauri build 2>&1 | grep -E "Compiling|Finished|Bundling|Error|error" | tail -6)
+echo "  ✓ Tauri shell compiled"
+
+# Locate the Tauri-built .app
+TAURI_APP=$(find "$HOME/Library/Caches" /var/folders -name "Leads.app" -path "*/bundle/macos/*" 2>/dev/null | head -1)
+if [ -z "$TAURI_APP" ]; then
+    TAURI_APP=$(find /tmp /var -name "Leads.app" -path "*/bundle/macos/*" 2>/dev/null | head -1)
+fi
+
+if [ -z "$TAURI_APP" ]; then
+    echo "ERROR: Could not locate Tauri-built Leads.app" >&2
+    exit 1
+fi
+echo "  ✓ Found bundle at: $TAURI_APP"
+
+echo ""
+echo "▶ Step 3: Inject Python bundle into app (preserving structure)..."
+RESOURCES="$TAURI_APP/Contents/Resources"
+rm -rf "$RESOURCES/leads-bin"
+rsync -a --exclude='*.pyc' dist/leads/ "$RESOURCES/leads-bin/"
+echo "  ✓ Python bundle injected"
+
+echo ""
+echo "▶ Step 4: Make Python binary executable..."
+chmod +x "$RESOURCES/leads-bin/leads"
+echo "  ✓ Permissions set"
+
+echo ""
+echo "▶ Step 5: Re-sign the bundle (ad-hoc, no developer certificate needed)..."
+codesign --force --deep --sign - "$TAURI_APP" 2>&1 | head -5 || true
+echo "  ✓ Signed (ad-hoc)"
+
+echo ""
+echo "▶ Step 6: Package into DMG..."
+DMG_NAME="Leads_1.0.0_aarch64.dmg"
+rm -f "$SCRIPT_DIR/$DMG_NAME"
+hdiutil create \
+    -volname "Godavari Leads" \
+    -srcfolder "$TAURI_APP" \
+    -ov -format UDZO \
+    "$SCRIPT_DIR/$DMG_NAME" 2>&1 | tail -3
+echo "  ✓ DMG created: $DMG_NAME"
+
+echo ""
+echo "✅ Build complete!"
+echo "   App:  $TAURI_APP"
+echo "   DMG:  $SCRIPT_DIR/$DMG_NAME"
+du -sh "$SCRIPT_DIR/$DMG_NAME"
