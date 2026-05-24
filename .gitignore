@@ -1,15 +1,39 @@
+# Python
 __pycache__/
 *.py[cod]
+*.pyo
+*.pyd
+.Python
 *.egg-info/
-.venv/
+dist/
+build/
+.eggs/
 venv/
-.env
-.DS_Store
+.venv/
+env/
 
-# Local database and uploaded files (recreated on first run)
+# PyInstaller build artifacts
+dist/
+build/
+*.spec.bak
+
+# Tauri / Rust build artifacts
+src-tauri/target/
+src-tauri/WixTools/
+
+# Database (local data — never commit)
+*.db
+*.db-shm
+*.db-wal
 data/leads.db
-data/leads.db-journal
-data/uploads/
-data/exports/
 
-.cursor/
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo

@@ -5,7 +5,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-DB_PATH = Path(__file__).resolve().parent.parent / "data" / "leads.db"
+import os as _os
+DB_PATH = Path(
+    _os.environ.get("LEADS_DB_PATH")
+    or Path(__file__).resolve().parent.parent / "data" / "leads.db"
+)
 
 
 def now_iso() -> str:

@@ -53,3 +53,85 @@ Open **Generate** in the sidebar (`/generate`) to create business documents loca
 PO data is stored in the same SQLite database (`data/leads.db`) in `purchase_orders`, `purchase_order_line_items`, and `purchase_order_batches` tables, linked via `generated_documents`.
 
 Internal notes (status, prepared by, etc.) are saved but not included in print, PDF, or Excel exports.
+
+---
+
+## Desktop App Build (feature/app branch)
+
+The app can be packaged as a native desktop app — no Python install required for end users.
+
+### Architecture
+
+```
+┌─────────────────────────────────┐
+│  Tauri native window (Rust)     │  ← tiny OS-native shell (~5 MB)
+│  Loads http://localhost:8000    │
+└──────────────┬──────────────────┘
+               │ spawns
+┌──────────────▼──────────────────┐
+│  PyInstaller binary (launcher)  │  ← Python + FastAPI + all deps bundled
+│  uvicorn on localhost:8000      │
+│  SQLite DB next to executable   │
+└─────────────────────────────────┘
+```
+
+### Prerequisites
+
+```bash
+# Python packaging
+pip install pyinstaller
+
+# Rust (required for Tauri)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Tauri CLI
+cargo install tauri-cli --version "^2.0"
+
+# Node (only needed to install Tauri CLI via npm as alternative)
+# npm install -g @tauri-apps/cli
+```
+
+### Step 1 — Build the Python binary
+
+```bash
+cd /path/to/Leads
+pyinstaller leads.spec
+# Output: dist/leads  (Mac/Linux)  or  dist/leads.exe  (Windows)
+```
+
+### Step 2 — Copy the binary into the Tauri bundle location
+
+```bash
+# Mac / Linux
+cp dist/leads src-tauri/
+
+# Windows
+copy dist\leads.exe src-tauri\
+```
+
+### Step 3 — Build the Tauri app
+
+```bash
+cd src-tauri
+cargo tauri build
+# Output: src-tauri/target/release/bundle/
+#   Mac:     Leads.app  +  Leads_1.0.0_aarch64.dmg
+#   Windows: Leads_1.0.0_x64-setup.exe
+#   Linux:   leads_1.0.0_amd64.AppImage
+```
+
+### Development mode (no packaging)
+
+```bash
+# Terminal 1 — start the Python server
+LEADS_NO_BROWSER=1 python3 launcher.py
+
+# Terminal 2 — start Tauri dev window
+cd src-tauri && cargo tauri dev
+```
+
+### Adding an icon
+
+1. Create a 1024×1024 PNG named `icon.png` and place it in `src-tauri/icons/`.
+2. Run `cargo tauri icon src-tauri/icons/icon.png` — this generates all required sizes automatically.
+3. Uncomment the `icon` lines in `leads.spec` and `tauri.conf.json`.
