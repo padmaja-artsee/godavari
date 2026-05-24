@@ -10,7 +10,7 @@
   {% block extra_css %}{% endblock %}
 </head>
 <body>
-  <div class="layout">
+  <div class="layout{% if hide_nav %} layout-full{% endif %}">
     {% if not hide_nav %}
     <aside class="sidebar no-print">
       <div class="brand">GB<span>Inc</span> Leads</div>
