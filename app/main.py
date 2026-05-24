@@ -1243,22 +1243,43 @@ async def shipping_export_xlsx(
     )
 
 
+LEADS_COLUMNS: list[tuple[str, str]] = [
+    ("Company", "company"),
+    ("Contact", "contact"),
+    ("Email", "email"),
+    ("Phone", "phone"),
+    ("Website", "website"),
+    ("Products Interested", "products_interested"),
+    ("Notes", "notes"),
+    ("Last Updated", "updated_at"),
+]
+
+DEALS_COLUMNS: list[tuple[str, str]] = [
+    ("Deal Date", "deal_date"),
+    ("Company", "company"),
+    ("Product", "product"),
+    ("Quantity", "quantity"),
+    ("Unit", "quantity_unit"),
+    ("Price", "price"),
+    ("Price Unit", "price_unit"),
+    ("Value", "value"),
+    ("Status", "status"),
+    ("PO Number", "po_number"),
+    ("Quote Ref", "quote_ref"),
+    ("Notes", "notes"),
+]
+
+
 @app.get("/leads/export.xlsx")
 async def leads_export_xlsx(
-    q: str = Query(""),
     company: str = Query(""),
+    product: str = Query(""),
+    q: str = Query(""),
 ):
-    customers = list_customers()
-    if q:
-        q_lower = q.lower()
-        customers = [c for c in customers if q_lower in (c.get("company","") or "").lower()
-                     or q_lower in (c.get("contact_name","") or "").lower()]
-    if company:
-        customers = [c for c in customers if c.get("company","") == company]
-    COLS = ["company","contact_name","email","phone","country","city","product_interest","created_at"]
+    rows = search_leads_contacts(company, product, q)
     fname = export_filename("gbinc-leads", "", "xlsx")
     return _download_response(
-        to_xlsx_bytes([("Leads", customers, COLS)]),
+        to_xlsx_bytes([("Leads", rows, LEADS_COLUMNS)]),
         fname,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
@@ -1273,11 +1294,9 @@ async def deals_export_xlsx(
     q: str = Query(""),
 ):
     rows = list_active_leads(status, period, company, product, "", q)
-    COLS = ["date","company","contact_name","product","quantity","unit","deal_value",
-            "currency","status","expected_close","notes"]
     fname = export_filename("gbinc-active-leads", status, "xlsx")
     return _download_response(
-        to_xlsx_bytes([("Active Leads", rows, COLS)]),
+        to_xlsx_bytes([("Active Leads", rows, DEALS_COLUMNS)]),
         fname,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )

@@ -7,7 +7,7 @@
     <p class="subtitle">Contact repository only — company, contact, email, website, products of interest. No PO numbers here.</p>
   </div>
   <div style="display:flex;gap:.5rem;align-items:center">
-    <a href="/leads/export.xlsx" class="btn btn-ghost btn-sm">↓ Export Excel</a>
+    <a href="/leads/export.xlsx?company={{ company | urlencode }}&product={{ product | urlencode }}&q={{ q | urlencode }}" class="btn btn-ghost btn-sm">↓ Export Excel</a>
     <a href="/add?tab=log" class="btn btn-primary">+ Add or update</a>
   </div>
 </div>
