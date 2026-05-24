@@ -115,7 +115,11 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-grid thead th { background: var(--green-d); color: #fff; font-weight: 600; font-size: .72rem; text-align: center; position: sticky; top: 0; z-index: 2; }
 .f-col-label { width: 200px; text-align: left !important; position: sticky; left: 0; background: var(--green-d) !important; z-index: 3; }
 .f-col-month { min-width: 72px; text-align: center; }
-.f-col-total { min-width: 80px; background: var(--green-d) !important; }
+.f-col-total { min-width: 80px; background: var(--green-d) !important; color: #fff !important; font-weight: 600; }
+.f-row-subtotal .f-col-total,
+.f-row-highlight .f-col-total,
+.f-row-total .f-col-total { color: var(--green-d) !important; }
+.f-section-header-row .f-col-total { color: #fff !important; }
 .f-col-var { min-width: 60px; text-align: center; }
 .f-col-var-sub { min-width: 60px; text-align: center; font-size: .68rem; background: var(--grey) !important; color: var(--text) !important; }
 
@@ -152,6 +156,26 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-calc-total { color: var(--green-d); font-weight: 700; font-size: .78rem; }
 .f-ro-val { font-weight: 600; }
 .f-ro-total { font-weight: 700; color: var(--green-d); }
+
+/* Total column spans: white on dark-green background */
+.f-col-total .f-calc-total,
+.f-col-total .f-calc-total-cell,
+.f-col-total .f-ro-total,
+.f-col-total .f-ro-val { color: #fff !important; }
+
+/* Restore dark text for light-background rows (subtotal / total / highlight) */
+.f-row-subtotal .f-col-total .f-calc-total,
+.f-row-subtotal .f-col-total .f-calc-total-cell,
+.f-row-subtotal .f-col-total .f-ro-total,
+.f-row-subtotal .f-col-total .f-ro-val,
+.f-row-total    .f-col-total .f-calc-total,
+.f-row-total    .f-col-total .f-calc-total-cell,
+.f-row-total    .f-col-total .f-ro-total,
+.f-row-total    .f-col-total .f-ro-val,
+.f-row-highlight .f-col-total .f-calc-total,
+.f-row-highlight .f-col-total .f-calc-total-cell,
+.f-row-highlight .f-col-total .f-ro-total,
+.f-row-highlight .f-col-total .f-ro-val { color: var(--green-d) !important; }
 .f-neg { color: var(--red) !important; }
 
 /* ─── Variance colors ─── */
