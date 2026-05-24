@@ -19,11 +19,18 @@ cp -r dist/leads src-tauri/leads-bin
 (cd src-tauri && cargo tauri build 2>&1 | grep -E "Compiling|Finished|Bundling|Error|error" | tail -6)
 echo "  ✓ Tauri shell compiled"
 
-# Locate the Tauri-built .app
-TAURI_APP=$(find "$HOME/Library/Caches" /var/folders -name "Leads.app" -path "*/bundle/macos/*" 2>/dev/null | head -1)
-if [ -z "$TAURI_APP" ]; then
-    TAURI_APP=$(find /tmp /var -name "Leads.app" -path "*/bundle/macos/*" 2>/dev/null | head -1)
-fi
+# Locate the Tauri-built .app — check known cargo target locations first.
+TAURI_APP=""
+for candidate in \
+    "$(cd src-tauri && cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin)['target_directory'])" 2>/dev/null)/release/bundle/macos/Leads.app" \
+    "/var/folders/mh/fqg3v7yn1y538bqtyl28_35r0000gn/T/cursor-sandbox-cache/699536e77528ae1fd82f92108e3cfa33/cargo-target/release/bundle/macos/Leads.app" \
+    "src-tauri/target/release/bundle/macos/Leads.app"
+do
+    if [ -d "$candidate" ]; then
+        TAURI_APP="$candidate"
+        break
+    fi
+done
 
 if [ -z "$TAURI_APP" ]; then
     echo "ERROR: Could not locate Tauri-built Leads.app" >&2
