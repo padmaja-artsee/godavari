@@ -251,6 +251,29 @@ def startup() -> None:
         _log.error("Schema upgrade failed: %s", exc)
 
 
+def _open_in_system_browser(path: str) -> None:
+    """Open a local URL in the system default browser (Safari/Chrome).
+    Used for Print because window.print() is blocked in Tauri's WKWebView."""
+    import subprocess, sys as _s
+    url = f"http://127.0.0.1:8000{path}"
+    try:
+        if _s.platform == "darwin":
+            subprocess.Popen(["open", url])
+        elif _s.platform == "win32":
+            subprocess.Popen(["start", url], shell=True)
+        else:
+            subprocess.Popen(["xdg-open", url])
+    except Exception:
+        pass
+
+
+@app.get("/open-print")
+async def open_print_in_browser(url: str = Query(...)):
+    """Called by the Print button; opens the print page in the system browser."""
+    _open_in_system_browser(url)
+    return Response(status_code=204)
+
+
 def _export_to_downloads(content: bytes, fname: str) -> str:
     """
     Save export bytes to ~/Downloads/<fname> and open in the default app.

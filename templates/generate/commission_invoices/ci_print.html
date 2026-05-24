@@ -15,7 +15,7 @@
 {% block content %}
 <div class="po-action-bar no-print">
   <button onclick="history.back()" class="btn btn-ghost">← Back</button>
-  <button onclick="window.print()" class="btn btn-primary">Print / Save PDF</button>
+  <button onclick="fetch('/open-print?url='+encodeURIComponent(window.location.pathname))" class="btn btn-primary">Print / Save PDF</button>
 </div>
 <div class="po-shell">
   {{ ci_body(ci, readonly=true) }}
