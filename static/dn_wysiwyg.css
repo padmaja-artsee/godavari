@@ -3,7 +3,7 @@
 /* ── Top grid: bill-to left, reference right ─────────────────────── */
 .dn-top-grid {
   display: grid;
-  grid-template-columns: 1fr 280px;
+  grid-template-columns: 1fr 320px;
   gap: 1rem;
   margin-bottom: .75rem;
   align-items: start;
@@ -98,6 +98,16 @@
   color: #1A5632;
   text-transform: uppercase;
   letter-spacing: .04em;
+}
+
+/* ── Reference block label width (labels like "Delivery / Pick date") ── */
+.dn-ref-col .ci-kv-label {
+  min-width: 140px;
+  text-align: right;
+}
+.dn-ref-col .ci-kv-input {
+  min-width: 0;
+  flex: 1;
 }
 
 /* ── Print ────────────────────────────────────────────────────────── */

@@ -52,7 +52,8 @@
   letter-spacing: .06em;
   color: #1a5632 !important;
   text-align: center;
-  width: 320px;
+  width: 100%;
+  box-sizing: border-box;
   background: transparent;
   border: none !important;
   outline: none;
