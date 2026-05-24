@@ -30,7 +30,15 @@ from finance.app.expenses import (
     list_transactions, receipt_path, save_receipt, update_transaction,
 )
 
-BASE = Path(__file__).resolve().parent.parent
+# When frozen by PyInstaller, __file__ doesn't reliably resolve to
+# sys._MEIPASS/finance/app/main.py.  Use LEADS_BUNDLE_BASE (set by
+# launcher.py) to find templates/static inside the bundle instead.
+_bundle_base = os.environ.get("LEADS_BUNDLE_BASE")
+if _bundle_base:
+    BASE = Path(_bundle_base) / "finance"
+else:
+    BASE = Path(__file__).resolve().parent.parent
+
 app = FastAPI(title="GBInc Finance")
 
 if (BASE / "static").exists():
