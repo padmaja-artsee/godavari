@@ -246,6 +246,50 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 999; display: flex; align-items: center; justify-content: center; }
 .f-modal { background: #fff; border-radius: 10px; padding: 1.5rem 1.75rem; min-width: 320px; max-width: 480px; box-shadow: 0 12px 40px rgba(0,0,0,.25); }
 
+/* ─── P&L Report ─── */
+.f-report { background: #fff; border: 1px solid var(--grey-b); border-radius: 8px; padding: 1.5rem 2rem; max-width: 900px; }
+.f-report-header { display: flex; align-items: flex-start; gap: 1.25rem; margin-bottom: 1.5rem; padding-bottom: 1rem; border-bottom: 2px solid var(--green); }
+.f-rpt-logo { height: 48px; width: auto; object-fit: contain; }
+.f-report-company { font-size: 1.15rem; font-weight: 700; color: var(--green-d); }
+.f-report-type { font-size: .95rem; font-weight: 600; color: var(--text); margin-top: .1rem; }
+.f-report-period { font-size: .82rem; color: var(--muted); margin-top: .1rem; }
+.f-report-basis { font-size: .72rem; color: var(--muted); font-style: italic; margin-top: .15rem; }
+.f-report-footer { margin-top: 1.5rem; font-size: .72rem; color: var(--muted); border-top: 1px solid var(--grey-b); padding-top: .5rem; }
+
+.f-pl-table { border-collapse: collapse; width: 100%; font-size: .82rem; }
+.f-pl-table thead th { padding: .35rem .6rem; border-bottom: 2px solid var(--green); font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
+.f-pl-table thead th.f-pl-name { text-align: left; width: 55%; }
+.f-pl-num { text-align: right; min-width: 100px; font-variant-numeric: tabular-nums; }
+.f-pl-name { text-align: left; }
+.f-pl-indent { padding-left: 1.75rem !important; }
+
+.f-pl-section-hdr td { background: var(--green); color: #fff; font-weight: 700; font-size: .75rem; text-transform: uppercase; letter-spacing: .07em; padding: .35rem .6rem; }
+.f-pl-subsection td { background: var(--grey); font-weight: 600; font-size: .78rem; padding: .28rem .6rem; color: var(--green-d); border-top: 1px solid var(--grey-b); }
+.f-pl-row td { padding: .32rem .6rem; border-bottom: 1px solid #F0F2F5; }
+.f-pl-row:hover td { background: var(--grey); }
+.f-pl-subtotal td { padding: .38rem .6rem; background: var(--green-l); font-weight: 700; border-top: 1.5px solid var(--green); border-bottom: 1.5px solid var(--green); }
+.f-pl-gross td { padding: .42rem .6rem; background: var(--green-m); font-weight: 700; font-size: .88rem; }
+.f-pl-spacer td { height: 8px; }
+.f-pl-total-expenses td { padding: .42rem .6rem; background: #FFF9C4; font-weight: 700; border-top: 2px solid #B7950B; border-bottom: 2px solid #B7950B; }
+.f-pl-net td { padding: .55rem .6rem; font-weight: 800; font-size: .95rem; border-top: 3px double var(--green); }
+.f-pl-net-pos td { background: var(--green-l); color: var(--green-d); }
+.f-pl-net-neg td { background: var(--red-l); color: var(--red); }
+.f-muted { color: var(--muted) !important; }
+
+/* ─── Print styles ─── */
+@media print {
+  .f-sidebar, .f-page-header, .no-print { display: none !important; }
+  .f-main { margin-left: 0 !important; padding: 0 !important; }
+  .f-report { border: none !important; padding: 0 !important; max-width: 100% !important; }
+  body { background: #fff !important; font-size: 11pt; }
+  .f-pl-table { font-size: 9pt; }
+  .f-pl-section-hdr td { background: #1C5631 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .f-pl-subsection td, .f-pl-subtotal td, .f-pl-gross td, .f-pl-gross td,
+  .f-pl-total-expenses td, .f-pl-net-pos td, .f-pl-net-neg td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .f-report-header { border-bottom: 2pt solid #1C5631 !important; }
+  @page { margin: 1.5cm 1.8cm; }
+}
+
 /* ─── Misc ─── */
 @media (max-width: 1200px) { .f-summary-grid { grid-template-columns: repeat(3,1fr); } }
 @media (max-width: 900px) { .f-two-col { grid-template-columns: 1fr; } .f-kpi-row { grid-template-columns: 1fr 1fr; } }

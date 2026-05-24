@@ -75,37 +75,65 @@ def cal_year_for(fiscal_year: int, month: int) -> int:
 # (section, name, is_calculated, is_system, sort_order)
 LINE_ITEMS_SEED = [
     # ── Income ──────────────────────────────────────────────────────────────
-    ("income", "Commission Income",       0, 1, 10),
-    ("income", "Other Income",            0, 1, 20),
-    ("income", "Total Income",            1, 1, 99),
+    ("income",   "Commission Income",         0, 1, 10),
+    ("income",   "Other Income",              0, 1, 20),
+    ("income",   "Total Income",              1, 1, 99),
     # ── Employee Costs ──────────────────────────────────────────────────────
-    ("employee", "Compensation",          0, 1, 10),
-    ("employee", "Payroll Tax",           0, 1, 80),
-    ("employee", "Total Employee Costs",  1, 1, 99),
+    ("employee", "Compensation",              0, 1, 10),
+    ("employee", "Health Insurance",          0, 1, 20),
+    ("employee", "Disability Insurance",      0, 1, 25),
+    ("employee", "Workers Compensation",      0, 1, 30),
+    ("employee", "Employee Benefits",         0, 1, 35),
+    ("employee", "Payroll Tax",               0, 1, 80),
+    ("employee", "Total Employee Costs",      1, 1, 99),
     # ── Office Costs ────────────────────────────────────────────────────────
-    ("office", "Office lease",            0, 1, 10),
-    ("office", "Equipment",               0, 1, 20),
-    ("office", "Subscriptions/Software",  0, 1, 30),
-    ("office", "Telephone",               0, 1, 40),
-    ("office", "Office supplies",         0, 1, 50),
-    ("office", "Security",                0, 1, 60),
-    ("office", "Miscellaneous expenses",  0, 1, 70),
-    ("office", "Total Office Costs",      1, 1, 99),
+    ("office",   "Office lease",              0, 1, 10),
+    ("office",   "Equipment",                 0, 1, 20),
+    ("office",   "Subscriptions/Software",    0, 1, 30),
+    ("office",   "Telephone",                 0, 1, 40),
+    ("office",   "Office supplies",           0, 1, 50),
+    ("office",   "Security",                  0, 1, 60),
+    ("office",   "Postage and Delivery",      0, 1, 65),
+    ("office",   "Repairs and Maintenance",   0, 1, 70),
+    ("office",   "Depreciation",              0, 1, 75),
+    ("office",   "Miscellaneous expenses",    0, 1, 80),
+    ("office",   "Total Office Costs",        1, 1, 99),
     # ── Bank/Legal/Admin ────────────────────────────────────────────────────
-    ("admin", "Bank charges",             0, 1, 10),
-    ("admin", "Insurance expense",        0, 1, 20),
-    ("admin", "Accounting",               0, 1, 30),
-    ("admin", "Legal",                    0, 1, 40),
-    ("admin", "LLC",                      0, 1, 50),
-    ("admin", "Payroll services",         0, 1, 60),
-    ("admin", "Total Admin",              1, 1, 99),
+    ("admin",    "Bank charges",              0, 1, 10),
+    ("admin",    "Taxes",                     0, 1, 15),
+    ("admin",    "Insurance expense",         0, 1, 20),
+    ("admin",    "Accounting",                0, 1, 30),
+    ("admin",    "Legal",                     0, 1, 40),
+    ("admin",    "LLC",                       0, 1, 50),
+    ("admin",    "Payroll services",          0, 1, 60),
+    ("admin",    "Interest Expense",          0, 1, 65),
+    ("admin",    "Fees",                      0, 1, 70),
+    ("admin",    "Total Admin",               1, 1, 99),
     # ── Conference/Travel ───────────────────────────────────────────────────
-    ("travel", "Registration",            0, 1, 10),
-    ("travel", "Travel costs",            0, 1, 20),
-    ("travel", "Total Travel",            1, 1, 99),
+    ("travel",   "Registration",              0, 1, 10),
+    ("travel",   "Meals and Entertainment",   0, 1, 15),
+    ("travel",   "Travel costs",              0, 1, 20),
+    ("travel",   "Car Rental",                0, 1, 25),
+    ("travel",   "Total Travel",              1, 1, 99),
     # ── Grand totals ────────────────────────────────────────────────────────
-    ("totals", "Total Expenses",          1, 1, 10),
-    ("totals", "Net (Income - Expenses)", 1, 1, 20),
+    ("totals",   "Total Expenses",            1, 1, 10),
+    ("totals",   "Net (Income - Expenses)",   1, 1, 20),
+]
+
+# Items added after initial release — used by the migration to patch existing DBs
+_MIGRATION_LINE_ITEMS = [
+    ("employee", "Health Insurance",        0, 1, 20),
+    ("employee", "Disability Insurance",    0, 1, 25),
+    ("employee", "Workers Compensation",    0, 1, 30),
+    ("employee", "Employee Benefits",       0, 1, 35),
+    ("office",   "Postage and Delivery",    0, 1, 65),
+    ("office",   "Repairs and Maintenance", 0, 1, 70),
+    ("office",   "Depreciation",            0, 1, 75),
+    ("admin",    "Taxes",                   0, 1, 15),
+    ("admin",    "Interest Expense",        0, 1, 65),
+    ("admin",    "Fees",                    0, 1, 70),
+    ("travel",   "Meals and Entertainment", 0, 1, 15),
+    ("travel",   "Car Rental",              0, 1, 25),
 ]
 
 SECTION_LABELS = {
@@ -122,33 +150,53 @@ SECTION_ORDER = ["income", "employee", "office", "admin", "travel", "totals"]
 # Default account → line item mapping
 ACCOUNTS_SEED = [
     # Income
-    ("Commission Income",       "income",   "Commission Income",      1, 10),
-    ("Other Income",            "income",   "Other Income",           1, 20),
+    ("Commission Income",           "income",   "Commission Income",        1,  10),
+    ("Other Income",                "income",   "Other Income",             1,  20),
     # Employee
-    ("Compensation",            "employee", "Compensation",           1, 30),
-    ("Payroll Tax",             "employee", "Payroll Tax",            1, 40),
-    ("Employee Benefits",       "employee", "Payroll Tax",            1, 50),
+    ("Compensation",                "employee", "Compensation",             1,  30),
+    ("Health Insurance",            "employee", "Health Insurance",         1,  35),
+    ("Disability Insurance",        "employee", "Disability Insurance",     1,  38),
+    ("Workers Compensation",        "employee", "Workers Compensation",     1,  40),
+    ("Paid Family Leave",           "employee", "Disability Insurance",     1,  42),
+    ("Employee Benefits",           "employee", "Employee Benefits",        1,  45),
+    ("Payroll Tax",                 "employee", "Payroll Tax",              1,  50),
     # Office
-    ("Office Lease / Rent",     "office",   "Office lease",           1, 60),
-    ("Equipment",               "office",   "Equipment",              1, 70),
-    ("Subscriptions/Software",  "office",   "Subscriptions/Software", 1, 80),
-    ("Telephone",               "office",   "Telephone",              1, 90),
-    ("Office Supplies",         "office",   "Office supplies",        1, 100),
-    ("Security",                "office",   "Security",               1, 110),
-    ("Miscellaneous",           "office",   "Miscellaneous expenses", 1, 120),
+    ("Office Lease / Rent",         "office",   "Office lease",             1,  60),
+    ("Equipment",                   "office",   "Equipment",                1,  70),
+    ("Subscriptions/Software",      "office",   "Subscriptions/Software",   1,  80),
+    ("Computer and Internet",       "office",   "Subscriptions/Software",   1,  85),
+    ("Dues and Subscriptions",      "office",   "Subscriptions/Software",   1,  87),
+    ("Telephone",                   "office",   "Telephone",                1,  90),
+    ("Office Supplies",             "office",   "Office supplies",          1, 100),
+    ("Security",                    "office",   "Security",                 1, 110),
+    ("Postage and Delivery",        "office",   "Postage and Delivery",     1, 115),
+    ("Repairs and Maintenance",     "office",   "Repairs and Maintenance",  1, 118),
+    ("Depreciation Expense",        "office",   "Depreciation",             1, 120),
+    ("Miscellaneous",               "office",   "Miscellaneous expenses",   1, 125),
     # Admin
-    ("Bank Charges",            "admin",    "Bank charges",           1, 130),
-    ("Insurance",               "admin",    "Insurance expense",      1, 140),
-    ("Accounting & Audit",      "admin",    "Accounting",             1, 150),
-    ("Legal Fees",              "admin",    "Legal",                  1, 160),
-    ("Professional Fees",       "admin",    "Legal",                  1, 170),
-    ("Consultant Expense",      "admin",    "Legal",                  1, 175),
-    ("LLC / State Fees",        "admin",    "LLC",                    1, 180),
-    ("Payroll Services",        "admin",    "Payroll services",       1, 190),
+    ("Bank Charges",                "admin",    "Bank charges",             1, 130),
+    ("Taxes",                       "admin",    "Taxes",                    1, 133),
+    ("Commercial Liability Ins",    "admin",    "Insurance expense",        1, 135),
+    ("Directors & Officers Ins",    "admin",    "Insurance expense",        1, 137),
+    ("Business Owners Insurance",   "admin",    "Insurance expense",        1, 139),
+    ("Insurance",                   "admin",    "Insurance expense",        1, 140),
+    ("Accounting & Audit",          "admin",    "Accounting",               1, 150),
+    ("Legal Fees",                  "admin",    "Legal",                    1, 160),
+    ("Professional Fees",           "admin",    "Legal",                    1, 170),
+    ("Consultant Expense",          "admin",    "Legal",                    1, 175),
+    ("LLC / State Fees",            "admin",    "LLC",                      1, 180),
+    ("Payroll Services",            "admin",    "Payroll services",         1, 190),
+    ("Interest Expense",            "admin",    "Interest Expense",         1, 195),
+    ("Fees",                        "admin",    "Fees",                     1, 198),
+    ("Membership",                  "admin",    "Fees",                     1, 199),
     # Travel
-    ("Registration / Events",   "travel",   "Registration",           1, 200),
-    ("Travel Expense",          "travel",   "Travel costs",           1, 210),
-    ("Meals & Entertainment",   "travel",   "Travel costs",           1, 220),
+    ("Registration / Events",       "travel",   "Registration",             1, 200),
+    ("Conference Expense",          "travel",   "Registration",             1, 202),
+    ("Meals and Entertainment",     "travel",   "Meals and Entertainment",  1, 205),
+    ("Travel Expense",              "travel",   "Travel costs",             1, 210),
+    ("Airfare",                     "travel",   "Travel costs",             1, 212),
+    ("Hotel / Lodging",             "travel",   "Travel costs",             1, 214),
+    ("Car Rental",                  "travel",   "Car Rental",               1, 220),
 ]
 
 PAYMENT_ACCOUNTS_SEED = [
@@ -250,6 +298,7 @@ def init_db() -> None:
         _seed_line_items(conn)
         _seed_accounts(conn)
         _seed_payment_accounts(conn)
+        _run_migrations(conn)
 
 
 def _seed_line_items(conn) -> None:
@@ -280,6 +329,26 @@ def _seed_payment_accounts(conn) -> None:
         "INSERT INTO payment_accounts (name,account_type,is_system) VALUES (?,?,1)",
         PAYMENT_ACCOUNTS_SEED,
     )
+
+
+def _run_migrations(conn) -> None:
+    """Idempotent — safe to run on every startup.
+    Inserts any line items / accounts that were added after initial release."""
+    # 1. Add missing line items (INSERT OR IGNORE respects UNIQUE(section,name))
+    conn.executemany(
+        "INSERT OR IGNORE INTO line_items "
+        "(section,name,is_calculated,is_system,sort_order) VALUES (?,?,?,?,?)",
+        _MIGRATION_LINE_ITEMS,
+    )
+    # 2. Add missing accounts (INSERT OR IGNORE respects UNIQUE(name))
+    for name, section, li_name, is_sys, srt in ACCOUNTS_SEED:
+        row = conn.execute("SELECT id FROM line_items WHERE name=?", (li_name,)).fetchone()
+        li_id = row["id"] if row else None
+        conn.execute(
+            "INSERT OR IGNORE INTO accounts "
+            "(name,section,line_item_id,is_system,sort_order) VALUES (?,?,?,?,?)",
+            (name, section, li_id, is_sys, srt),
+        )
 
 
 # ---------------------------------------------------------------------------

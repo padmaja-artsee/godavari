@@ -367,6 +367,100 @@ async def analysis_page(request: Request, fy: int = Query(0)):
 
 
 # ---------------------------------------------------------------------------
+# P&L Report
+# ---------------------------------------------------------------------------
+
+@app.get("/report", response_class=HTMLResponse)
+async def report_page(
+    request: Request,
+    fy: int = Query(0),
+    view: str = Query("ytd"),  # ytd | monthly
+    month: int = Query(0),
+):
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0]
+    items  = list_line_items()
+    b_grid = compute_grid(get_budget_grid(fy), items)
+    a_grid = _combined_actuals(fy, items)
+
+    by_name = {i["name"]: i["id"] for i in items}
+
+    if view == "monthly" and month:
+        selected_months = [month]
+        period_label = f"{MONTH_LABELS.get(month, '')} FY{fy}"
+    else:
+        selected_months = FY_MONTHS
+        period_label = f"FY{fy} Year to Date (Apr {fy-1} – Mar {fy})"
+
+    def _sum(grid, name):
+        lid = by_name.get(name)
+        if not lid: return 0.0
+        return sum(grid.get((lid, m), 0.0) for m in selected_months)
+
+    # Build structured report sections
+    EXPENSE_SECTIONS = [
+        ("employee", "Employee Costs"),
+        ("office",   "Office Costs"),
+        ("admin",    "Bank / Legal / Admin"),
+        ("travel",   "Conference / Travel"),
+    ]
+    SECTION_TOTALS = {
+        "employee": "Total Employee Costs",
+        "office":   "Total Office Costs",
+        "admin":    "Total Admin",
+        "travel":   "Total Travel",
+    }
+
+    income_lines = [
+        {"name": i["name"],
+         "actual": _sum(a_grid, i["name"]),
+         "budget": _sum(b_grid, i["name"])}
+        for i in items if i["section"] == "income" and not i["is_calculated"]
+    ]
+    total_income_actual = _sum(a_grid, "Total Income")
+    total_income_budget = _sum(b_grid, "Total Income")
+
+    expense_sections = []
+    for sec, label in EXPENSE_SECTIONS:
+        sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
+        lines = [
+            {"name": i["name"],
+             "actual": _sum(a_grid, i["name"]),
+             "budget": _sum(b_grid, i["name"])}
+            for i in sec_items
+            if _sum(a_grid, i["name"]) or _sum(b_grid, i["name"])  # only show rows with data
+        ]
+        tot_name = SECTION_TOTALS[sec]
+        expense_sections.append({
+            "label": label, "section": sec,
+            "lines": lines,
+            "total_actual": _sum(a_grid, tot_name),
+            "total_budget": _sum(b_grid, tot_name),
+        })
+
+    total_expenses_actual = _sum(a_grid, "Total Expenses")
+    total_expenses_budget = _sum(b_grid, "Total Expenses")
+    net_actual = _sum(a_grid, "Net (Income - Expenses)")
+    net_budget = _sum(b_grid, "Net (Income - Expenses)")
+
+    return templates.TemplateResponse("report.html", _ctx(
+        request, fy=fy, fiscal_years=fys, view=view, month=month,
+        period_label=period_label, archived=is_archived(fy),
+        income_lines=income_lines,
+        total_income_actual=total_income_actual,
+        total_income_budget=total_income_budget,
+        expense_sections=expense_sections,
+        total_expenses_actual=total_expenses_actual,
+        total_expenses_budget=total_expenses_budget,
+        net_actual=net_actual,
+        net_budget=net_budget,
+        months=FY_MONTHS,
+        month_labels=MONTH_LABELS,
+        page="report",
+    ))
+
+
+# ---------------------------------------------------------------------------
 # Transactions (expenses + income)
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+{% set page = "report" %}
+{% block title %}P&L Report — FY{{ fy }}{% endblock %}
+{% block content %}
+<div class="f-page-header no-print">
+  <div>
+    <h1 class="f-title">Profit &amp; Loss Report</h1>
+    <p class="f-subtitle">{{ period_label }}</p>
+  </div>
+  <div class="f-header-controls">
+    <form method="get" action="/report" class="f-filter-row" id="reportForm">
+      <select name="fy" class="f-select-sm" onchange="document.getElementById('reportForm').submit()">
+        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
+      </select>
+      <select name="view" class="f-select-sm" onchange="document.getElementById('reportForm').submit()">
+        <option value="ytd"     {% if view=='ytd'     %}selected{% endif %}>Full Year (YTD)</option>
+        {% for m in months %}
+        <option value="monthly" data-month="{{ m }}"
+          {% if view=='monthly' and month==m %}selected{% endif %}>
+          {{ month_labels[m] }} FY{{ fy }}
+        </option>
+        {% endfor %}
+      </select>
+      {% if view == 'monthly' %}
+      <input type="hidden" name="month" value="{{ month }}"/>
+      {% endif %}
+    </form>
+    <button onclick="window.print()" class="f-btn-sm f-btn-primary no-print">🖨 Print / PDF</button>
+    {% if archived %}<span class="f-badge f-badge-warning no-print">Archived</span>{% endif %}
+  </div>
+</div>
+
+<!-- ═══ PRINTABLE REPORT ═══ -->
+<div class="f-report" id="plReport">
+
+  <!-- Report header (shown on print) -->
+  <div class="f-report-header">
+    <div class="f-report-logo">
+      <img src="/leads-static/logo.png" alt="GBInc" class="f-rpt-logo"
+           onerror="this.style.display='none'"/>
+    </div>
+    <div class="f-report-title-block">
+      <div class="f-report-company">Godavari Biorefineries Inc</div>
+      <div class="f-report-type">Profit &amp; Loss</div>
+      <div class="f-report-period">{{ period_label }}</div>
+      <div class="f-report-basis">Accrual Basis</div>
+    </div>
+  </div>
+
+  <table class="f-pl-table">
+    <thead>
+      <tr>
+        <th class="f-pl-name"></th>
+        <th class="f-pl-num">Actual</th>
+        <th class="f-pl-num">Budget</th>
+        <th class="f-pl-num">Variance</th>
+      </tr>
+    </thead>
+    <tbody>
+
+      <!-- ── INCOME ────────────────────────────────── -->
+      <tr class="f-pl-section-hdr"><td colspan="4">INCOME</td></tr>
+      {% for line in income_lines %}
+      <tr class="f-pl-row">
+        <td class="f-pl-name f-pl-indent">{{ line.name }}</td>
+        <td class="f-pl-num">{{ "${:,.2f}".format(line.actual) if line.actual else "—" }}</td>
+        <td class="f-pl-num f-muted">{{ "${:,.2f}".format(line.budget) if line.budget else "—" }}</td>
+        <td class="f-pl-num {% if line.actual - line.budget >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+          {% set v = line.actual - line.budget %}
+          {% if v %}{{ "${:,.2f}".format(v) }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      <tr class="f-pl-subtotal">
+        <td class="f-pl-name">Total Income</td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(total_income_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_income_budget) }}</td>
+        <td class="f-pl-num {% if total_income_actual - total_income_budget >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+          ${{ "{:,.2f}".format(total_income_actual - total_income_budget) }}
+        </td>
+      </tr>
+
+      <tr class="f-pl-gross">
+        <td class="f-pl-name">Gross Profit</td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(total_income_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_income_budget) }}</td>
+        <td class="f-pl-num"></td>
+      </tr>
+
+      <!-- ── EXPENSES ───────────────────────────────── -->
+      <tr class="f-pl-spacer"><td colspan="4"></td></tr>
+      <tr class="f-pl-section-hdr"><td colspan="4">EXPENSES</td></tr>
+
+      {% for sec in expense_sections %}
+      {% if sec.lines %}
+      <tr class="f-pl-subsection"><td colspan="4">{{ sec.label }}</td></tr>
+      {% for line in sec.lines %}
+      <tr class="f-pl-row">
+        <td class="f-pl-name f-pl-indent">{{ line.name }}</td>
+        <td class="f-pl-num">{{ "${:,.2f}".format(line.actual) if line.actual else "—" }}</td>
+        <td class="f-pl-num f-muted">{{ "${:,.2f}".format(line.budget) if line.budget else "—" }}</td>
+        <td class="f-pl-num {% if line.budget - line.actual >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+          {% set v = line.budget - line.actual %}
+          {% if v %}{{ "${:,.2f}".format(v) }}{% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      <tr class="f-pl-subtotal">
+        <td class="f-pl-name">Total {{ sec.label }}</td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(sec.total_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(sec.total_budget) }}</td>
+        <td class="f-pl-num {% if sec.total_budget - sec.total_actual >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+          ${{ "{:,.2f}".format(sec.total_budget - sec.total_actual) }}
+        </td>
+      </tr>
+      <tr class="f-pl-spacer"><td colspan="4"></td></tr>
+      {% endif %}
+      {% endfor %}
+
+      <!-- ── TOTALS ─────────────────────────────────── -->
+      <tr class="f-pl-total-expenses">
+        <td class="f-pl-name">Total Expenses</td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(total_expenses_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_expenses_budget) }}</td>
+        <td class="f-pl-num {% if total_expenses_budget - total_expenses_actual >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+          ${{ "{:,.2f}".format(total_expenses_budget - total_expenses_actual) }}
+        </td>
+      </tr>
+
+      <tr class="f-pl-net {% if net_actual >= 0 %}f-pl-net-pos{% else %}f-pl-net-neg{% endif %}">
+        <td class="f-pl-name">Net Income / (Loss)</td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(net_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(net_budget) }}</td>
+        <td class="f-pl-num {% if net_actual - net_budget >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+          ${{ "{:,.2f}".format(net_actual - net_budget) }}
+        </td>
+      </tr>
+
+    </tbody>
+  </table>
+
+  <div class="f-report-footer no-print">
+    Generated {{ now }} &mdash; Godavari Biorefineries Inc &mdash; Accrual Basis
+  </div>
+</div>
+
+<script>
+// Fix the month selector — keep month param in sync with view
+document.querySelector('select[name="view"]').addEventListener('change', function() {
+  const form = document.getElementById('reportForm');
+  const opt = this.options[this.selectedIndex];
+  let mInput = form.querySelector('input[name="month"]');
+  if (this.value === 'monthly') {
+    if (!mInput) { mInput = document.createElement('input'); mInput.type='hidden'; mInput.name='month'; form.appendChild(mInput); }
+    mInput.value = opt.dataset.month || '{{ month or months[0] }}';
+  } else {
+    if (mInput) mInput.remove();
+  }
+  form.submit();
+});
+</script>
+{% endblock %}
