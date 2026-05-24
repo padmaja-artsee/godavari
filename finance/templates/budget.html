@@ -81,15 +81,26 @@
       </td>
     </tr>
     {% endfor %}
-    {# Add-line buttons for certain sections #}
-    {% if sec.section == 'employee' and not archived %}
+    {# Add-line buttons for expense sections #}
+    {% if sec.section in ('employee','office','admin','travel') and not archived %}
     <tr class="f-add-row">
       <td colspan="{{ months|length + 2 }}">
         <form method="post" action="/budget/add-line" class="f-add-line-form">
           <input type="hidden" name="fy" value="{{ fy }}"/>
-          <input type="hidden" name="section" value="employee"/>
-          <input type="text" name="name" placeholder="New comp line name (e.g. Comp — PG)" class="f-input-sm" required/>
+          <input type="hidden" name="section" value="{{ sec.section }}"/>
+          {% if sec.section == 'employee' %}
+          <input type="text" name="name" placeholder="New comp line (e.g. Comp — PG)" class="f-input-sm" required/>
           <button class="f-btn-xs f-btn-primary" type="submit">+ Add Comp Line</button>
+          {% elif sec.section == 'office' %}
+          <input type="text" name="name" placeholder="New office cost line" class="f-input-sm" required/>
+          <button class="f-btn-xs f-btn-primary" type="submit">+ Add Office Line</button>
+          {% elif sec.section == 'admin' %}
+          <input type="text" name="name" placeholder="New admin/legal line" class="f-input-sm" required/>
+          <button class="f-btn-xs f-btn-primary" type="submit">+ Add Admin Line</button>
+          {% elif sec.section == 'travel' %}
+          <input type="text" name="name" placeholder="New travel/conference line" class="f-input-sm" required/>
+          <button class="f-btn-xs f-btn-primary" type="submit">+ Add Travel Line</button>
+          {% endif %}
         </form>
       </td>
     </tr>
