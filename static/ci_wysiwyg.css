@@ -221,12 +221,17 @@
   background: rgba(255,255,255,.1);
 }
 
-.ci-col-product { width: 32%; }
-.ci-col-gblinv  { width: 14%; }
-.ci-col-qty     { width: 9%; text-align: center; }
+.ci-col-product { width: 26%; }
+.ci-col-gblinv  { width: 11%; }
+.ci-col-qty     { width: 8%; text-align: center; }
+.ci-col-uprice  { width: 12%; text-align: right; }
 .ci-col-fob     { width: 12%; text-align: right; }
-.ci-col-rate    { width: 13%; text-align: center; }
-.ci-col-val     { width: 12%; text-align: right; }
+.ci-col-rate    { width: 11%; text-align: center; }
+.ci-col-val     { width: 10%; text-align: right; }
+
+/* Calculated FOB output cell */
+.ci-fob-cell    { position: relative; }
+.ci-fob-out     { display: block; text-align: right; font-variant-numeric: tabular-nums; }
 
 .ci-num { text-align: right; }
 .ci-val-cell { font-weight: 600; }

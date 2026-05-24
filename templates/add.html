@@ -1,101 +1,139 @@
 {% extends "base.html" %}
 {% from "_quantity_fields.html" import quantity_fields %}
+{% from "_deal_shipping_fields.html" import shipping_inputs %}
 {% block title %}Add / Update{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
     <h1>Add or update</h1>
-    <p class="subtitle">Same form everywhere — emails and notes save to the shared activity log (by company and deal).</p>
+    <p class="subtitle">Log activity, edit deals, or manage company details.</p>
   </div>
 </div>
 
 <div class="filters" style="margin-bottom:1.25rem">
-  <a href="/add?tab=log" class="filter-pill {% if tab == 'log' %}active{% endif %}">Add or update</a>
-  <a href="/add?tab=lead" class="filter-pill {% if tab == 'lead' %}active{% endif %}">Contact only</a>
-  <a href="/add?tab=deal" class="filter-pill {% if tab == 'deal' %}active{% endif %}">Deal only (quick)</a>
+  <a href="/add?tab=log"     class="filter-pill {% if tab != 'lead' %}active{% endif %}">Deals &amp; Activity</a>
+  <a href="/add?tab=lead"    class="filter-pill {% if tab == 'lead' %}active{% endif %}">Leads</a>
 </div>
 
-{% if tab == 'log' %}
+{# ══════════════════════════════════════════════════════════
+   DEALS & ACTIVITY  (tab=log, default)
+══════════════════════════════════════════════════════════ #}
+{% if tab != 'lead' %}
 <div class="card log-portal">
-  <div class="card-header"><h2>Add or update — complete portal</h2></div>
+  <div class="card-header"><h2>Deals &amp; Activity</h2></div>
   <form method="post" action="/add/log{% if return_to %}?return_to={{ return_to | urlencode }}{% endif %}" class="form-grid" id="log-form">
+
+    {# ── Attach-to mode ── #}
     <div class="full link-mode-row">
-      <label class="full" style="margin-bottom:.4rem;font-size:.8rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.04em">Attach to</label>
+      <label class="full" style="margin-bottom:.4rem;font-size:.8rem;color:#6b7280;font-weight:600;text-transform:uppercase;letter-spacing:.04em">I want to</label>
       <div class="link-mode-btn-group" id="link-mode-btns">
         <input type="hidden" name="link_mode" id="link-mode-hidden"
-               value="{% if preset_deal_id %}existing{% elif preset_product and not preset_deal_id %}new{% else %}none{% endif %}" />
-        <button type="button"
-                class="link-mode-btn {% if preset_deal_id %}active{% endif %}"
-                data-value="existing"
-                title="Email / quote on a pursuit in progress or closed">
-          Existing deal
+               value="{% if preset_deal_id %}existing{% elif preset_product and not preset_deal_id %}new{% else %}existing{% endif %}" />
+        <button type="button" class="link-mode-btn {% if not preset_product or preset_deal_id %}active{% endif %}"
+                data-value="existing" title="Update an existing deal and log what happened">
+          Update existing deal
         </button>
-        <button type="button"
-                class="link-mode-btn {% if preset_product and not preset_deal_id %}active{% endif %}"
-                data-value="new"
-                title="First log entry + open a new deal row">
+        <button type="button" class="link-mode-btn {% if preset_product and not preset_deal_id %}active{% endif %}"
+                data-value="new" title="Open a brand-new deal and log the first activity">
           Start new deal
         </button>
-        <button type="button"
-                class="link-mode-btn {% if not preset_deal_id and not preset_product %}active{% endif %}"
-                data-value="none"
-                title="General email, no specific deal yet">
+        <button type="button" class="link-mode-btn"
+                data-value="none" title="Log activity against a company (no specific deal yet)">
           Company only
         </button>
       </div>
     </div>
 
+    {# ── Company ── #}
     <div class="full log-company-row">
       <label>Company *</label>
       <input id="log-company" name="company" required list="customers"
-             value="{{ preset_company }}" placeholder="Start typing company name" />
+             value="{{ preset_company }}" placeholder="Start typing company name…" autocomplete="off" />
     </div>
 
+    {# ════════════════════════════════════════════
+       PANEL: EXISTING DEAL
+    ════════════════════════════════════════════ #}
     <div id="panel-existing" class="panel full">
       <label>Which deal?</label>
-      <p class="form-hint muted" style="margin:0 0 0.35rem">Deals for this company load below (e.g. PO 6713 vs TBD).</p>
+      <p class="form-hint muted" style="margin:0 0 .35rem">Select a deal — current values will pre-fill below.</p>
       <select id="log-deal-id" name="deal_id" data-preset="{{ preset_deal_id }}">
         {% if company_deals %}
-        <option value="">— Pick a deal —</option>
-        {% for d in company_deals %}
-        <option value="{{ d.id }}" {% if preset_deal_id == d.id|string %}selected{% endif %}>
-          {{ d.label if d.label is defined else (d.deal_date ~ ' · ' ~ d.product ~ ' · ' ~ d.status) }}
-        </option>
-        {% endfor %}
+          <option value="">— Pick a deal —</option>
+          {% for d in company_deals %}
+          <option value="{{ d.id }}"
+                  {% if preset_deal_id == d.id|string %}selected{% endif %}
+                  data-deal="{{ d | tojson | e }}">
+            {{ d.label if d.label is defined else (d.deal_date ~ ' · ' ~ d.product ~ ' · ' ~ d.status) }}
+          </option>
+          {% endfor %}
         {% else %}
-        <option value="">— Enter company name above first —</option>
+          <option value="">— Enter company name first —</option>
         {% endif %}
       </select>
-      <div class="form-grid" style="padding:0.75rem 0 0">
-        <div>
-          <label>PO # (update)</label>
-          <input name="deal_po_number" placeholder="Leave blank to keep unchanged" />
+
+      {# Collapsible deal details (commercial + shipping) #}
+      <details id="deal-details-accordion" style="margin-top:1rem" {% if preset_deal_id %}open{% endif %}>
+        <summary style="cursor:pointer;font-weight:700;font-size:.92rem;color:#1A5632;user-select:none;padding:.4rem 0;list-style:none;display:flex;align-items:center;gap:.4rem">
+          <span id="deal-details-arrow" style="transition:transform .2s;display:inline-block">▶</span>
+          Deal details
+          <span id="deal-details-summary" style="font-weight:400;color:#6b7280;font-size:.82rem;margin-left:.25rem"></span>
+        </summary>
+
+        <div style="margin-top:.75rem;padding:.85rem;background:#f8faf9;border-radius:8px;border:1px solid #d1e8da">
+          {# Commercial #}
+          <h4 style="margin:0 0 .65rem;font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1A5632">Commercial</h4>
+          <div class="form-grid" style="margin-bottom:.5rem">
+            <div>
+              <label>PO #</label>
+              <input name="deal_po_number" id="f-po-number" placeholder="Leave blank to keep" />
+            </div>
+            {{ quantity_fields('', 'MT', '', 'deal_quantity', 'deal_quantity_unit', 'deal_quantity_unit_other', units=quantity_units) }}
+            <div>
+              <label>Price</label>
+              <input name="deal_price" id="f-price" placeholder="e.g. 150" />
+            </div>
+            <div>
+              <label>Price unit</label>
+              <select name="deal_price_unit" id="f-price-unit">
+                {% for u in price_units %}
+                <option value="{{ u }}" {% if u == '/MT' %}selected{% endif %}>{{ u }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
+              <label>Incoterms</label>
+              <input name="incoterms" placeholder="e.g. CFR Antwerp" />
+            </div>
+            <div>
+              <label>Payment terms</label>
+              <input name="payment_terms" placeholder="e.g. 30 days net" />
+            </div>
+            <div>
+              <label>Shipment timing</label>
+              <input name="shipment_timing" placeholder="e.g. Prompt / Q3 2026" />
+            </div>
+            <div class="full">
+              <label>Append to deal notes</label>
+              <input name="deal_notes_append" placeholder="e.g. PO confirmed, delivery week of…" />
+            </div>
+          </div>
+
+          {# Shipping #}
+          <h4 style="margin:.85rem 0 .65rem;font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#1A5632">Shipping &amp; tracking</h4>
+          {{ shipping_inputs({}) }}
         </div>
-        {{ quantity_fields('', 'MT', '', 'deal_quantity', 'deal_quantity_unit', 'deal_quantity_unit_other', units=quantity_units) }}
-        <div>
-          <label>Price (update)</label>
-          <input name="deal_price" placeholder="e.g. 150" />
-        </div>
-        <div>
-          <label>Price unit</label>
-          <select name="deal_price_unit">
-            {% for u in price_units %}
-            <option value="{{ u }}" {% if u == '/MT' %}selected{% endif %}>{{ u }}</option>
-            {% endfor %}
-          </select>
-        </div>
-        <div class="full">
-          <label>Append to deal notes</label>
-          <input name="deal_notes_append" placeholder="e.g. PO confirmed, delivery week of…" />
-        </div>
-      </div>
+      </details>
     </div>
 
+    {# ════════════════════════════════════════════
+       PANEL: NEW DEAL
+    ════════════════════════════════════════════ #}
     <div id="panel-new" class="panel full">
       <div class="form-grid">
         <div class="full">
-          <label>Product for this deal *</label>
-          <input name="product_new" list="products" value="{{ preset_product }}" />
+          <label>Product *</label>
+          <input name="product_new" list="products" value="{{ preset_product }}" placeholder="e.g. Ethyl Acetate" />
         </div>
         <div>
           <label>Deal start date *</label>
@@ -125,14 +163,17 @@
       </div>
     </div>
 
+    {# ════════════════════════════════════════════
+       PANEL: COMPANY ONLY
+    ════════════════════════════════════════════ #}
     <div id="panel-none" class="panel full">
-      <label>Product discussed *</label>
-      <p class="form-hint muted" style="margin:0 0 0.35rem">Required when known — ties this email to that product (and an open deal if one exists).</p>
-      <input name="product_none" list="products" value="{{ preset_product }}" placeholder="e.g. Acetic Acid, n-Butanol" />
+      <label>Product discussed</label>
+      <p class="form-hint muted" style="margin:0 0 .35rem">Ties this note to that product (and an open deal if one exists).</p>
+      <input name="product_none" list="products" value="{{ preset_product }}" placeholder="e.g. Acetic Acid" />
     </div>
 
+    {# ── What happened (always visible) ── #}
     <div class="full section-divider"><h3>What happened</h3></div>
-
     <div>
       <label>Date *</label>
       <input name="activity_date" type="date" required />
@@ -140,69 +181,41 @@
     <div>
       <label>Channel</label>
       <select id="log-channel" name="channel">
-        <option>Email</option>
-        <option>Phone</option>
-        <option>Meeting</option>
-        <option>Quote</option>
-        <option>Sample</option>
-        <option>PO</option>
-        <option>Issue</option>
-        <option>Follow-up</option>
-        <option>Note</option>
+        <option>Email</option><option>Phone</option><option>Meeting</option>
+        <option>Quote</option><option>Sample</option><option>PO</option>
+        <option>Issue</option><option>Follow-up</option><option>Note</option>
       </select>
     </div>
-
     <div class="full">
       <label>Notes *</label>
-      <textarea name="comment" required rows="5" placeholder="What happened — email summary, call notes, quote update…"></textarea>
+      <textarea name="comment" required rows="4" placeholder="What happened — email summary, call notes, quote update…"></textarea>
     </div>
     <div>
       <label>Amount / qty (optional)</label>
       <input name="value" placeholder="Quoted price, volume" />
     </div>
-
     <div class="full">
-      <button type="submit" class="btn btn-primary">Save log entry</button>
+      <button type="submit" class="btn btn-primary">Save</button>
     </div>
   </form>
 </div>
 <script src="/static/log.js"></script>
 
-{% elif tab == 'lead' %}
+{# ══════════════════════════════════════════════════════════
+   COMPANIES  (tab=lead)
+══════════════════════════════════════════════════════════ #}
+{% else %}
 <div class="card" style="max-width:720px">
-  <div class="card-header"><h2>Contact only</h2></div>
+  <div class="card-header"><h2>Add or update lead</h2></div>
   <form method="post" action="/add/contact" class="form-grid">
     <div class="full"><label>Company *</label><input name="company" required list="customers" value="{{ preset_company }}" /></div>
-    <div><label>Contact</label><input name="contact" value="{{ lead.contact if lead else '' }}" /></div>
+    <div><label>Contact name</label><input name="contact" value="{{ lead.contact if lead else '' }}" /></div>
     <div><label>Email</label><input name="email" type="email" value="{{ lead.email if lead else '' }}" /></div>
     <div><label>Website</label><input name="website" value="{{ lead.website if lead else '' }}" /></div>
     <div><label>Phone</label><input name="phone" value="{{ lead.phone if lead else '' }}" /></div>
     <div class="full"><label>Products interested in</label><input name="products_interested" list="products" value="{{ lead.products_interested if lead else '' }}" /></div>
     <div class="full"><label>Notes</label><textarea name="notes" rows="2">{{ lead.notes if lead else '' }}</textarea></div>
-    <div class="full"><button type="submit" class="btn btn-primary">Save contact</button></div>
-  </form>
-</div>
-
-{% else %}
-<div class="card" style="max-width:720px">
-  <div class="card-header"><h2>Deal only (no log entry)</h2></div>
-  <p class="form-hint">Prefer <a href="/add?tab=log">Add or update</a> to open a deal and record the first email together.</p>
-  <form method="post" action="/add/deal" class="form-grid">
-    <div class="full"><label>Company *</label><input name="company" required list="customers" value="{{ preset_company }}" /></div>
-    <div class="full"><label>Product *</label><input name="product" required list="products" value="{{ preset_product }}" /></div>
-    <div><label>Deal date *</label><input name="deal_date" type="date" required /></div>
-    <div><label>PO #</label><input name="po_number" /></div>
-    {{ quantity_fields('', 'MT', '', units=quantity_units) }}
-    <div><label>Price</label><input name="price" placeholder="e.g. 150" /></div>
-    <div><label>Price unit</label>
-      <select name="price_unit">
-        {% for u in price_units %}
-        <option value="{{ u }}" {% if u == '/MT' %}selected{% endif %}>{{ u }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="full"><label>Notes</label><textarea name="notes" rows="2"></textarea></div>
-    <div class="full"><button type="submit" class="btn btn-primary">Open deal</button></div>
+    <div class="full"><button type="submit" class="btn btn-primary">Save company</button></div>
   </form>
 </div>
 {% endif %}

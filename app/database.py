@@ -418,6 +418,9 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
     for col in SHIPPING_FIELDS:
         if col not in cols:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
+    for col in ("incoterms", "payment_terms", "shipment_timing"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS contacts (
@@ -1186,6 +1189,9 @@ def update_deal_fields(
     transit_time: str = "",
     destination: str = "",
     eta: str = "",
+    incoterms: str = "",
+    payment_terms: str = "",
+    shipment_timing: str = "",
 ) -> None:
     unit = (price_unit or "/MT").strip() or "/MT"
     qty_unit = normalize_quantity_unit(quantity_unit, quantity_unit_other)
@@ -1212,6 +1218,7 @@ def update_deal_fields(
                 po_date = ?, packing = ?, gbl_invoice = ?, gbl_invoice_date = ?,
                 container_number = ?, vessel_name = ?, etd_india = ?, transit_time = ?,
                 destination = ?, eta = ?,
+                incoterms = ?, payment_terms = ?, shipment_timing = ?,
                 updated_at = ?
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -1234,6 +1241,9 @@ def update_deal_fields(
                 shipping_vals["transit_time"],
                 shipping_vals["destination"],
                 shipping_vals["eta"],
+                incoterms.strip(),
+                payment_terms.strip(),
+                shipment_timing.strip(),
                 now_iso(),
                 deal_id,
             ),
@@ -1719,7 +1729,12 @@ def list_deals_for_company(company: str, active_only: bool = True) -> list[dict]
         rows = conn.execute(
             f"""
             SELECT d.id, d.deal_date, d.status, d.po_number, d.quote_ref, d.closed_date,
-                   d.quantity, d.quantity_unit, d.price, d.price_unit, p.name AS product
+                   d.quantity, d.quantity_unit, d.price, d.price_unit, d.notes,
+                   d.po_date, d.packing, d.gbl_invoice, d.gbl_invoice_date,
+                   d.container_number, d.vessel_name, d.etd_india, d.transit_time,
+                   d.destination, d.eta,
+                   d.incoterms, d.payment_terms, d.shipment_timing,
+                   p.name AS product
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
             JOIN products p ON p.id = d.product_id

@@ -629,7 +629,8 @@ def create_purchase_order_from_deal(deal_id: int) -> dict[str, Any] | None:
     with get_db() as conn:
         row = conn.execute(
             """
-            SELECT d.*, c.name AS company, p.name AS product
+            SELECT d.*, c.name AS company, p.name AS product,
+                   p.hs_code AS product_hs_code
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
             JOIN products p ON p.id = d.product_id
@@ -643,23 +644,51 @@ def create_purchase_order_from_deal(deal_id: int) -> dict[str, Any] | None:
     po = deepcopy(DEFAULT_PO)
     po["deal_id"] = deal_id
     po["customer_id"] = d.get("customer_id")
+
+    # --- header / meta ---
     po["additional_ref"] = d.get("po_number") or po["additional_ref"]
     po["po_date"] = (d.get("po_date") or d.get("deal_date") or po["po_date"])[:10]
-    po["port_of_discharge"] = d.get("destination") or po["port_of_discharge"]
-    po["consignee_name"] = d.get("company") or po["consignee_name"]
-    if d.get("packing"):
-        po["shipping_notes"] = d.get("packing")
-    if d.get("notes"):
-        po["shipping_notes"] = (po.get("shipping_notes") or "") + ("\n" if po.get("shipping_notes") else "") + d["notes"]
 
+    # --- commercial terms from deal ---
+    if d.get("incoterms"):
+        po["incoterm_terms"] = d["incoterms"]
+    if d.get("payment_terms"):
+        po["payment_terms"] = d["payment_terms"]
+    if d.get("shipment_timing"):
+        po["shipment_timing"] = d["shipment_timing"]
+
+    # --- consignee / delivery ---
+    po["consignee_name"] = d.get("company") or po["consignee_name"]
+    po["port_of_discharge"] = d.get("destination") or po["port_of_discharge"]
+
+    # --- HS code from product catalogue ---
+    if d.get("product_hs_code"):
+        po["hs_code"] = d["product_hs_code"]
+
+    # --- marking section ---
+    po["marking_buyer_name"] = d.get("company") or po["marking_buyer_name"]
+    po["marking_product_brand"] = d.get("product") or po["marking_product_brand"]
+
+    # --- shipping notes ---
+    notes_parts = []
+    if d.get("packing"):
+        notes_parts.append(d["packing"])
+    if d.get("notes"):
+        notes_parts.append(d["notes"])
+    if notes_parts:
+        po["shipping_notes"] = "\n".join(notes_parts)
+
+    # --- pricing / quantities ---
     qty_raw = d.get("quantity") or ""
     qty_unit = d.get("quantity_unit") or "MT"
     qty_num = _parse_qty_number(qty_raw)
     price = _float(d.get("price"))
     price_unit = d.get("price_unit") or "/MT"
-    rate_unit = f"Euro / {price_unit.lstrip('/')}" if price_unit.startswith("/") else f"Euro {price_unit}"
+    rate_currency = "Euro"
+    rate_per = price_unit.lstrip("/") or "MT"
+    rate_unit = f"{rate_currency} / {rate_per}"
 
-    commercial_qty = qty_num if qty_unit.upper() == "MT" else qty_num
+    commercial_qty = qty_num
     if qty_unit.upper() == "KG" and qty_num:
         commercial_qty = qty_num / 1000
     pricing_qty = commercial_qty * 1000 if commercial_qty and qty_unit.upper() != "KG" else qty_num

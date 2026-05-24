@@ -89,6 +89,18 @@
         {% endfor %}
       </select>
     </div>
+    <div>
+      <label>Incoterms <span class="form-hint" style="font-weight:400">→ PO "Terms"</span></label>
+      <input name="incoterms" value="{{ d.incoterms or '' }}" placeholder="e.g. CFR Antwerp" />
+    </div>
+    <div>
+      <label>Payment terms <span class="form-hint" style="font-weight:400">→ PO</span></label>
+      <input name="payment_terms" value="{{ d.payment_terms or '' }}" placeholder="e.g. 30 days net" />
+    </div>
+    <div>
+      <label>Shipment timing <span class="form-hint" style="font-weight:400">→ PO "Shipment"</span></label>
+      <input name="shipment_timing" value="{{ d.shipment_timing or '' }}" placeholder="e.g. Prompt / Q3 2026" />
+    </div>
     <div class="full"><h3 class="form-section-title">Shipping / tracking</h3></div>
     {{ shipping_inputs(d) }}
     <div class="full">

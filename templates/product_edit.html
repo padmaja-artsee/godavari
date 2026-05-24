@@ -25,6 +25,10 @@
       <input name="cas_number" value="{{ product.cas_number if product else '' }}" placeholder="123-72-8" />
     </div>
     <div>
+      <label>HS code <span class="form-hint" style="font-weight:400">→ PO "HS Code"</span></label>
+      <input name="hs_code" value="{{ product.hs_code if product else '' }}" placeholder="e.g. 2905.31" />
+    </div>
+    <div>
       <label>Biobased content</label>
       <input name="biobased_content" value="{{ product.biobased_content if product else '' }}" placeholder="~100%" />
     </div>

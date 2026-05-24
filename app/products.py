@@ -57,6 +57,7 @@ def upgrade_products_schema() -> None:
         for col, typ in [
             ("trade_name", "TEXT"),
             ("cas_number", "TEXT"),
+            ("hs_code", "TEXT"),
             ("biobased_content", "TEXT"),
             ("applications", "TEXT"),
             ("certifications", "TEXT"),
@@ -341,7 +342,8 @@ def save_product(data: dict[str, Any], product_id: Optional[int] = None) -> int:
             conn.execute(
                 """
                 UPDATE products SET
-                    name = ?, trade_name = ?, cas_number = ?, biobased_content = ?,
+                    name = ?, trade_name = ?, cas_number = ?, hs_code = ?,
+                    biobased_content = ?,
                     applications = ?, certifications = ?, category = ?,
                     synonyms = ?, notes = ?, status = ?, updated_at = ?
                 WHERE id = ?
@@ -350,6 +352,7 @@ def save_product(data: dict[str, Any], product_id: Optional[int] = None) -> int:
                     name,
                     data.get("trade_name", ""),
                     data.get("cas_number", ""),
+                    data.get("hs_code", ""),
                     data.get("biobased_content", ""),
                     data.get("applications", ""),
                     data.get("certifications", ""),
@@ -370,14 +373,15 @@ def save_product(data: dict[str, Any], product_id: Optional[int] = None) -> int:
         cur = conn.execute(
             """
             INSERT INTO products (
-                name, trade_name, cas_number, biobased_content, applications,
+                name, trade_name, cas_number, hs_code, biobased_content, applications,
                 certifications, category, synonyms, notes, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
                 data.get("trade_name", ""),
                 data.get("cas_number", ""),
+                data.get("hs_code", ""),
                 data.get("biobased_content", ""),
                 data.get("applications", ""),
                 data.get("certifications", ""),

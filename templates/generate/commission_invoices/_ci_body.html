@@ -112,10 +112,16 @@
             {% else %}<input class="ci-subunit-input" name="qty_unit" value="{{ ci.qty_unit or 'MT' }}" />{% endif %}
           </span>
         </th>
-        <th class="ci-col-fob">Value<br>
+        <th class="ci-col-uprice">PRICE / UNIT<br>
+          <span class="ci-subunit">
+            {% if readonly %}{{ ci.fob_currency or 'Euro' }} / {{ ci.qty_unit or 'MT' }}
+            {% else %}<input class="ci-subunit-input" name="fob_currency" value="{{ ci.fob_currency or 'Euro' }}" style="width:3rem" /> / {{ ci.qty_unit or 'MT' }}{% endif %}
+          </span>
+        </th>
+        <th class="ci-col-fob">TOTAL VALUE<br>
           <span class="ci-subunit">FOB&nbsp;
             {% if readonly %}{{ ci.fob_currency or 'Euro' }}
-            {% else %}<input class="ci-subunit-input" name="fob_currency" value="{{ ci.fob_currency or 'Euro' }}" />{% endif %}
+            {% else %}{{ ci.fob_currency or 'Euro' }}{% endif %}
           </span>
         </th>
         <th class="ci-col-rate">Commission<br><span class="ci-subunit">Rate %</span></th>
@@ -133,7 +139,14 @@
         <td>{% if readonly %}{{ line.product_description }}{% else %}<input class="po-input" name="product_description" value="{{ line.product_description or '' }}" required />{% endif %}</td>
         <td>{% if readonly %}{{ line.gbl_invoice_number or '—' }}{% else %}<input class="po-input" name="gbl_invoice_number" value="{{ line.gbl_invoice_number or '' }}" />{% endif %}</td>
         <td class="ci-num">{% if readonly %}{{ line.quantity|num }}{% else %}<input class="po-number-input ci-qty" name="quantity" value="{{ line.quantity or '' }}" />{% endif %}</td>
-        <td class="ci-num">{% if readonly %}{{ line.fob_value|num }}{% else %}<input class="po-number-input ci-fob" name="fob_value" value="{{ line.fob_value or '' }}" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}{{ line.unit_price|num }}{% else %}<input class="po-number-input ci-uprice" name="unit_price" value="{{ line.unit_price or '' }}" />{% endif %}</td>
+        <td class="ci-num ci-fob-cell">
+          {% if readonly %}{{ line.fob_value|num }}
+          {% else %}
+          <output class="ci-fob-out">{{ line.fob_value|num }}</output>
+          <input type="hidden" class="ci-fob" name="fob_value" value="{{ line.fob_value or 0 }}" />
+          {% endif %}
+        </td>
         <td class="ci-num">
           {% if readonly %}{{ line.commission_rate|num }}%{% else %}
           <input class="po-number-input ci-rate" name="commission_rate" value="{{ line.commission_rate or 3 }}" />
@@ -151,7 +164,11 @@
         <td><input class="po-input" name="product_description" value="" required placeholder="e.g. Crotonaldehyde to BASF SE" /></td>
         <td><input class="po-input" name="gbl_invoice_number" value="" /></td>
         <td class="ci-num"><input class="po-number-input ci-qty" name="quantity" value="" /></td>
-        <td class="ci-num"><input class="po-number-input ci-fob" name="fob_value" value="" /></td>
+        <td class="ci-num"><input class="po-number-input ci-uprice" name="unit_price" value="" /></td>
+        <td class="ci-num ci-fob-cell">
+          <output class="ci-fob-out">0.00</output>
+          <input type="hidden" class="ci-fob" name="fob_value" value="0" />
+        </td>
         <td class="ci-num"><input class="po-number-input ci-rate" name="commission_rate" value="3" /></td>
         <td class="ci-num ci-val-cell"><output class="ci-line-value">0.00</output></td>
       </tr>

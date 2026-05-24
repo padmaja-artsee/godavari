@@ -297,6 +297,7 @@ async def product_save(
     name: str = Form(...),
     trade_name: str = Form(""),
     cas_number: str = Form(""),
+    hs_code: str = Form(""),
     biobased_content: str = Form(""),
     applications: str = Form(""),
     certifications: str = Form(""),
@@ -312,6 +313,7 @@ async def product_save(
             "name": name,
             "trade_name": trade_name,
             "cas_number": cas_number,
+            "hs_code": hs_code,
             "biobased_content": biobased_content,
             "applications": applications,
             "certifications": certifications,
@@ -356,6 +358,9 @@ async def deal_update_meta(
     transit_time: str = Form(""),
     destination: str = Form(""),
     eta: str = Form(""),
+    incoterms: str = Form(""),
+    payment_terms: str = Form(""),
+    shipment_timing: str = Form(""),
     next_url: str = Form(""),
 ):
     update_deal_fields(
@@ -378,6 +383,9 @@ async def deal_update_meta(
         transit_time,
         destination,
         eta,
+        incoterms=incoterms,
+        payment_terms=payment_terms,
+        shipment_timing=shipment_timing,
     )
     return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
 
@@ -605,8 +613,22 @@ async def post_deal(
     price: str = Form(""),
     price_unit: str = Form("/MT"),
     notes: str = Form(""),
+    # Shipping / tracking fields
+    po_date: str = Form(""),
+    packing: str = Form(""),
+    gbl_invoice: str = Form(""),
+    gbl_invoice_date: str = Form(""),
+    container_number: str = Form(""),
+    vessel_name: str = Form(""),
+    etd_india: str = Form(""),
+    transit_time: str = Form(""),
+    destination: str = Form(""),
+    eta: str = Form(""),
+    incoterms: str = Form(""),
+    payment_terms: str = Form(""),
+    shipment_timing: str = Form(""),
 ):
-    create_deal(
+    deal_id = create_deal(
         {
             "company": company,
             "product": product,
@@ -622,6 +644,24 @@ async def post_deal(
             "notes": notes,
         }
     )
+    # Save commercial + shipping fields if any were provided
+    extra = {
+        "po_date": po_date, "packing": packing, "gbl_invoice": gbl_invoice,
+        "gbl_invoice_date": gbl_invoice_date, "container_number": container_number,
+        "vessel_name": vessel_name, "etd_india": etd_india,
+        "transit_time": transit_time, "destination": destination, "eta": eta,
+        "incoterms": incoterms, "payment_terms": payment_terms,
+        "shipment_timing": shipment_timing,
+    }
+    if any(v.strip() for v in extra.values()):
+        update_deal_fields(
+            deal_id,
+            po_number=po_number, quote_ref=quote_ref,
+            quantity=quantity,
+            quantity_unit=normalize_quantity_unit(quantity_unit, quantity_unit_other),
+            price=price, price_unit=price_unit, notes=notes,
+            **extra,
+        )
     return RedirectResponse("/deals", status_code=303)
 
 
@@ -654,6 +694,20 @@ async def post_log(
     channel: str = Form("Email"),
     comment: str = Form(""),
     value: str = Form(""),
+    # Shipping fields — only used when link_mode == "new"
+    po_date: str = Form(""),
+    packing: str = Form(""),
+    gbl_invoice: str = Form(""),
+    gbl_invoice_date: str = Form(""),
+    container_number: str = Form(""),
+    vessel_name: str = Form(""),
+    etd_india: str = Form(""),
+    transit_time: str = Form(""),
+    destination: str = Form(""),
+    eta: str = Form(""),
+    incoterms: str = Form(""),
+    payment_terms: str = Form(""),
+    shipment_timing: str = Form(""),
 ):
     if link_mode == "new":
         product_val = product_new or product
@@ -695,6 +749,18 @@ async def post_log(
             f"/add?tab=log&company={quote(company)}&error={quote(str(e))}",
             status_code=303,
         )
+    # Save shipping + commercial fields for new or existing deals when provided
+    if result.get("deal_id") and link_mode in ("new", "existing"):
+        extra = {
+            "po_date": po_date, "packing": packing, "gbl_invoice": gbl_invoice,
+            "gbl_invoice_date": gbl_invoice_date, "container_number": container_number,
+            "vessel_name": vessel_name, "etd_india": etd_india,
+            "transit_time": transit_time, "destination": destination, "eta": eta,
+            "incoterms": incoterms, "payment_terms": payment_terms,
+            "shipment_timing": shipment_timing,
+        }
+        if any(v.strip() for v in extra.values()):
+            update_deal_fields(result["deal_id"], **extra)
     return_to = request.query_params.get("return_to", "")
     if return_to.startswith("/"):
         return RedirectResponse(return_to, status_code=303)

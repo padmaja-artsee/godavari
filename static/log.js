@@ -1,86 +1,181 @@
 (function () {
   const companyInput = document.getElementById("log-company");
-  const dealSelect = document.getElementById("log-deal-id");
+  const dealSelect   = document.getElementById("log-deal-id");
+  const accordion    = document.getElementById("deal-details-accordion");
+  const arrow        = document.getElementById("deal-details-arrow");
+  const summarySpan  = document.getElementById("deal-details-summary");
+
   const panels = {
     existing: document.getElementById("panel-existing"),
-    new: document.getElementById("panel-new"),
-    none: document.getElementById("panel-none"),
+    new:      document.getElementById("panel-new"),
+    none:     document.getElementById("panel-none"),
   };
 
   if (!companyInput) return;
 
   const linkHidden = document.getElementById("link-mode-hidden");
 
+  // ── Accordion arrow animation ─────────────────────────
+  if (accordion) {
+    accordion.addEventListener("toggle", function () {
+      if (arrow) arrow.style.transform = accordion.open ? "rotate(90deg)" : "";
+    });
+    if (accordion.open && arrow) arrow.style.transform = "rotate(90deg)";
+  }
+
+  // ── Mode switching ─────────────────────────────────────
   function setLinkMode(mode) {
     if (linkHidden) linkHidden.value = mode;
-    // update button active state
-    document.querySelectorAll("#link-mode-btns .link-mode-btn").forEach((btn) => {
+    document.querySelectorAll("#link-mode-btns .link-mode-btn").forEach(btn => {
       btn.classList.toggle("active", btn.dataset.value === mode);
     });
-    Object.keys(panels).forEach((k) => {
+    Object.keys(panels).forEach(k => {
       const panel = panels[k];
       if (!panel) return;
       const active = k === mode;
       panel.style.display = active ? "block" : "none";
-      panel.querySelectorAll("input, select, textarea").forEach((el) => {
+      panel.querySelectorAll("input, select, textarea").forEach(el => {
         if (el.name === "link_mode") return;
         el.disabled = !active;
       });
     });
   }
 
+  // ── Deal pre-population ───────────────────────────────
+  const FIELD_MAP = {
+    // commercial
+    "deal_po_number":    "po_number",
+    "deal_price":        "price",
+    "deal_price_unit":   "price_unit",
+    "incoterms":         "incoterms",
+    "payment_terms":     "payment_terms",
+    "shipment_timing":   "shipment_timing",
+    // shipping
+    "po_date":           "po_date",
+    "packing":           "packing",
+    "gbl_invoice":       "gbl_invoice",
+    "gbl_invoice_date":  "gbl_invoice_date",
+    "container_number":  "container_number",
+    "vessel_name":       "vessel_name",
+    "etd_india":         "etd_india",
+    "transit_time":      "transit_time",
+    "destination":       "destination",
+    "eta":               "eta",
+  };
+
+  function populateDealFields(deal) {
+    if (!deal) return;
+    // commercial text/select
+    Object.entries(FIELD_MAP).forEach(([formName, dealKey]) => {
+      const el = document.querySelector(`[name="${formName}"]`);
+      if (!el) return;
+      const val = deal[dealKey] || "";
+      el.value = val;
+    });
+    // quantity: deal_quantity + deal_quantity_unit
+    const qtyEl  = document.querySelector('[name="deal_quantity"]');
+    const unitEl = document.querySelector('[name="deal_quantity_unit"]');
+    if (qtyEl)  qtyEl.value  = deal.quantity  || "";
+    if (unitEl) unitEl.value = deal.quantity_unit || "MT";
+
+    // update summary line
+    updateSummary(deal);
+
+    // auto-open accordion if deal has any non-empty data
+    const hasData = deal.po_number || deal.price || deal.quantity ||
+                    deal.po_date || deal.packing || deal.container_number;
+    if (accordion && hasData) accordion.open = true;
+  }
+
+  function updateSummary(deal) {
+    if (!summarySpan) return;
+    const parts = [];
+    if (deal.po_number) parts.push("PO " + deal.po_number);
+    if (deal.quantity)  parts.push(deal.quantity + (deal.quantity_unit ? " " + deal.quantity_unit : ""));
+    if (deal.price)     parts.push("€" + deal.price + (deal.price_unit || ""));
+    if (deal.packing)   parts.push(deal.packing);
+    summarySpan.textContent = parts.length ? "— " + parts.join(" · ") : "";
+  }
+
+  function clearDealFields() {
+    Object.keys(FIELD_MAP).forEach(formName => {
+      const el = document.querySelector(`[name="${formName}"]`);
+      if (el) el.value = "";
+    });
+    const qtyEl  = document.querySelector('[name="deal_quantity"]');
+    const unitEl = document.querySelector('[name="deal_quantity_unit"]');
+    if (qtyEl)  qtyEl.value  = "";
+    if (unitEl) unitEl.value = "MT";
+    if (summarySpan) summarySpan.textContent = "";
+  }
+
+  // ── Deal select change ────────────────────────────────
+  if (dealSelect) {
+    dealSelect.addEventListener("change", function () {
+      const opt = dealSelect.selectedOptions[0];
+      if (!opt || !opt.dataset.deal) { clearDealFields(); return; }
+      try {
+        populateDealFields(JSON.parse(opt.dataset.deal));
+      } catch(e) { clearDealFields(); }
+    });
+    // Pre-populate if a deal is already selected (e.g. from URL preset)
+    const presetOpt = dealSelect.querySelector("option[selected]") ||
+                      (dealSelect.dataset.preset
+                        ? dealSelect.querySelector(`option[value="${dealSelect.dataset.preset}"]`)
+                        : null);
+    if (presetOpt && presetOpt.dataset.deal) {
+      try { populateDealFields(JSON.parse(presetOpt.dataset.deal)); } catch(e) {}
+    }
+  }
+
+  // ── Load deals for company ────────────────────────────
   async function loadDeals(company) {
     if (!dealSelect) return;
-    const mode = linkHidden ? linkHidden.value : "none";
     if (!company.trim()) {
-      dealSelect.innerHTML =
-        '<option value="">— Enter company name first —</option>';
+      dealSelect.innerHTML = '<option value="">— Enter company name first —</option>';
+      clearDealFields();
       return;
     }
-    if (mode !== "existing") {
-      return;
-    }
-    dealSelect.innerHTML = '<option value="">Loading deals…</option>';
-    dealSelect.disabled = true;
+    if (linkHidden && linkHidden.value !== "existing") return;
+
+    dealSelect.innerHTML = '<option value="">Loading…</option>';
+    dealSelect.disabled  = true;
     try {
-      const res = await fetch(
-        "/api/company-deals?company=" + encodeURIComponent(company.trim())
-      );
+      const res   = await fetch("/api/company-deals?company=" + encodeURIComponent(company.trim()));
       const deals = await res.json();
       dealSelect.disabled = false;
       if (!deals.length) {
-        dealSelect.innerHTML =
-          '<option value="">No deals for this company — use “Start new deal”</option>';
+        dealSelect.innerHTML = '<option value="">No deals — use "Start new deal"</option>';
+        clearDealFields();
         return;
       }
       dealSelect.innerHTML = '<option value="">— Pick a deal —</option>';
-      deals.forEach((d) => {
-        const opt = document.createElement("option");
-        opt.value = d.id;
-        const po = d.po_number ? ` · PO ${d.po_number}` : "";
-        opt.textContent =
-          d.label || `${d.id} · ${d.deal_date} · ${d.product} · ${d.status}${po}`;
-        if (String(d.id) === dealSelect.dataset.preset) opt.selected = true;
+      deals.forEach(d => {
+        const opt       = document.createElement("option");
+        opt.value       = d.id;
+        opt.textContent = d.label || `${d.id} · ${d.deal_date} · ${d.product} · ${d.status}`;
+        opt.dataset.deal = JSON.stringify(d);
+        if (String(d.id) === dealSelect.dataset.preset) {
+          opt.selected = true;
+          try { populateDealFields(d); } catch(e) {}
+        }
         dealSelect.appendChild(opt);
       });
-    } catch (e) {
+    } catch(e) {
       dealSelect.disabled = false;
       dealSelect.innerHTML = '<option value="">Error loading deals</option>';
     }
   }
 
   function scheduleLoadDeals() {
-    clearTimeout(scheduleLoadDeals.timer);
-    scheduleLoadDeals.timer = setTimeout(
-      () => loadDeals(companyInput.value),
-      250
-    );
+    clearTimeout(scheduleLoadDeals._t);
+    scheduleLoadDeals._t = setTimeout(() => loadDeals(companyInput.value), 250);
   }
 
-  companyInput.addEventListener("input", scheduleLoadDeals);
+  companyInput.addEventListener("input",  scheduleLoadDeals);
   companyInput.addEventListener("change", scheduleLoadDeals);
 
-  document.querySelectorAll("#link-mode-btns .link-mode-btn").forEach((btn) => {
+  document.querySelectorAll("#link-mode-btns .link-mode-btn").forEach(btn => {
     btn.addEventListener("click", () => {
       setLinkMode(btn.dataset.value);
       if (btn.dataset.value === "existing") scheduleLoadDeals();
@@ -88,7 +183,5 @@
   });
 
   if (companyInput.value) scheduleLoadDeals();
-
-  // Apply initial mode from hidden input
   if (linkHidden) setLinkMode(linkHidden.value);
 })();

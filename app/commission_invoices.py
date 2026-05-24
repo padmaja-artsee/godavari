@@ -88,6 +88,7 @@ DEFAULT_CI: dict[str, Any] = {
             "product_description": "",
             "gbl_invoice_number":  "",
             "quantity":            0.0,
+            "unit_price":          0.0,
             "fob_value":           0.0,
             "commission_rate":     3.0,
             "commission_value":    0.0,
@@ -100,8 +101,13 @@ DEFAULT_CI: dict[str, Any] = {
 
 def recalc_line(line: dict[str, Any]) -> dict[str, Any]:
     line = dict(line)
-    fob   = _float(line.get("fob_value"))
-    rate  = _float(line.get("commission_rate"))
+    qty        = _float(line.get("quantity"))
+    unit_price = _float(line.get("unit_price"))
+    # Auto-derive FOB value from qty × unit_price when unit_price is set
+    if unit_price:
+        line["fob_value"] = round(qty * unit_price, 2)
+    fob  = _float(line.get("fob_value"))
+    rate = _float(line.get("commission_rate"))
     line["commission_value"] = round(fob * rate / 100, 2) if fob and rate else 0.0
     return line
 
@@ -142,6 +148,10 @@ def _upgrade_ci_extra_columns(conn) -> None:
     for col in CI_EXTRA_FIELDS:
         if col not in cols:
             conn.execute(f"ALTER TABLE commission_invoices ADD COLUMN {col} TEXT")
+    # Migrate line-items table
+    li_cols = {r[1] for r in conn.execute("PRAGMA table_info(commission_invoice_line_items)").fetchall()}
+    if "unit_price" not in li_cols:
+        conn.execute("ALTER TABLE commission_invoice_line_items ADD COLUMN unit_price REAL DEFAULT 0")
 
 
 def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -152,7 +162,7 @@ def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
     products = form_getlist(form, "product_description")
     text_fields    = ["gbl_invoice_number"]
-    numeric_fields = ["quantity", "fob_value", "commission_rate"]
+    numeric_fields = ["quantity", "unit_price", "fob_value", "commission_rate"]
 
     line_items: list[dict[str, Any]] = []
     for i, product in enumerate(products):
@@ -293,13 +303,13 @@ def _save_ci_lines(conn, ci_id: int, line_items: list[dict[str, Any]]) -> None:
             """
             INSERT INTO commission_invoice_line_items (
                 commission_invoice_id, product_description, gbl_invoice_number,
-                quantity, fob_value, commission_rate, commission_value, sort_order
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                quantity, unit_price, fob_value, commission_rate, commission_value, sort_order
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ci_id,
                 line.get("product_description"), line.get("gbl_invoice_number"),
-                line.get("quantity"), line.get("fob_value"),
+                line.get("quantity"), line.get("unit_price"), line.get("fob_value"),
                 line.get("commission_rate"), line.get("commission_value"),
                 sort_order,
             ),
@@ -426,7 +436,10 @@ def _deal_to_ci_line(d: dict) -> dict:
     qty      = float(qty_nums[0]) if qty_nums else 0.0
     line = deepcopy(DEFAULT_CI["line_items"][0])
     line["product_description"] = d.get("product") or ""
+    line["gbl_invoice_number"]  = d.get("gbl_invoice") or ""
     line["quantity"]    = qty
+    line["unit_price"]  = price or 0.0
+    # fob_value will be recalculated by recalc_line (qty × unit_price)
     line["fob_value"]   = round(price * qty, 2) if price and qty else 0.0
     return line
 
