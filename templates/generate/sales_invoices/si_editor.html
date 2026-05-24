@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "generate/sales_invoices/_si_body.html" import si_body %}
+{% block title %}{% if editing %}Edit{% else %}New{% endif %} Commercial Invoice{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/generate.css" />
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+<link rel="stylesheet" href="/static/si_wysiwyg.css" />
+{% endblock %}
+{% block content %}
+<div class="po-shell">
+  <div class="po-action-bar no-print">
+    <a href="/generate" class="btn btn-ghost btn-sm">← Generate</a>
+    <a href="/generate/sales-invoices" class="btn btn-ghost btn-sm">Saved Invoices</a>
+    <div class="po-action-bar-right">
+      {% if editing and si.id %}
+      <a href="/generate/sales-invoices/{{ si.id }}" class="btn btn-ghost btn-sm">Preview</a>
+      <a href="/generate/sales-invoices/{{ si.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
+      <a href="/generate/sales-invoices/{{ si.id }}/print" class="btn btn-ghost btn-sm" target="_blank">Print</a>
+      {% endif %}
+      <button type="submit" form="si-editor-form" class="btn btn-primary btn-sm">Save</button>
+    </div>
+  </div>
+
+  {% if errors %}
+  <div class="card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem">
+    {% for e in errors %}<p style="margin:0.25rem 0">{{ e }}</p>{% endfor %}
+  </div>
+  {% endif %}
+
+  <form method="post" id="si-editor-form"
+        action="{% if editing %}/generate/sales-invoices/{{ si.id }}/edit{% else %}/generate/sales-invoices/new{% endif %}">
+    {% if si.deal_id %}<input type="hidden" name="deal_id" value="{{ si.deal_id }}" />{% endif %}
+    {% if si.customer_id %}<input type="hidden" name="customer_id" value="{{ si.customer_id }}" />{% endif %}
+    {{ si_body(si, readonly=false) }}
+  </form>
+
+  <section class="po-admin-panel no-print card" style="margin-top:1rem;max-width:960px;margin-left:auto;margin-right:auto">
+    <h2 style="margin:0 0 0.75rem;font-size:1rem">Internal Notes <span class="badge">Not printed</span></h2>
+    <div class="form-grid" style="grid-template-columns:1fr 1fr">
+      <div>
+        <label>Status</label>
+        <select name="status" form="si-editor-form">
+          {% for s in ['Draft','Approved','Sent','Cancelled'] %}
+          <option value="{{ s }}" {% if si.status == s %}selected{% endif %}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div><label>Prepared By</label><input name="prepared_by" form="si-editor-form" value="{{ si.prepared_by or '' }}" /></div>
+      <div class="full"><label>Internal Notes</label><textarea name="internal_notes" form="si-editor-form" rows="3">{{ si.internal_notes or '' }}</textarea></div>
+    </div>
+  </section>
+</div>
+<script src="/static/si_wysiwyg.js"></script>
+{% endblock %}

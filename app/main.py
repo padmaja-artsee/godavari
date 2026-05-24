@@ -102,6 +102,20 @@ from app.commission_invoices import (
     upgrade_commission_invoices_schema,
 )
 from app.ci_exports import export_ci_xlsx
+# ── Sales (Commercial) Invoice ──────────────────────────────────────────────
+from app.sales_invoices import (
+    DEFAULT_SI,
+    create_sales_invoice,
+    create_si_from_deals,
+    delete_sales_invoice,
+    duplicate_sales_invoice,
+    get_sales_invoice,
+    get_sales_invoice_for_export,
+    list_sales_invoices,
+    parse_si_form,
+    upgrade_sales_invoices_schema,
+)
+from app.si_exports import export_si_xlsx
 from app.purchase_orders import (
     DEFAULT_PO,
     calculate_po_totals,
@@ -169,6 +183,7 @@ def startup() -> None:
     import_catalogue()
     fix_legacy_product_names()
     upgrade_commission_invoices_schema()  # CI: remove with CI feature block
+    upgrade_sales_invoices_schema()       # SI: remove with SI feature block
 
 
 def ctx(request: Request, **extra):
@@ -1485,6 +1500,144 @@ async def ci_export_xlsx_route(ci_id: int):
     if not ci:
         return RedirectResponse("/generate/commission-invoices", status_code=303)
     content, fname = export_ci_xlsx(ci)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{fname}"'},
+    )
+
+
+# ── Sales (Commercial) Invoice routes ─────────────────────────────────────────
+# Remove this entire block (and the SI imports above) to drop the feature.
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.get("/generate/sales-invoices", response_class=HTMLResponse)
+async def si_list_page(request: Request):
+    rows = list_sales_invoices()
+    return templates.TemplateResponse(
+        "generate/sales_invoices/si_list.html",
+        {"request": request, "rows": rows},
+    )
+
+
+@app.get("/generate/sales-invoices/new", response_class=HTMLResponse)
+async def si_new_page(
+    request: Request,
+    deal_id: int = Query(0),
+    deal_ids: str = Query(""),
+    blank: str = Query(""),
+):
+    if not deal_id and not deal_ids and blank != "1":
+        return templates.TemplateResponse(
+            "generate/sales_invoices/si_pick_deal.html",
+            {"request": request},
+        )
+    from copy import deepcopy
+    ids: list[int] = []
+    if deal_ids:
+        ids = [int(x) for x in deal_ids.split(",") if x.strip().isdigit()]
+    elif deal_id:
+        ids = [deal_id]
+    if ids:
+        si = create_si_from_deals(ids) or deepcopy(DEFAULT_SI)
+    else:
+        si = deepcopy(DEFAULT_SI)
+    return templates.TemplateResponse(
+        "generate/sales_invoices/si_editor.html",
+        {"request": request, "si": si, "editing": False, "errors": []},
+    )
+
+
+@app.post("/generate/sales-invoices/new", response_class=HTMLResponse)
+async def si_new_post(request: Request):
+    form = await request.form()
+    data, line_items = parse_si_form(form)
+    if not data.get("invoice_number"):
+        return templates.TemplateResponse(
+            "generate/sales_invoices/si_editor.html",
+            {"request": request, "si": {**data, "line_items": line_items},
+             "editing": False, "errors": ["Invoice number is required."]},
+            status_code=422,
+        )
+    deal_id     = int(form.get("deal_id") or 0) or None
+    customer_id = int(form.get("customer_id") or 0) or None
+    si_id = create_sales_invoice(data, line_items, deal_id=deal_id, customer_id=customer_id)
+    return RedirectResponse(f"/generate/sales-invoices/{si_id}?saved=1", status_code=303)
+
+
+@app.get("/generate/sales-invoices/{si_id}", response_class=HTMLResponse)
+async def si_detail_page(request: Request, si_id: int):
+    si = get_sales_invoice(si_id)
+    if not si:
+        return RedirectResponse("/generate/sales-invoices", status_code=303)
+    saved_msg = "Saved successfully." if request.query_params.get("saved") else None
+    return templates.TemplateResponse(
+        "generate/sales_invoices/si_detail.html",
+        {"request": request, "si": si, "saved_msg": saved_msg},
+    )
+
+
+@app.get("/generate/sales-invoices/{si_id}/edit", response_class=HTMLResponse)
+async def si_edit_page(request: Request, si_id: int):
+    si = get_sales_invoice(si_id)
+    if not si:
+        return RedirectResponse("/generate/sales-invoices", status_code=303)
+    return templates.TemplateResponse(
+        "generate/sales_invoices/si_editor.html",
+        {"request": request, "si": si, "editing": True, "errors": []},
+    )
+
+
+@app.post("/generate/sales-invoices/{si_id}/edit", response_class=HTMLResponse)
+async def si_edit_post(request: Request, si_id: int):
+    form = await request.form()
+    data, line_items = parse_si_form(form)
+    if not data.get("invoice_number"):
+        si = get_sales_invoice(si_id) or {}
+        si.update(data)
+        si["line_items"] = line_items
+        return templates.TemplateResponse(
+            "generate/sales_invoices/si_editor.html",
+            {"request": request, "si": si, "editing": True,
+             "errors": ["Invoice number is required."]},
+            status_code=422,
+        )
+    from app.sales_invoices import update_sales_invoice
+    update_sales_invoice(si_id, data, line_items)
+    return RedirectResponse(f"/generate/sales-invoices/{si_id}?saved=1", status_code=303)
+
+
+@app.post("/generate/sales-invoices/{si_id}/duplicate")
+async def si_duplicate(si_id: int):
+    new_id = duplicate_sales_invoice(si_id)
+    if new_id:
+        return RedirectResponse(f"/generate/sales-invoices/{new_id}/edit", status_code=303)
+    return RedirectResponse("/generate/sales-invoices", status_code=303)
+
+
+@app.post("/generate/sales-invoices/{si_id}/delete")
+async def si_delete(si_id: int):
+    delete_sales_invoice(si_id)
+    return RedirectResponse("/generate/sales-invoices", status_code=303)
+
+
+@app.get("/generate/sales-invoices/{si_id}/print", response_class=HTMLResponse)
+async def si_print_page(request: Request, si_id: int):
+    si = get_sales_invoice(si_id)
+    if not si:
+        return RedirectResponse("/generate/sales-invoices", status_code=303)
+    return templates.TemplateResponse(
+        "generate/sales_invoices/si_print.html",
+        {"request": request, "si": si},
+    )
+
+
+@app.get("/generate/sales-invoices/{si_id}/export.xlsx")
+async def si_export_xlsx_route(si_id: int):
+    si = get_sales_invoice_for_export(si_id)
+    if not si:
+        return RedirectResponse("/generate/sales-invoices", status_code=303)
+    content, fname = export_si_xlsx(si)
     return Response(
         content=content,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

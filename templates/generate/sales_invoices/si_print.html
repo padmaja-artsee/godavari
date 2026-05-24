@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% from "generate/sales_invoices/_si_body.html" import si_body %}
+{% block title %}Print — {{ si.invoice_number }}{% endblock %}
+{% set hide_nav = true %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+<link rel="stylesheet" href="/static/si_wysiwyg.css" />
+<style>
+  body { margin: 0; }
+  .main { padding: 0 !important; margin: 0 !important; }
+  .po-shell { background: white; padding: 0; }
+  .po-action-bar { max-width: 960px; margin: 0.75rem auto; display: flex; gap: 0.75rem; align-items: center; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="po-action-bar no-print">
+  <a href="/generate/sales-invoices/{{ si.id }}" class="btn btn-ghost">← Back</a>
+</div>
+<div class="po-shell">
+  {{ si_body(si, readonly=true) }}
+</div>
+<script>window.addEventListener("load", function(){ window.print(); });</script>
+{% endblock %}

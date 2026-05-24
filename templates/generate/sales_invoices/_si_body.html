@@ -1,0 +1,327 @@
+{% macro si_body(si, readonly=false) %}
+{% set CURRENCIES = ['Euro','USD','GBP','JPY','CHF','CAD','AUD','CNY','INR','SGD'] %}
+<div class="po-page po-excel-layout si-page">
+
+  {# ── Header: logo + company name ── #}
+  <div class="ci-header-row">
+    <img src="/static/gbbv-logo.png" alt="GBBV logo" class="po-logo" />
+    <div class="ci-company-name">
+      {% if readonly %}{{ si.company_name or '' }}
+      {% else %}<input class="po-input po-company-title ci-company-input" name="company_name" value="{{ si.company_name or '' }}" />{% endif %}
+    </div>
+  </div>
+
+  {# ── Document title ── #}
+  <div class="ci-title-row">
+    {% if readonly %}
+    <span class="ci-doc-title-text">{{ si.document_title or 'COMMERCIAL INVOICE' }}</span>
+    {% else %}
+    <input class="po-input ci-doc-title-input" name="document_title" value="{{ si.document_title or 'COMMERCIAL INVOICE' }}" />
+    {% endif %}
+  </div>
+
+  {# ── Bill-to + Invoice meta ── #}
+  <div class="ci-meta-grid">
+    <div class="ci-meta-left">
+      <p class="ci-to-label">TO</p>
+      {% if readonly %}
+      <p><strong>{{ si.bill_to_name }}</strong></p>
+      <p>{{ si.bill_to_address_1 }}</p>
+      <p>{{ si.bill_to_address_2 }}</p>
+      {% if si.bill_to_address_3 %}<p>{{ si.bill_to_address_3 }}</p>{% endif %}
+      <p><strong>VAT Number :</strong> {{ si.bill_to_vat or '—' }}</p>
+      <p><strong>Customer Order No :</strong> {{ si.customer_order_no or '—' }}</p>
+      {% if si.customer_material_code %}<p><strong>Code :</strong> {{ si.customer_material_code }}</p>{% endif %}
+      {% else %}
+      <input class="po-input" name="bill_to_name" value="{{ si.bill_to_name or '' }}" placeholder="Company name" />
+      <input class="po-input" name="bill_to_address_1" value="{{ si.bill_to_address_1 or '' }}" placeholder="Address line 1" />
+      <input class="po-input" name="bill_to_address_2" value="{{ si.bill_to_address_2 or '' }}" placeholder="Address line 2" />
+      <input class="po-input" name="bill_to_address_3" value="{{ si.bill_to_address_3 or '' }}" placeholder="Address line 3 (optional)" />
+      <div class="ci-order-row">
+        <span class="ci-kv-label">VAT Number</span>
+        <input class="po-mkinput" name="bill_to_vat" value="{{ si.bill_to_vat or '' }}" placeholder="e.g. DE12443224" />
+      </div>
+      <div class="ci-order-row">
+        <span class="ci-kv-label">Customer Order No</span>
+        <input class="po-mkinput" name="customer_order_no" value="{{ si.customer_order_no or '' }}" placeholder="e.g. PO-12345" />
+      </div>
+      <div class="ci-order-row">
+        <span class="ci-kv-label">Code</span>
+        <input class="po-mkinput" name="customer_material_code" value="{{ si.customer_material_code or '' }}" placeholder="Customer material code" />
+      </div>
+      {% endif %}
+    </div>
+
+    {# Right: Invoice No + Date ── #}
+    <div class="ci-meta-right">
+      <div class="ci-kv-row">
+        <span class="ci-kv-label">Invoice No</span>
+        {% if readonly %}<span class="ci-kv-val">{{ si.invoice_number or '—' }}</span>
+        {% else %}<input class="po-mkinput ci-kv-input" name="invoice_number" value="{{ si.invoice_number or '' }}" required placeholder="e.g. 202627 XXX" />{% endif %}
+      </div>
+      <div class="ci-kv-row">
+        <span class="ci-kv-label">Date</span>
+        {% if readonly %}<span class="ci-kv-val">{{ si.invoice_date or '—' }}</span>
+        {% else %}<input class="po-mkinput ci-kv-input" name="invoice_date" value="{{ si.invoice_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
+      </div>
+    </div>
+  </div>
+
+  {# ── Transaction description ── #}
+  <div class="ci-section-head">TRANSACTION DESCRIPTION</div>
+  <div class="ci-txn-row">
+    {% if readonly %}{{ si.transaction_description or '' }}
+    {% else %}
+    <input class="po-mkinput ci-txn-input" name="transaction_description"
+           value="{{ si.transaction_description or '' }}"
+           placeholder="Sale of [Product] to [Customer] — BL No: XXXXXX" />
+    {% endif %}
+  </div>
+
+  {# ── Delivery section ── #}
+  <div class="si-delivery-grid">
+    <div class="si-del-row">
+      <span class="ci-ship-label">Delivery Address</span>
+      {% if readonly %}{{ si.delivery_address or '—' }}{% else %}
+      <input class="po-mkinput ci-ship-val-input" name="delivery_address" value="{{ si.delivery_address or '' }}" placeholder="Factory / Warehouse address" />{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">VAT of delivery location</span>
+      {% if readonly %}{{ si.delivery_vat or '—' }}{% else %}
+      <input class="po-mkinput ci-ship-val-input" name="delivery_vat" value="{{ si.delivery_vat or '' }}" placeholder="e.g. AA122233334" />{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">Date of delivery</span>
+      {% if readonly %}{{ si.delivery_date or '—' }}{% else %}
+      <input class="po-mkinput ci-ship-val-input" name="delivery_date" value="{{ si.delivery_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">ISO tank / Container No</span>
+      {% if readonly %}{{ si.iso_tank_number or '—' }}{% else %}
+      <input class="po-mkinput ci-ship-val-input" name="iso_tank_number" value="{{ si.iso_tank_number or '' }}" placeholder="e.g. TIFU150710-1" />{% endif %}
+    </div>
+    <div class="si-del-row">
+      <span class="ci-ship-label">Cleaning certificate No</span>
+      {% if readonly %}{{ si.cleaning_cert_number or '—' }}{% else %}
+      <input class="po-mkinput ci-ship-val-input" name="cleaning_cert_number" value="{{ si.cleaning_cert_number or '' }}" placeholder="e.g. IN260107274" />{% endif %}
+    </div>
+  </div>
+
+  {# ── Product table ── #}
+  <table class="ci-table si-table" id="si-lines-table">
+    <thead>
+      <tr>
+        <th class="si-col-product">PRODUCT AND OTHER DESCRIPTION</th>
+        <th class="si-col-qty">QUANTITY<br>
+          <span class="ci-subunit">
+            {% if readonly %}{{ si.qty_unit or 'MT' }}
+            {% else %}<input class="ci-subunit-input" name="qty_unit" value="{{ si.qty_unit or 'MT' }}" />{% endif %}
+          </span>
+        </th>
+        <th class="si-col-rate">RATE<br>
+          <span class="ci-subunit">
+            {% if readonly %}{{ si.rate_currency or 'Euro' }} / {{ si.rate_unit or 'MT' }}
+            {% else %}
+            <select class="po-inline-input ci-subunit-input" name="rate_currency" style="width:3.5rem">
+              {% for c in CURRENCIES %}<option value="{{ c }}" {% if (si.rate_currency or 'Euro') == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+            &nbsp;/&nbsp;
+            <select class="po-inline-input ci-subunit-input" name="rate_unit" style="width:2.8rem">
+              {% for u in ['MT','KG','FCL'] %}<option value="{{ u }}" {% if (si.rate_unit or 'MT') == u %}selected{% endif %}>{{ u }}</option>{% endfor %}
+            </select>
+            {% endif %}
+          </span>
+        </th>
+        <th class="si-col-val">VALUE<br>
+          <span class="ci-subunit">
+            {% if readonly %}{{ si.value_currency or 'Euro' }}
+            {% else %}<select class="po-inline-input ci-subunit-input" name="value_currency" style="width:3.5rem">
+              {% for c in CURRENCIES %}<option value="{{ c }}" {% if (si.value_currency or 'Euro') == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>{% endif %}
+          </span>
+        </th>
+        <th class="si-col-remark">TERMS / REMARK</th>
+      </tr>
+    </thead>
+    <tbody id="si-lines-body">
+      {# Brand name row #}
+      {% if readonly %}
+        {% if si.brand_name %}
+        <tr class="si-brand-row">
+          <td colspan="4">Brand : {{ si.brand_name }}</td>
+          <td>{{ si.incoterms or '' }}</td>
+        </tr>
+        {% endif %}
+      {% else %}
+      <tr class="si-brand-row no-print-bg">
+        <td colspan="4">
+          <span class="si-brand-label">Brand name :</span>
+          <input class="po-mkinput si-brand-input" name="brand_name" value="{{ si.brand_name or '' }}" placeholder="e.g. NaturoEA" style="width:70%" />
+        </td>
+        <td>
+          <input class="po-mkinput" name="incoterms" value="{{ si.incoterms or '' }}" placeholder="CIF / CFR / DDP" />
+        </td>
+      </tr>
+      {% endif %}
+
+      {# Line items #}
+      {% for line in si.line_items %}
+      <tr class="si-line-row">
+        <td>{% if readonly %}{{ line.product_description }}{% else %}<input class="po-input" name="product_description" value="{{ line.product_description or '' }}" required placeholder="Product name" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}{{ line.quantity|num }}{% else %}<input class="po-number-input si-qty" name="quantity" value="{{ line.quantity or '' }}" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}{{ line.rate|num }}{% else %}<input class="po-number-input si-rate" name="rate" value="{{ line.rate or '' }}" />{% endif %}</td>
+        <td class="ci-num si-val-cell">
+          {% if readonly %}{{ line.value|num }}
+          {% else %}
+          <output class="si-line-value">{{ line.value|num }}</output>
+          <input type="hidden" class="si-val-hidden" name="line_value" value="{{ line.value or 0 }}" />
+          {% endif %}
+        </td>
+        <td>{% if readonly %}{{ line.remark or '' }}{% else %}<input class="po-input" name="remark" value="{{ line.remark or '' }}" placeholder="e.g. FOC" />{% endif %}</td>
+      </tr>
+      {% endfor %}
+      {% if not si.line_items %}
+      <tr class="si-line-row">
+        <td><input class="po-input" name="product_description" required placeholder="Product name" value="" /></td>
+        <td class="ci-num"><input class="po-number-input si-qty" name="quantity" value="" /></td>
+        <td class="ci-num"><input class="po-number-input si-rate" name="rate" value="" /></td>
+        <td class="ci-num si-val-cell">
+          <output class="si-line-value">0.00</output>
+          <input type="hidden" class="si-val-hidden" name="line_value" value="0" />
+        </td>
+        <td><input class="po-input" name="remark" value="" placeholder="e.g. FOC" /></td>
+      </tr>
+      {% endif %}
+
+      {# Delivery note / batch rows #}
+      {% if readonly %}
+        {% if si.delivery_note_number %}
+        <tr class="si-meta-row">
+          <td colspan="3">Delivery Note {{ si.delivery_note_number }}</td>
+          <td></td><td></td>
+        </tr>
+        {% endif %}
+        {% if si.batch_numbers %}
+        <tr class="si-meta-row">
+          <td colspan="2">{{ si.batch_numbers }}</td>
+          <td class="ci-num"><strong>Total</strong></td>
+          <td class="ci-num"><strong>{{ si.net_value|money if si.net_value else '' }}</strong></td>
+          <td></td>
+        </tr>
+        {% endif %}
+      {% else %}
+      <tr class="si-meta-row no-print-bg">
+        <td colspan="3">
+          <span class="si-brand-label">Delivery Note No :</span>
+          <input class="po-mkinput si-brand-input" name="delivery_note_number" value="{{ si.delivery_note_number or '' }}" placeholder="e.g. 202627 XXX" style="width:60%" />
+        </td>
+        <td></td><td></td>
+      </tr>
+      <tr class="si-meta-row no-print-bg">
+        <td colspan="2">
+          <span class="si-brand-label">Batch No(s) :</span>
+          <input class="po-mkinput si-brand-input" name="batch_numbers" value="{{ si.batch_numbers or '' }}" placeholder="e.g. 030/2026ABCD" style="width:60%" />
+        </td>
+        <td class="ci-num"><strong>Total</strong></td>
+        <td class="ci-num"><strong><output id="si-net-total">{{ si.net_value|money if si.net_value else '0.00' }}</output></strong></td>
+        <td></td>
+      </tr>
+      {% endif %}
+    </tbody>
+  </table>
+
+  {% if not readonly %}
+  <div class="ci-line-actions no-print">
+    <button type="button" id="si-add-line" class="btn btn-ghost btn-sm">+ Add line</button>
+  </div>
+  {% endif %}
+
+  {# ── Totals ── #}
+  <div class="ci-totals-block">
+    <div class="ci-total-row">
+      <span>Net VALUE</span>
+      <span id="si-net-value">{{ si.net_value|money if si.net_value else '0.00' }}</span>
+    </div>
+    <div class="ci-total-row">
+      <span>VAT
+        {% if readonly %}({{ si.vat_percent|int }} %){% else %}
+        (<input class="po-number-input si-vat-pct" name="vat_percent" value="{{ si.vat_percent|int }}" style="width:2.5rem;text-align:center" /> %)
+        {% endif %}
+      </span>
+      <span id="si-vat-amount">{{ si.vat_amount|money if si.vat_amount else '0.00' }}</span>
+    </div>
+    <div class="ci-total-row ci-total-grand">
+      <span>TOTAL TO PAY</span>
+      <span id="si-total-pay">{{ si.total_to_pay|money if si.total_to_pay else '0.00' }}</span>
+    </div>
+    <div class="ci-total-row ci-inwords-row">
+      <span>Total Payable In Words</span>
+      {% if readonly %}<span>{{ si.amount_in_words or '' }}</span>
+      {% else %}
+      <input class="po-mkinput ci-inwords-input" name="amount_in_words" value="{{ si.amount_in_words or '' }}" placeholder="e.g. Euro Three Thousand Only" />
+      {% endif %}
+    </div>
+  </div>
+
+  {# ── Terms + Enclosures ── #}
+  <div class="ci-pay-enc-grid">
+    <div>
+      <span class="ci-ship-label">Terms of Delivery</span>
+      {% if readonly %}{{ si.terms_of_delivery or '—' }}{% else %}
+      <input class="po-mkinput" name="terms_of_delivery" value="{{ si.terms_of_delivery or '' }}" placeholder="e.g. CIF / CFR / DDP" />{% endif %}
+    </div>
+    <div>
+      <span class="ci-ship-label">Payment Terms</span>
+      {% if readonly %}{{ si.payment_terms or '—' }}{% else %}
+      <input class="po-mkinput" name="payment_terms" value="{{ si.payment_terms or 'End of Month 60 days' }}" />{% endif %}
+    </div>
+    <div class="full" style="grid-column:1/-1">
+      <span class="ci-ship-label">Enclosures</span>
+      {% if readonly %}<span style="white-space:pre-line">{{ si.enclosures or '' }}</span>{% else %}
+      <textarea class="po-mkinput ci-enc-textarea" name="enclosures" rows="3">{{ si.enclosures or '' }}</textarea>{% endif %}
+    </div>
+  </div>
+
+  {# ── Bank Details ── #}
+  <div class="ci-bank-block">
+    <p class="ci-bank-title">BANK DETAILS</p>
+    <div class="ci-bank-grid">
+      <span class="ci-ship-label">Bank</span>
+      {% if readonly %}{{ si.bank_name or '' }}{% else %}
+      <input class="po-mkinput" name="bank_name" value="{{ si.bank_name or '' }}" />{% endif %}
+
+      <span class="ci-ship-label">Account No</span>
+      {% if readonly %}{{ si.bank_account_no or '' }}{% else %}
+      <input class="po-mkinput" name="bank_account_no" value="{{ si.bank_account_no or '' }}" />{% endif %}
+
+      <span class="ci-ship-label">IBAN</span>
+      {% if readonly %}{{ si.bank_iban or '' }}{% else %}
+      <input class="po-mkinput" name="bank_iban" value="{{ si.bank_iban or '' }}" />{% endif %}
+
+      <span class="ci-ship-label">BIC</span>
+      {% if readonly %}{{ si.bank_bic or '' }}{% else %}
+      <input class="po-mkinput" name="bank_bic" value="{{ si.bank_bic or '' }}" />{% endif %}
+    </div>
+  </div>
+
+  {# ── Signature + Footer ── #}
+  <div class="po-footer">
+    <div class="po-sig-block">
+      <p class="po-sig-for">For Godavari Biorefineries B.V.</p>
+      <div class="po-sig-line"></div>
+      <p class="po-sig-label">Authorised Signatory</p>
+    </div>
+    <div class="po-footer-company">
+      <img src="/static/footer logo.png" alt="Footer logo" class="po-footer-logo" />
+      <div class="po-footer-details">
+        <p>Commercial Register Number 34325188</p>
+        <p>VAT : NL8203.86.157.B.01</p>
+        <p>Bank : Rabobank – Haarlem / IBAN NL83RABO 0311323650 / BIC : RABONL2U</p>
+        <p>Address : Opaallaan 1180, &nbsp; 2132 LN &nbsp; Hoofddorp. &nbsp; The Netherlands.</p>
+        <p>Tel : +31 6 11 12 61 66</p>
+      </div>
+    </div>
+  </div>
+
+</div>
+{% endmacro %}

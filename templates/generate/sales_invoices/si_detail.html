@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% from "generate/sales_invoices/_si_body.html" import si_body %}
+{% block title %}Invoice {{ si.invoice_number }}{% endblock %}
+{% block extra_css %}
+<link rel="stylesheet" href="/static/generate.css" />
+<link rel="stylesheet" href="/static/po_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+<link rel="stylesheet" href="/static/si_wysiwyg.css" />
+{% endblock %}
+{% block content %}
+<div class="page-header no-print">
+  <div>
+    <h1>Invoice {{ si.invoice_number }}</h1>
+    <p class="subtitle">
+      <a class="link" href="/generate/sales-invoices">← Commercial Invoices</a> ·
+      <a class="link" href="/generate">Generate</a>
+    </p>
+  </div>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="/generate/sales-invoices/{{ si.id }}/edit" class="btn btn-primary">Edit</a>
+    <form method="post" action="/generate/sales-invoices/{{ si.id }}/duplicate" style="display:inline">
+      <button type="submit" class="btn btn-ghost">Duplicate</button>
+    </form>
+    <a href="/generate/sales-invoices/{{ si.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
+    <a href="/generate/sales-invoices/{{ si.id }}/print" class="btn btn-ghost" target="_blank">Print</a>
+    <form method="post" action="/generate/sales-invoices/{{ si.id }}/delete" style="display:inline"
+          onsubmit="return confirm('Delete this Commercial Invoice?');">
+      <button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button>
+    </form>
+  </div>
+</div>
+
+{% if saved_msg %}<p class="card no-print" style="background:#ecfdf5;border-color:#86efac">{{ saved_msg }}</p>{% endif %}
+
+<div class="po-shell">
+  {{ si_body(si, readonly=true) }}
+</div>
+{% endblock %}

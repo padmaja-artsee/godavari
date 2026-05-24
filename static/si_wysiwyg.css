@@ -1,0 +1,74 @@
+/* Commercial (Sales) Invoice styles
+   Self-contained — remove with the SI feature.
+   Shares po_wysiwyg.css and ci_wysiwyg.css base classes.
+*/
+
+/* ── Page wrapper ─────────────────────────────────────────────────── */
+.si-page { font-size: .88rem; }
+
+/* ── Delivery section ─────────────────────────────────────────────── */
+.si-delivery-grid {
+  border: 1px solid #c8d8cc;
+  border-radius: 4px;
+  padding: .6rem .85rem;
+  margin: .5rem 0;
+  background: #f8faf9;
+}
+
+.si-del-row {
+  display: flex;
+  align-items: baseline;
+  gap: .5rem;
+  padding: .22rem 0;
+  border-bottom: 1px dashed #dde8e2;
+}
+.si-del-row:last-child { border-bottom: none; }
+
+/* ── Product table ────────────────────────────────────────────────── */
+.si-table { width: 100%; border-collapse: collapse; margin: .5rem 0; }
+
+/* Column widths */
+.si-col-product { width: 38%; }
+.si-col-qty     { width: 11%; text-align: center; }
+.si-col-rate    { width: 16%; text-align: right; }
+.si-col-val     { width: 14%; text-align: right; }
+.si-col-remark  { width: 21%; }
+
+/* Brand/meta rows */
+.si-brand-row td,
+.si-meta-row td {
+  padding: .3rem .5rem;
+  background: #f5f9f6;
+  font-size: .83rem;
+  color: #374151;
+  border-top: 1px dashed #d1e8da;
+}
+
+.si-brand-label {
+  font-weight: 600;
+  color: #1A5632;
+  margin-right: .3rem;
+  white-space: nowrap;
+}
+
+.si-brand-input {
+  font-size: .83rem !important;
+}
+
+/* Calculated value output */
+.si-val-cell { position: relative; }
+.si-line-value {
+  display: block;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Print overrides ──────────────────────────────────────────────── */
+@media print {
+  .si-del-row    { border-bottom: 1px solid #ccc; }
+  .no-print-bg td { background: transparent !important; }
+  .si-brand-input,
+  .si-brand-row input,
+  .si-meta-row  input { display: none; }
+  .si-brand-row td::after { content: attr(data-print); }
+}
