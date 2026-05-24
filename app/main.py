@@ -1243,6 +1243,46 @@ async def shipping_export_xlsx(
     )
 
 
+@app.get("/leads/export.xlsx")
+async def leads_export_xlsx(
+    q: str = Query(""),
+    company: str = Query(""),
+):
+    customers = list_customers()
+    if q:
+        q_lower = q.lower()
+        customers = [c for c in customers if q_lower in (c.get("company","") or "").lower()
+                     or q_lower in (c.get("contact_name","") or "").lower()]
+    if company:
+        customers = [c for c in customers if c.get("company","") == company]
+    COLS = ["company","contact_name","email","phone","country","city","product_interest","created_at"]
+    fname = export_filename("gbinc-leads", "", "xlsx")
+    return _download_response(
+        to_xlsx_bytes([("Leads", customers, COLS)]),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/deals/export.xlsx")
+async def deals_export_xlsx(
+    status: str = Query("open"),
+    period: str = Query("all"),
+    company: str = Query(""),
+    product: str = Query(""),
+    q: str = Query(""),
+):
+    rows = list_active_leads(status, period, company, product, "", q)
+    COLS = ["date","company","contact_name","product","quantity","unit","deal_value",
+            "currency","status","expected_close","notes"]
+    fname = export_filename("gbinc-active-leads", status, "xlsx")
+    return _download_response(
+        to_xlsx_bytes([("Active Leads", rows, COLS)]),
+        fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @app.get("/summary", response_class=HTMLResponse)
 async def summary(
     request: Request,

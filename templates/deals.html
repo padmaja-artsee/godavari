@@ -47,6 +47,8 @@
       <input name="q" value="{{ q }}" placeholder="Search" />
       <button type="submit" class="btn btn-primary">Apply</button>
       <a href="/deals?status=all&period=month&view={{ view }}" class="btn btn-ghost">Clear</a>
+      <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&company={{ company }}&product={{ product }}&q={{ q }}"
+         class="btn btn-ghost">↓ Export Excel</a>
     </div>
   </form>
 
