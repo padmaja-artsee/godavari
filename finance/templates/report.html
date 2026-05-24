@@ -26,6 +26,7 @@
       {% endif %}
     </form>
     <button onclick="window.print()" class="f-btn-sm f-btn-primary no-print">🖨 Print / PDF</button>
+    <a href="{{ _base }}/export/variances.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline no-print">↓ Export Excel</a>
     {% if archived %}<span class="f-badge f-badge-warning no-print">Archived</span>{% endif %}
   </div>
 </div>

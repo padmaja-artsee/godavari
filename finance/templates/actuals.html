@@ -14,6 +14,7 @@
       </select>
     </form>
     <a href="{{ _base }}/expenses/new?fy={{ fy }}" class="f-btn-sm f-btn-primary">+ Record Expense</a>
+    <a href="{{ _base }}/export/actuals.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
     {% if saved %}<span class="f-badge f-badge-green">Saved ✓</span>{% endif %}
     {% if archived %}<span class="f-badge f-badge-warning">Archived</span>{% endif %}
   </div>

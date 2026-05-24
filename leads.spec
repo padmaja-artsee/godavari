@@ -1,12 +1,11 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller spec for the Leads desktop app.
+PyInstaller spec for the GBInc Leads + Finance desktop app.
 
 Build with:
     pyinstaller leads.spec
 
-Output:  dist/leads          (Mac/Linux binary)
-         dist/leads.exe      (Windows)
+Output:  dist/GodavariLeads.app  (macOS)
 """
 import sys
 from pathlib import Path
@@ -20,14 +19,15 @@ a = Analysis(
     pathex=[str(ROOT)],
     binaries=[],
     datas=[
-        # Bundle templates, static assets, and the data directory (seed + templates).
-        (str(ROOT / "templates"),  "templates"),
-        (str(ROOT / "static"),     "static"),
-        (str(ROOT / "data"),       "data"),
+        # ── Leads ──────────────────────────────────────────────────────────
+        (str(ROOT / "templates"),              "templates"),
+        (str(ROOT / "static"),                 "static"),
+        (str(ROOT / "data"),                   "data"),
+        # ── Finance sub-app ────────────────────────────────────────────────
+        (str(ROOT / "finance" / "templates"),  "finance/templates"),
+        (str(ROOT / "finance" / "static"),     "finance/static"),
+        # finance/__init__.py and app/__init__.py are picked up via hiddenimports
     ],
-    # Note: data/leads.db is intentionally included so the app can copy it to
-    # ~/Library/Application Support/GodavariLeads/ on first launch, avoiding
-    # slow JSON seed loading.
 
     hiddenimports=[
         # FastAPI / Starlette internals not always auto-detected.
@@ -47,7 +47,10 @@ a = Analysis(
         "starlette.middleware",
         "starlette.middleware.cors",
         "multipart",
-        # App modules.
+        "openpyxl",
+        "openpyxl.styles",
+        "openpyxl.utils",
+        # ── Leads modules ──────────────────────────────────────────────────
         "app.main",
         "app.database",
         "app.generate",
@@ -59,6 +62,17 @@ a = Analysis(
         "app.si_exports",
         "app.delivery_notes",
         "app.dn_exports",
+        "app.deal_files",
+        "app.products",
+        "app.exports",
+        "app.seed",
+        # ── Finance modules ────────────────────────────────────────────────
+        "finance",
+        "finance.app",
+        "finance.app.main",
+        "finance.app.database",
+        "finance.app.expenses",
+        "finance.app.exports",
     ],
     hookspath=[],
     runtime_hooks=[],
@@ -81,8 +95,8 @@ exe = EXE(  # noqa: F821
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=True,    # Show console for debugging - set False for production release.
-    # icon="static/icon.icns",   # Uncomment and add icon file for branded app.
+    console=False,
+    icon=str(ROOT / "src-tauri" / "icons" / "icon.icns"),
 )
 
 coll = COLLECT(  # noqa: F821
@@ -96,16 +110,17 @@ coll = COLLECT(  # noqa: F821
     name="leads",
 )
 
-# Mac: wrap in a proper .app bundle.
+# macOS: wrap in a proper .app bundle.
 if sys.platform == "darwin":
     app = BUNDLE(  # noqa: F821
         coll,
-        name="Leads.app",
-        # icon="static/icon.icns",
+        name="GodavariLeads.app",
+        icon=str(ROOT / "src-tauri" / "icons" / "icon.icns"),
         bundle_identifier="com.godavari.leads",
         info_plist={
-            "NSPrincipalClass": "NSApplication",
-            "NSHighResolutionCapable": True,
-            "CFBundleShortVersionString": "1.0.0",
+            "NSPrincipalClass":         "NSApplication",
+            "NSHighResolutionCapable":  True,
+            "CFBundleShortVersionString": "1.1.0",
+            "CFBundleDisplayName":      "Godavari Leads",
         },
     )

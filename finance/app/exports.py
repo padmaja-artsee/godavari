@@ -1,12 +1,17 @@
-"""Excel export — matches Budget vs Actuals.xlsx structure."""
+"""Excel export — budget template, grid exports, list exports."""
 from __future__ import annotations
 from io import BytesIO
+from typing import List
 
 import openpyxl
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
-from finance.app.database import FY_MONTHS, MONTH_LABELS, SECTION_LABELS
+from finance.app.database import (
+    FY_MONTHS, MONTH_LABELS, SECTION_LABELS, SECTION_ORDER,
+    compute_grid, get_budget_grid, get_transaction_rollup,
+    get_actuals_manual,
+)
 
 _GREEN   = "1C5631"
 _GREEN_D = "134023"
@@ -197,3 +202,307 @@ def parse_budget_upload(file_bytes: bytes, items: list[dict]) -> dict:
             if val:
                 values[f"{lid}_{month}"] = val
     return values
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Shared helpers for grid exports
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _grid_header(ws, title: str, subtitle: str, ncols: int) -> None:
+    ws.merge_cells(f"A1:{get_column_letter(ncols)}1")
+    c = ws["A1"]; c.value = "Godavari Biorefineries Inc"
+    c.font = _f(bold=True, size=12, color=_WHITE); c.fill = _fill(_GREEN)
+    c.alignment = _al(h="left"); ws.row_dimensions[1].height = 20
+
+    ws.merge_cells(f"A2:{get_column_letter(ncols)}2")
+    c = ws["A2"]; c.value = title
+    c.font = _f(bold=True, size=10, color=_WHITE); c.fill = _fill(_GREEN)
+    c.alignment = _al(h="left"); ws.row_dimensions[2].height = 16
+
+    ws.merge_cells(f"A3:{get_column_letter(ncols)}3")
+    c = ws["A3"]; c.value = subtitle
+    c.font = _f(size=9, color="666666"); c.alignment = _al(h="left")
+    ws.row_dimensions[3].height = 14
+
+
+SECTION_STYLES_XL = {
+    "Total Income":            ("subtotal", _GREEN_L, True),
+    "Total Employee Costs":    ("subtotal", _GREEN_L, True),
+    "Total Office Costs":      ("subtotal", _GREEN_L, True),
+    "Total Admin":             ("subtotal", _GREEN_L, True),
+    "Total Travel":            ("subtotal", _GREEN_L, True),
+    "Total Expenses":          ("highlight","FFF9C4",  True),
+    "Net (Income - Expenses)": ("total",    _GREEN_L,  True),
+}
+
+
+def _write_grid_sheet(ws, items: list, grid: dict, title: str, subtitle: str) -> None:
+    ncols = 2 + len(FY_MONTHS) + 1  # label + 12 months + total
+    _grid_header(ws, title, subtitle, ncols)
+
+    # Column headers row 5
+    hdr = 5
+    ws.cell(hdr, 1, "Line Item").font = _f(bold=True, size=8, color=_WHITE)
+    ws.cell(hdr, 1).fill = _fill(_GREEN)
+    for i, m in enumerate(FY_MONTHS, start=2):
+        c = ws.cell(hdr, i, MONTH_LABELS[m].upper())
+        c.font = _f(bold=True, size=8, color=_WHITE)
+        c.fill = _fill(_GREEN); c.alignment = _al(h="center"); c.border = _border()
+    c = ws.cell(hdr, ncols, "TOTAL")
+    c.font = _f(bold=True, size=8, color=_WHITE)
+    c.fill = _fill(_GREEN_D); c.alignment = _al(h="center"); c.border = _border()
+    ws.row_dimensions[hdr].height = 14
+
+    ws.column_dimensions["A"].width = 32
+    for col in range(2, ncols + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 10
+
+    full = compute_grid(grid, items)
+    data_row = hdr + 1
+    prev_sec = None
+
+    for item in items:
+        sec = item["section"]
+        if sec == "totals":
+            data_row += 1  # spacer
+        if sec != prev_sec and sec != "totals":
+            # Section header
+            ws.merge_cells(f"A{data_row}:{get_column_letter(ncols)}{data_row}")
+            c = ws.cell(data_row, 1, SECTION_LABELS.get(sec, sec).upper())
+            c.font = _f(bold=True, size=8, color=_WHITE); c.fill = _fill(_GREEN)
+            ws.row_dimensions[data_row].height = 13
+            data_row += 1; prev_sec = sec
+
+        style_info = SECTION_STYLES_XL.get(item["name"])
+        fill_color = style_info[1] if style_info else (_GREY if data_row % 2 == 0 else _WHITE)
+        row_font = _f(bold=bool(style_info))
+
+        c = ws.cell(data_row, 1, item["name"])
+        c.font = row_font; c.fill = _fill(fill_color)
+        c.alignment = _al(h="left"); c.border = _border()
+
+        row_total = 0.0
+        for i, m in enumerate(FY_MONTHS, start=2):
+            val = full.get((item["id"], m), 0.0)
+            row_total += val
+            cell = ws.cell(data_row, i, val if val else None)
+            cell.fill = _fill(fill_color); cell.border = _border()
+            cell.number_format = "#,##0.00"; cell.alignment = _al(h="right")
+            cell.font = row_font
+
+        tot_cell = ws.cell(data_row, ncols, row_total if row_total else None)
+        tot_cell.fill = _fill(_GREEN_L if style_info else _GREY)
+        tot_cell.number_format = "#,##0.00"; tot_cell.alignment = _al(h="right")
+        tot_cell.font = _f(bold=True); tot_cell.border = _border()
+        ws.row_dimensions[data_row].height = 13
+        data_row += 1
+
+    ws.freeze_panes = "B6"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Budget export
+# ─────────────────────────────────────────────────────────────────────────────
+
+def export_budget_xlsx(items: list, fiscal_year: int) -> tuple:
+    wb = openpyxl.Workbook()
+    ws = wb.active; ws.title = f"Budget FY{fiscal_year}"
+    grid = get_budget_grid(fiscal_year)
+    _write_grid_sheet(ws, items, grid,
+        f"Budget — FY{fiscal_year}",
+        f"Apr {fiscal_year-1} – Mar {fiscal_year}")
+    buf = BytesIO(); wb.save(buf)
+    return buf.getvalue(), f"GBInc-Budget-FY{fiscal_year}.xlsx"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Actuals export
+# ─────────────────────────────────────────────────────────────────────────────
+
+def export_actuals_xlsx(items: list, fiscal_year: int) -> tuple:
+    wb = openpyxl.Workbook()
+    ws = wb.active; ws.title = f"Actuals FY{fiscal_year}"
+    rollup  = get_transaction_rollup(fiscal_year)
+    manual  = get_actuals_manual(fiscal_year)
+    combined = {}
+    for k in set(list(rollup.keys()) + list(manual.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    _write_grid_sheet(ws, items, combined,
+        f"Actuals — FY{fiscal_year}",
+        f"Apr {fiscal_year-1} – Mar {fiscal_year}")
+    buf = BytesIO(); wb.save(buf)
+    return buf.getvalue(), f"GBInc-Actuals-FY{fiscal_year}.xlsx"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Budget vs Actuals variances export
+# ─────────────────────────────────────────────────────────────────────────────
+
+def export_variances_xlsx(items: list, fiscal_year: int) -> tuple:
+    wb = openpyxl.Workbook()
+    ws = wb.active; ws.title = f"Variances FY{fiscal_year}"
+
+    ncols = 2 + len(FY_MONTHS) * 3 + 3  # label + (bud/act/var)*12 + 3 totals
+    _grid_header(ws, f"Budget vs Actuals — FY{fiscal_year}",
+                 f"Apr {fiscal_year-1} – Mar {fiscal_year}", min(ncols, 50))
+
+    b_grid = compute_grid(get_budget_grid(fiscal_year), items)
+    rollup  = get_transaction_rollup(fiscal_year)
+    manual  = get_actuals_manual(fiscal_year)
+    combined = {}
+    for k in set(list(rollup.keys()) + list(manual.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    a_grid = compute_grid(combined, items)
+
+    # Sub-header rows
+    hdr1, hdr2 = 5, 6
+    ws.cell(hdr1, 1, "Line Item").font = _f(bold=True, size=8, color=_WHITE)
+    ws.cell(hdr1, 1).fill = _fill(_GREEN)
+    col = 2
+    for m in FY_MONTHS:
+        lbl = MONTH_LABELS[m].upper()
+        ws.merge_cells(f"{get_column_letter(col)}{hdr1}:{get_column_letter(col+2)}{hdr1}")
+        c = ws.cell(hdr1, col, lbl)
+        c.font = _f(bold=True, size=7, color=_WHITE); c.fill = _fill(_GREEN)
+        c.alignment = _al(h="center")
+        for sub, nm in [(col,"Bud"),(col+1,"Act"),(col+2,"Var")]:
+            c2 = ws.cell(hdr2, sub, nm)
+            c2.font = _f(bold=True, size=7); c2.fill = _fill(_GREY)
+            c2.alignment = _al(h="center"); c2.border = _border()
+        col += 3
+    for sub, nm in [(col,"Bud"),(col+1,"Act"),(col+2,"Var")]:
+        c2 = ws.cell(hdr1, sub, "TOTAL" if sub==col else "")
+        c3 = ws.cell(hdr2, sub, nm)
+        c2.font = _f(bold=True, size=7, color=_WHITE); c2.fill = _fill(_GREEN_D)
+        c3.font = _f(bold=True, size=7); c3.fill = _fill(_GREY)
+        c3.alignment = _al(h="center"); c3.border = _border()
+
+    ws.column_dimensions["A"].width = 30
+    for c in range(2, col + 4):
+        ws.column_dimensions[get_column_letter(c)].width = 8
+
+    data_row = hdr2 + 1
+    prev_sec = None
+    for item in items:
+        sec = item["section"]
+        if sec == "totals": data_row += 1
+        if sec != prev_sec and sec != "totals":
+            ws.merge_cells(f"A{data_row}:{get_column_letter(col+2)}{data_row}")
+            c = ws.cell(data_row, 1, SECTION_LABELS.get(sec, sec).upper())
+            c.font = _f(bold=True, size=7, color=_WHITE); c.fill = _fill(_GREEN)
+            data_row += 1; prev_sec = sec
+
+        style_info = SECTION_STYLES_XL.get(item["name"])
+        fill_color = style_info[1] if style_info else (_GREY if data_row % 2 == 0 else _WHITE)
+        ws.cell(data_row, 1, item["name"]).font = _f(bold=bool(style_info))
+        ws.cell(data_row, 1).fill = _fill(fill_color)
+        ws.cell(data_row, 1).alignment = _al(h="left"); ws.cell(data_row, 1).border = _border()
+
+        b_tot = a_tot = 0.0
+        c = 2
+        for m in FY_MONTHS:
+            b = b_grid.get((item["id"], m), 0.0); a = a_grid.get((item["id"], m), 0.0)
+            v = b - a if item["section"] != "income" else a - b
+            b_tot += b; a_tot += a
+            for ci, val in [(c,b),(c+1,a),(c+2,v)]:
+                cell = ws.cell(data_row, ci, val if val else None)
+                cell.number_format = "#,##0.00"; cell.border = _border()
+                cell.fill = _fill(fill_color); cell.alignment = _al(h="right")
+                if ci == c+2 and val:
+                    cell.font = _f(bold=True, color=("006100" if val >= 0 else "9C0006"))
+            c += 3
+        v_tot = b_tot - a_tot if item["section"] != "income" else a_tot - b_tot
+        for ci, val in [(c,b_tot),(c+1,a_tot),(c+2,v_tot)]:
+            cell = ws.cell(data_row, ci, val if val else None)
+            cell.number_format = "#,##0.00"; cell.border = _border()
+            cell.fill = _fill(_GREEN_L if style_info else _GREY)
+            cell.font = _f(bold=True, color=("006100" if ci==c+2 and v_tot>=0 else ("9C0006" if ci==c+2 else _BLACK)))
+        data_row += 1
+
+    ws.freeze_panes = "B7"
+    buf = BytesIO(); wb.save(buf)
+    return buf.getvalue(), f"GBInc-Variances-FY{fiscal_year}.xlsx"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Transactions list (expenses or income)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def export_transactions_xlsx(transactions: list, fiscal_year: int,
+                              tx_type: str = "expense") -> tuple:
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Income" if tx_type == "income" else "Expenses"
+
+    label = "Income Entries" if tx_type == "income" else "Expenses"
+    _grid_header(ws, f"{label} — FY{fiscal_year}",
+                 f"Apr {fiscal_year-1} – Mar {fiscal_year}", 8)
+
+    headers = ["Date","Account","Vendor","Payment Account","Reference","Currency","Amount","Notes"]
+    for i, h in enumerate(headers, 1):
+        c = ws.cell(5, i, h)
+        c.font = _f(bold=True, size=8, color=_WHITE); c.fill = _fill(_GREEN)
+        c.alignment = _al(h="center"); c.border = _border()
+
+    widths = [12, 28, 22, 18, 16, 9, 12, 30]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    total = 0.0
+    for r, t in enumerate(transactions, 6):
+        row_fill = _fill(_WHITE) if r % 2 == 0 else _fill(_GREY)
+        vals = [
+            t.get("date",""), t.get("account_name",""), t.get("vendor_name") or "",
+            t.get("payment_account_name") or "", t.get("reference") or "",
+            t.get("currency","USD"), t.get("amount",0), t.get("notes") or "",
+        ]
+        for ci, v in enumerate(vals, 1):
+            cell = ws.cell(r, ci, v)
+            cell.fill = row_fill; cell.border = _border()
+            if ci == 7:
+                cell.number_format = "#,##0.00"; cell.alignment = _al(h="right")
+            ws.row_dimensions[r].height = 13
+        total += t.get("amount", 0)
+
+    # Total row
+    tr = 6 + len(transactions)
+    ws.cell(tr, 6, "TOTAL").font = _f(bold=True)
+    ws.cell(tr, 6).fill = _fill(_GREEN_L); ws.cell(tr, 6).border = _border()
+    c = ws.cell(tr, 7, total)
+    c.font = _f(bold=True); c.fill = _fill(_GREEN_L)
+    c.number_format = "#,##0.00"; c.alignment = _al(h="right"); c.border = _border()
+
+    ws.freeze_panes = "A6"
+    fname = f"GBInc-{'Income' if tx_type=='income' else 'Expenses'}-FY{fiscal_year}.xlsx"
+    buf = BytesIO(); wb.save(buf)
+    return buf.getvalue(), fname
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Vendors list
+# ─────────────────────────────────────────────────────────────────────────────
+
+def export_vendors_xlsx(vendors: list) -> tuple:
+    wb = openpyxl.Workbook()
+    ws = wb.active; ws.title = "Vendors"
+    _grid_header(ws, "Vendors", "Godavari Biorefineries Inc", 5)
+
+    for i, h in enumerate(["Name","Email","Phone","Notes","ID"], 1):
+        c = ws.cell(5, i, h)
+        c.font = _f(bold=True, size=8, color=_WHITE); c.fill = _fill(_GREEN)
+        c.alignment = _al(h="center"); c.border = _border()
+
+    for col, w in [(1,28),(2,26),(3,16),(4,36),(5,8)]:
+        ws.column_dimensions[get_column_letter(col)].width = w
+
+    for r, v in enumerate(vendors, 6):
+        row_fill = _fill(_WHITE) if r % 2 == 0 else _fill(_GREY)
+        for ci, val in enumerate([v.get("name",""), v.get("email",""),
+                                    v.get("phone",""), v.get("notes",""),
+                                    v.get("id","")], 1):
+            cell = ws.cell(r, ci, val)
+            cell.fill = row_fill; cell.border = _border()
+            ws.row_dimensions[r].height = 13
+
+    buf = BytesIO(); wb.save(buf)
+    return buf.getvalue(), "GBInc-Vendors.xlsx"

@@ -24,6 +24,7 @@
     </form>
     <a href="{{ _base }}/expenses/new?fy={{ fy }}&tx_type={{ tx_type }}&account_id={{ filter_account }}&vendor_id={{ filter_vendor }}"
        class="f-btn-sm f-btn-primary">+ {{ "Record Income" if tx_type=="income" else "Record Expense" }}</a>
+    <a href="{{ _base }}/export/transactions.xlsx?fy={{ fy }}&tx_type={{ tx_type }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
   </div>
 </div>
 

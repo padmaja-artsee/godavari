@@ -615,6 +615,76 @@ async def fy_unarchive(fy: int = Form(...)):
 
 
 # ---------------------------------------------------------------------------
+# Excel exports — work in both web and desktop app
+# ---------------------------------------------------------------------------
+
+def _excel_response(content: bytes, filename: str):
+    """Return file download, or save to ~/Downloads in desktop bundle."""
+    import sys as _sys
+    bundle = os.environ.get("LEADS_BUNDLE_BASE") or getattr(_sys, "frozen", False)
+    if bundle:
+        import subprocess
+        dest = Path.home() / "Downloads" / filename
+        dest.write_bytes(content)
+        try:
+            subprocess.Popen(["open", str(dest)])
+        except Exception:
+            pass
+        return Response(status_code=204)
+    return Response(
+        content=content,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/export/budget.xlsx")
+async def export_budget(fy: int = Query(0)):
+    from finance.app.exports import export_budget_xlsx
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0] if fys else 2027
+    content, fname = export_budget_xlsx(list_line_items(), fy)
+    return _excel_response(content, fname)
+
+
+@app.get("/export/actuals.xlsx")
+async def export_actuals(fy: int = Query(0)):
+    from finance.app.exports import export_actuals_xlsx
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0] if fys else 2027
+    content, fname = export_actuals_xlsx(list_line_items(), fy)
+    return _excel_response(content, fname)
+
+
+@app.get("/export/variances.xlsx")
+async def export_variances(fy: int = Query(0)):
+    from finance.app.exports import export_variances_xlsx
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0] if fys else 2027
+    content, fname = export_variances_xlsx(list_line_items(), fy)
+    return _excel_response(content, fname)
+
+
+@app.get("/export/transactions.xlsx")
+async def export_transactions_route(
+    fy: int = Query(0), tx_type: str = Query("expense")
+):
+    from finance.app.exports import export_transactions_xlsx
+    fys = get_fiscal_years()
+    if not fy: fy = fys[0] if fys else 2027
+    txs = list_transactions(fiscal_year=fy, transaction_type=tx_type)
+    content, fname = export_transactions_xlsx(txs, fy, tx_type)
+    return _excel_response(content, fname)
+
+
+@app.get("/export/vendors.xlsx")
+async def export_vendors_route():
+    from finance.app.exports import export_vendors_xlsx
+    content, fname = export_vendors_xlsx(list_vendors())
+    return _excel_response(content, fname)
+
+
+# ---------------------------------------------------------------------------
 # Vendors
 # ---------------------------------------------------------------------------
 
