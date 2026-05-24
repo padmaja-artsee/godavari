@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{% block title %}Finance{% endblock %} · GBInc</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/static/finance.css" />
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+  <div class="f-layout">
+    <aside class="f-sidebar">
+      <div class="f-brand">
+        <img src="/leads-static/logo.png" alt="GBInc" class="f-logo" />
+        <span class="f-brand-sub">Finance</span>
+      </div>
+      <nav class="f-nav">
+        <a href="/"        class="{% if page=='dashboard' %}active{% endif %}">Dashboard</a>
+        <a href="/budget"  class="{% if page=='budget'    %}active{% endif %}">Budget</a>
+        <a href="/actuals" class="{% if page=='actuals'   %}active{% endif %}">Actuals</a>
+        <a href="/report"  class="{% if page=='report'    %}active{% endif %}">Budget vs Actuals</a>
+      </nav>
+      <div class="f-sidebar-footer">
+        <a href="http://127.0.0.1:{{ leads_port }}" class="f-switch-link">← Leads</a>
+      </div>
+    </aside>
+    <main class="f-main">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</body>
+</html>

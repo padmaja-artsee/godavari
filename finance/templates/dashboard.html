@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Dashboard FY{{ fy }}{% endblock %}
+{% block extra_css %}
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+{% endblock %}
+{% block content %}
+{% set page = "dashboard" %}
+
+<div class="f-page-header">
+  <div>
+    <h1>Financial Dashboard</h1>
+    <p class="f-subtitle">GBInc · FY{{ fy }} (Apr {{ fy - 1 }} – Mar {{ fy }}) · USD $1000s</p>
+  </div>
+  <div class="f-fy-picker">
+    {% for y in fiscal_years %}
+    <a href="/?fy={{ y }}" class="f-fy-btn {% if y == fy %}active{% endif %}">FY{{ y }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="f-kpi-row">
+  <div class="f-kpi">
+    <div class="f-kpi-label">Total Income (Actual)</div>
+    <div class="f-kpi-value">${{ "%.1f"|format(total_income_actual) }}k</div>
+  </div>
+  <div class="f-kpi">
+    <div class="f-kpi-label">Total Expenses (Actual)</div>
+    <div class="f-kpi-value">${{ "%.1f"|format(total_expenses_actual) }}k</div>
+  </div>
+  <div class="f-kpi {% if ebitda_actual_total >= 0 %}f-kpi-positive{% else %}f-kpi-negative{% endif %}">
+    <div class="f-kpi-label">EBITDA (Actual)</div>
+    <div class="f-kpi-value">${{ "%.1f"|format(ebitda_actual_total) }}k</div>
+  </div>
+  <div class="f-kpi">
+    <div class="f-kpi-label">EBITDA (Budget)</div>
+    <div class="f-kpi-value">${{ "%.1f"|format(ebitda_budget_total) }}k</div>
+  </div>
+  {% if ebitda_budget_total %}
+  <div class="f-kpi {% if ebitda_actual_total >= ebitda_budget_total %}f-kpi-positive{% else %}f-kpi-negative{% endif %}">
+    <div class="f-kpi-label">EBITDA vs Budget</div>
+    {% set var = ebitda_actual_total - ebitda_budget_total %}
+    {% set var_pct = (var / ebitda_budget_total * 100) %}
+    <div class="f-kpi-value">{{ "%.1f"|format(var_pct) }}%</div>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Charts -->
+<div class="f-charts-grid">
+  <div class="f-card">
+    <h3>EBITDA — Budget vs Actual ($k)</h3>
+    <div id="chart-ebitda"></div>
+  </div>
+  <div class="f-card">
+    <h3>Income vs Expenses — Actual ($k)</h3>
+    <div id="chart-ie"></div>
+  </div>
+</div>
+
+<div class="f-actions-row">
+  <a href="/budget?fy={{ fy }}"  class="f-btn f-btn-primary">Enter Budget</a>
+  <a href="/actuals?fy={{ fy }}" class="f-btn f-btn-primary">Enter Actuals</a>
+  <a href="/report?fy={{ fy }}"  class="f-btn f-btn-ghost">Budget vs Actuals Report</a>
+  <a href="/report/export.xlsx?fy={{ fy }}" class="f-btn f-btn-ghost">Export Excel</a>
+</div>
+
+<script>
+const months = {{ chart_months | tojson }};
+const ebitdaBudget = {{ ebitda_budget | tojson }};
+const ebitdaActual = {{ ebitda_actual | tojson }};
+const incomeActual  = {{ income_actual  | tojson }};
+const expenseActual = {{ expense_actual | tojson }};
+
+Plotly.newPlot('chart-ebitda', [
+  { x: months, y: ebitdaBudget, name: 'Budget',  type: 'bar', marker: { color: '#94a3b8' } },
+  { x: months, y: ebitdaActual, name: 'Actual',  type: 'bar', marker: { color: '#1C5631' } },
+], { barmode: 'group', margin: { t: 10, r: 10, b: 40, l: 50 }, legend: { orientation: 'h' },
+     plot_bgcolor: 'transparent', paper_bgcolor: 'transparent',
+     font: { family: 'DM Sans', size: 11 } }, { responsive: true });
+
+Plotly.newPlot('chart-ie', [
+  { x: months, y: incomeActual,  name: 'Income',   type: 'bar', marker: { color: '#1C5631' } },
+  { x: months, y: expenseActual, name: 'Expenses', type: 'bar', marker: { color: '#dc2626' } },
+], { barmode: 'group', margin: { t: 10, r: 10, b: 40, l: 50 }, legend: { orientation: 'h' },
+     plot_bgcolor: 'transparent', paper_bgcolor: 'transparent',
+     font: { family: 'DM Sans', size: 11 } }, { responsive: true });
+</script>
+{% endblock %}
