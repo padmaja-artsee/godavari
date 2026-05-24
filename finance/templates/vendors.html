@@ -6,7 +6,7 @@
   <h1 class="f-title">Vendors</h1>
   <div class="f-header-controls">
     {% if saved %}<span class="f-badge f-badge-green">Saved ✓</span>{% endif %}
-    <a href="/vendors/new" class="f-btn-sm f-btn-primary">+ Add Vendor</a>
+    <a href="{{ _base }}/vendors/new" class="f-btn-sm f-btn-primary">+ Add Vendor</a>
   </div>
 </div>
 
@@ -31,8 +31,8 @@
     <td>{{ v.phone or "—" }}</td>
     <td class="f-text-muted">{{ v.notes or "" }}</td>
     <td>
-      <a href="/vendors/{{ v.id }}/edit" class="f-action-btn">Edit</a>
-      <form method="post" action="/vendors/{{ v.id }}/delete" id="vdel-{{ v.id }}" style="display:inline">
+      <a href="{{ _base }}/vendors/{{ v.id }}/edit" class="f-action-btn">Edit</a>
+      <form method="post" action="{{ _base }}/vendors/{{ v.id }}/delete" id="vdel-{{ v.id }}" style="display:inline">
         <button type="button" class="f-action-btn f-action-del"
                 onclick="showConfirm('vdel-{{ v.id }}')">Delete</button>
       </form>
@@ -42,7 +42,7 @@
   </tbody>
 </table>
 {% else %}
-<div class="f-empty-state">No vendors yet. <a href="/vendors/new">Add one.</a></div>
+<div class="f-empty-state">No vendors yet. <a href="{{ _base }}/vendors/new">Add one.</a></div>
 {% endif %}
 
 <script>

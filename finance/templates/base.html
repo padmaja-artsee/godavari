@@ -4,46 +4,49 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}GBInc Finance{% endblock %}</title>
-  <link rel="stylesheet" href="/static/finance.css"/>
+  <link rel="stylesheet" href="{{ _base }}/static/finance.css"/>
 </head>
 <body>
 <nav class="f-sidebar">
   <div class="f-brand">
-    <img src="/leads-static/logo.png" alt="GBInc" class="f-logo" onerror="this.style.display='none'"/>
-    <span>Finance</span>
+    <img src="{{ _base }}/leads-static/logo.png" alt="GBInc" class="f-logo" onerror="this.style.display='none'"/>
+    <div class="f-brand-text">
+      <span class="f-brand-name">GBInc</span>
+      <span class="f-brand-sub">Finance</span>
+    </div>
   </div>
 
   <div class="f-nav-section">
     <span class="f-nav-label">Overview</span>
-    <a href="/" class="f-nav-link {% if page=='dashboard' %}active{% endif %}">Dashboard</a>
-    <a href="/analysis" class="f-nav-link {% if page=='analysis' %}active{% endif %}">Analysis</a>
-    <a href="/report" class="f-nav-link {% if page=='report' %}active{% endif %}">P&amp;L Report</a>
+    <a href="{{ _base }}/" class="f-nav-link {% if page=='dashboard' %}active{% endif %}">Dashboard</a>
+    <a href="{{ _base }}/analysis" class="f-nav-link {% if page=='analysis' %}active{% endif %}">Analysis</a>
+    <a href="{{ _base }}/report" class="f-nav-link {% if page=='report' %}active{% endif %}">P&amp;L Report</a>
   </div>
 
   <div class="f-nav-section">
     <span class="f-nav-label">Planning</span>
-    <a href="/budget" class="f-nav-link {% if page=='budget' %}active{% endif %}">Budget</a>
-    <a href="/actuals" class="f-nav-link {% if page=='actuals' %}active{% endif %}">Actuals</a>
-    <a href="/variances" class="f-nav-link {% if page=='variances' %}active{% endif %}">Budget vs Actuals</a>
+    <a href="{{ _base }}/budget" class="f-nav-link {% if page=='budget' %}active{% endif %}">Budget</a>
+    <a href="{{ _base }}/actuals" class="f-nav-link {% if page=='actuals' %}active{% endif %}">Actuals</a>
+    <a href="{{ _base }}/variances" class="f-nav-link {% if page=='variances' %}active{% endif %}">Budget vs Actuals</a>
   </div>
 
   <div class="f-nav-section">
     <span class="f-nav-label">Transactions</span>
-    <a href="/expenses/new?tx_type=expense" class="f-nav-link f-nav-action {% if page=='expense_new' %}active{% endif %}">+ Record Expense</a>
-    <a href="/expenses?tx_type=expense" class="f-nav-link f-nav-sub {% if page=='expenses' %}active{% endif %}">All Expenses</a>
-    <a href="/expenses/new?tx_type=income" class="f-nav-link f-nav-action {% if page=='income_new' %}active{% endif %}">+ Record Income</a>
-    <a href="/expenses?tx_type=income" class="f-nav-link f-nav-sub {% if page=='income_list' %}active{% endif %}">All Income</a>
+    <a href="{{ _base }}/expenses/new?tx_type=expense" class="f-nav-link f-nav-action {% if page=='expense_new' %}active{% endif %}">+ Record Expense</a>
+    <a href="{{ _base }}/expenses?tx_type=expense" class="f-nav-link f-nav-sub {% if page=='expenses' %}active{% endif %}">All Expenses</a>
+    <a href="{{ _base }}/expenses/new?tx_type=income" class="f-nav-link f-nav-action {% if page=='income_new' %}active{% endif %}">+ Record Income</a>
+    <a href="{{ _base }}/expenses?tx_type=income" class="f-nav-link f-nav-sub {% if page=='income_list' %}active{% endif %}">All Income</a>
   </div>
 
   <div class="f-nav-section">
     <span class="f-nav-label">Setup</span>
-    <a href="/vendors/new" class="f-nav-link f-nav-action {% if page=='vendor_new' %}active{% endif %}">+ Add Vendor</a>
-    <a href="/vendors" class="f-nav-link f-nav-sub {% if page=='vendors' %}active{% endif %}">All Vendors</a>
-    <a href="/settings" class="f-nav-link {% if page=='settings' %}active{% endif %}">Settings</a>
+    <a href="{{ _base }}/vendors/new" class="f-nav-link f-nav-action {% if page=='vendor_new' %}active{% endif %}">+ Add Vendor</a>
+    <a href="{{ _base }}/vendors" class="f-nav-link f-nav-sub {% if page=='vendors' %}active{% endif %}">All Vendors</a>
+    <a href="{{ _base }}/settings" class="f-nav-link {% if page=='settings' %}active{% endif %}">Settings</a>
   </div>
 
   <div class="f-nav-footer">
-    <a href="http://127.0.0.1:{{ leads_port }}/" class="f-nav-link f-back-link">← Leads</a>
+    <a href="/" class="f-leads-btn">← Leads</a>
   </div>
 </nav>
 

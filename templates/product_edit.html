@@ -119,7 +119,7 @@
         <a class="link" href="/products/files/{{ f.id }}" target="_blank">{{ f.filename }}</a>
         <span class="muted">{% if f.file_size %}{{ (f.file_size / 1024)|round(1) }} KB · {% endif %}{{ f.created_at[:10] }}</span>
         <form method="post" action="/products/files/{{ f.id }}/delete" class="inline-form"
-              data-confirm="Remove this PDF?">
+              onsubmit="return confirm('Remove this PDF?')">
           <button type="submit" class="btn btn-danger btn-sm">Remove</button>
         </form>
       </li>
@@ -145,7 +145,7 @@
     <p class="muted">Not linked to any deals or notes. Safe to remove from the catalogue.</p>
     {% endif %}
     <form method="post" action="/products/{{ product.id }}/delete" style="margin-top:0.75rem"
-          data-confirm="Delete {{ product.name }}?{% if u.deals or u.activities %} Related records will use General instead.{% endif %} PDFs will be removed.">
+          onsubmit="return confirm('Delete {{ product.name }}?{% if u.deals or u.activities %} Related records will use General instead.{% endif %} PDFs will be removed.')">
       <button type="submit" class="btn btn-danger btn-sm">Delete product</button>
     </form>
   </div>

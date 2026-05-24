@@ -8,12 +8,12 @@
     <p class="f-subtitle">Auto-populated from recorded transactions. Manual additions can be appended below each cell.</p>
   </div>
   <div class="f-header-controls">
-    <form method="get" action="/actuals">
+    <form method="get" action="{{ _base }}/actuals">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
       </select>
     </form>
-    <a href="/expenses/new?fy={{ fy }}" class="f-btn-sm f-btn-primary">+ Record Expense</a>
+    <a href="{{ _base }}/expenses/new?fy={{ fy }}" class="f-btn-sm f-btn-primary">+ Record Expense</a>
     {% if saved %}<span class="f-badge f-badge-green">Saved ✓</span>{% endif %}
     {% if archived %}<span class="f-badge f-badge-warning">Archived</span>{% endif %}
   </div>
@@ -96,7 +96,7 @@
 {% if not archived %}
 <details class="f-manual-details" style="margin-top:1.5rem">
   <summary class="f-section-title">Manual Additions (amounts not entered as transactions)</summary>
-  <form method="post" action="/actuals/manual">
+  <form method="post" action="{{ _base }}/actuals/manual">
     <input type="hidden" name="fy" value="{{ fy }}"/>
     <div class="f-grid-scroll">
     <table class="f-grid f-grid-compact">

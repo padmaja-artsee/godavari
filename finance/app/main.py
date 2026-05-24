@@ -1,7 +1,14 @@
-"""Finance FastAPI application — runs on port 8001."""
+"""Finance FastAPI application — runs standalone on port 8001 or
+   mounted at /finance inside the Leads app (Option B single-port).
+   Set FINANCE_BASE_PATH=/finance before importing this module when mounting.
+"""
 from __future__ import annotations
 import os, sys
 from pathlib import Path
+
+# When mounted as a sub-app, FINANCE_BASE_PATH is set to "/finance".
+# All internal redirects and template hrefs are prefixed with this.
+FINANCE_BASE = os.environ.get("FINANCE_BASE_PATH", "")
 
 from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
@@ -32,6 +39,7 @@ if (BASE.parent / "static").exists():
     app.mount("/leads-static", StaticFiles(directory=str(BASE.parent / "static")), name="leads_static")
 
 templates = Jinja2Templates(directory=str(BASE / "templates"))
+templates.env.globals["_base"] = FINANCE_BASE
 
 
 @app.on_event("startup")
@@ -187,7 +195,7 @@ async def save_budget(request: Request, fy: int = Form(...)):
         except (ValueError, AttributeError):
             values[k] = 0.0
     save_budget_grid(fy, values)
-    return RedirectResponse(f"/budget?fy={fy}&saved=1", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/budget?fy={fy}&saved=1", status_code=303)
 
 
 @app.get("/budget/template.xlsx")
@@ -218,21 +226,21 @@ async def budget_upload(fy: int = Form(...), file: UploadFile = File(...)):
     try:
         values = parse_budget_upload(data, items)
         save_budget_grid(fy, values)
-        return RedirectResponse(f"/budget?fy={fy}&saved=1&uploaded={len(values)}", status_code=303)
+        return RedirectResponse(f"{FINANCE_BASE}/budget?fy={fy}&saved=1&uploaded={len(values)}", status_code=303)
     except Exception as exc:
-        return RedirectResponse(f"/budget?fy={fy}&upload_error={str(exc)[:120]}", status_code=303)
+        return RedirectResponse(f"{FINANCE_BASE}/budget?fy={fy}&upload_error={str(exc)[:120]}", status_code=303)
 
 
 @app.post("/budget/add-line")
 async def budget_add_line(fy: int = Form(...), section: str = Form(...), name: str = Form(...)):
     add_line_item(section, name.strip())
-    return RedirectResponse(f"/budget?fy={fy}", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/budget?fy={fy}", status_code=303)
 
 
 @app.post("/budget/delete-line")
 async def budget_delete_line(fy: int = Form(...), lid: int = Form(...)):
     delete_line_item(lid)
-    return RedirectResponse(f"/budget?fy={fy}", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/budget?fy={fy}", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -283,7 +291,7 @@ async def save_manual(request: Request, fy: int = Form(...)):
         except (ValueError, AttributeError):
             values[k] = 0.0
     save_actuals_manual(fy, values)
-    return RedirectResponse(f"/actuals?fy={fy}&saved=1", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/actuals?fy={fy}&saved=1", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -524,13 +532,13 @@ async def expense_new_save(
         vendor_id=_or_none(vendor_id),
         reference=reference, notes=notes, receipt_filename=rfname,
     )
-    return RedirectResponse(f"/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
 
 
 @app.get("/expenses/{tx_id}/edit", response_class=HTMLResponse)
 async def expense_edit_form(request: Request, tx_id: int):
     tx = get_transaction(tx_id)
-    if not tx: return RedirectResponse("/expenses", status_code=303)
+    if not tx: return RedirectResponse(f"{FINANCE_BASE}/expenses", status_code=303)
     fys = get_fiscal_years()
     return templates.TemplateResponse("expense_form.html", _ctx(
         request, fy=tx["fiscal_year"], fiscal_years=fys,
@@ -568,13 +576,13 @@ async def expense_edit_save(
         vendor_id=_or_none(vendor_id),
         reference=reference, notes=notes, receipt_filename=rfname,
     )
-    return RedirectResponse(f"/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
 
 
 @app.post("/expenses/{tx_id}/delete")
 async def expense_delete(tx_id: int, fy: int = Form(0), tx_type: str = Form("expense")):
     delete_transaction(tx_id)
-    return RedirectResponse(f"/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
 
 
 @app.get("/expenses/{tx_id}/receipt")
@@ -597,13 +605,13 @@ async def expense_receipt(tx_id: int):
 @app.post("/fy/archive")
 async def fy_archive(fy: int = Form(...)):
     archive_year(fy)
-    return RedirectResponse(f"/?fy={fy}", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/?fy={fy}", status_code=303)
 
 
 @app.post("/fy/unarchive")
 async def fy_unarchive(fy: int = Form(...)):
     unarchive_year(fy)
-    return RedirectResponse(f"/?fy={fy}", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/?fy={fy}", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -626,13 +634,13 @@ async def vendor_new_form(request: Request):
 async def vendor_new(name: str = Form(...), email: str = Form(""),
                      phone: str = Form(""), notes: str = Form("")):
     save_vendor(name, email, phone, notes)
-    return RedirectResponse("/vendors?saved=1", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/vendors?saved=1", status_code=303)
 
 
 @app.get("/vendors/{vid}/edit", response_class=HTMLResponse)
 async def vendor_edit_form(request: Request, vid: int):
     v = next((x for x in list_vendors() if x["id"] == vid), None)
-    if not v: return RedirectResponse("/vendors", status_code=303)
+    if not v: return RedirectResponse(f"{FINANCE_BASE}/vendors", status_code=303)
     return templates.TemplateResponse("vendor_form.html", _ctx(request, vendor=v, page="vendor_new"))
 
 
@@ -640,13 +648,13 @@ async def vendor_edit_form(request: Request, vid: int):
 async def vendor_edit(vid: int, name: str = Form(...), email: str = Form(""),
                       phone: str = Form(""), notes: str = Form("")):
     save_vendor(name, email, phone, notes, vid=vid)
-    return RedirectResponse("/vendors?saved=1", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/vendors?saved=1", status_code=303)
 
 
 @app.post("/vendors/{vid}/delete")
 async def vendor_delete(vid: int):
     delete_vendor(vid)
-    return RedirectResponse("/vendors", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/vendors", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -666,32 +674,32 @@ async def settings_page(request: Request, saved: int = Query(0)):
 async def account_new(name: str = Form(...), section: str = Form(""),
                       line_item_id: str = Form("")):
     save_account(name, section, _or_none(line_item_id))
-    return RedirectResponse("/settings?saved=1", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/settings?saved=1", status_code=303)
 
 
 @app.post("/settings/accounts/{aid}/edit")
 async def account_edit(aid: int, name: str = Form(...), section: str = Form(""),
                        line_item_id: str = Form("")):
     save_account(name, section, _or_none(line_item_id), aid=aid)
-    return RedirectResponse("/settings?saved=1", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/settings?saved=1", status_code=303)
 
 
 @app.post("/settings/accounts/{aid}/delete")
 async def account_delete(aid: int):
     delete_account(aid)
-    return RedirectResponse("/settings", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/settings", status_code=303)
 
 
 @app.post("/settings/payment-accounts/new")
 async def payment_account_new(name: str = Form(...), account_type: str = Form("bank")):
     save_payment_account(name, account_type)
-    return RedirectResponse("/settings?saved=1", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/settings?saved=1", status_code=303)
 
 
 @app.post("/settings/payment-accounts/{paid}/delete")
 async def payment_account_delete(paid: int):
     delete_payment_account(paid)
-    return RedirectResponse("/settings", status_code=303)
+    return RedirectResponse(f"{FINANCE_BASE}/settings", status_code=303)
 
 
 # ---------------------------------------------------------------------------

@@ -8,7 +8,7 @@
     <p class="f-subtitle">Apr {{ fy-1 }}–Mar {{ fy }}</p>
   </div>
   <div class="f-header-controls">
-    <form method="get" action="/budget">
+    <form method="get" action="{{ _base }}/budget">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
       </select>
@@ -18,7 +18,7 @@
       ↑ Upload Budget
       <input type="file" id="xlUpload" accept=".xlsx" style="display:none" onchange="doUpload(this)"/>
     </label>
-    <a href="/budget/template.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline">↓ Template</a>
+    <a href="{{ _base }}/budget/template.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline">↓ Template</a>
     {% endif %}
     {% if saved %}<span class="f-badge f-badge-green">Saved ✓</span>{% endif %}
     {% if uploaded %}<span class="f-badge f-badge-green">Uploaded {{ uploaded }} values ✓</span>{% endif %}
@@ -27,7 +27,7 @@
   </div>
 </div>
 
-<form method="post" action="/budget" id="budgetForm">
+<form method="post" action="{{ _base }}/budget" id="budgetForm">
   <input type="hidden" name="fy" value="{{ fy }}"/>
 
 <div class="f-grid-scroll">
@@ -50,7 +50,7 @@
       <td class="f-row-name {% if row.item.is_system==0 %}f-row-custom{% endif %}">
         {{ row.item.name }}
         {% if row.item.is_system==0 and not archived %}
-        <form method="post" action="/budget/delete-line" style="display:inline;margin-left:.25rem">
+        <form method="post" action="{{ _base }}/budget/delete-line" style="display:inline;margin-left:.25rem">
           <input type="hidden" name="fy" value="{{ fy }}"/>
           <input type="hidden" name="lid" value="{{ row.item.id }}"/>
           <button class="f-row-del-btn" title="Remove line" onclick="return confirm('Remove this line?')">×</button>
@@ -85,7 +85,7 @@
     {% if sec.section in ('employee','office','admin','travel') and not archived %}
     <tr class="f-add-row">
       <td colspan="{{ months|length + 2 }}">
-        <form method="post" action="/budget/add-line" class="f-add-line-form">
+        <form method="post" action="{{ _base }}/budget/add-line" class="f-add-line-form">
           <input type="hidden" name="fy" value="{{ fy }}"/>
           <input type="hidden" name="section" value="{{ sec.section }}"/>
           {% if sec.section == 'employee' %}

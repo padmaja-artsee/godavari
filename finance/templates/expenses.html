@@ -8,7 +8,7 @@
     <p class="f-subtitle">{{ transactions|length }} records &mdash; Total: ${{ "{:,.2f}".format(total) }}</p>
   </div>
   <div class="f-header-controls">
-    <form method="get" action="/expenses" id="filterForm" class="f-filter-row">
+    <form method="get" action="{{ _base }}/expenses" id="filterForm" class="f-filter-row">
       <input type="hidden" name="tx_type" value="{{ tx_type }}"/>
       <select name="fy" class="f-select-sm" onchange="document.getElementById('filterForm').submit()">
         {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
@@ -22,7 +22,7 @@
         {% for v in vendors %}<option value="{{ v.id }}" {% if v.id==filter_vendor %}selected{% endif %}>{{ v.name }}</option>{% endfor %}
       </select>
     </form>
-    <a href="/expenses/new?fy={{ fy }}&tx_type={{ tx_type }}&account_id={{ filter_account }}&vendor_id={{ filter_vendor }}"
+    <a href="{{ _base }}/expenses/new?fy={{ fy }}&tx_type={{ tx_type }}&account_id={{ filter_account }}&vendor_id={{ filter_vendor }}"
        class="f-btn-sm f-btn-primary">+ {{ "Record Income" if tx_type=="income" else "Record Expense" }}</a>
   </div>
 </div>
@@ -63,12 +63,12 @@
     <td class="num f-bold">${{ "{:,.2f}".format(t.amount) }} <small class="f-text-muted">{{ t.currency }}</small></td>
     <td>
       {% if t.receipt_filename %}
-      <a href="/expenses/{{ t.id }}/receipt" target="_blank" class="f-receipt-link">📎 View</a>
+      <a href="{{ _base }}/expenses/{{ t.id }}/receipt" target="_blank" class="f-receipt-link">📎 View</a>
       {% else %}—{% endif %}
     </td>
     <td>
-      <a href="/expenses/{{ t.id }}/edit" class="f-action-btn">Edit</a>
-      <form method="post" action="/expenses/{{ t.id }}/delete" id="del-{{ t.id }}" style="display:inline">
+      <a href="{{ _base }}/expenses/{{ t.id }}/edit" class="f-action-btn">Edit</a>
+      <form method="post" action="{{ _base }}/expenses/{{ t.id }}/delete" id="del-{{ t.id }}" style="display:inline">
         <input type="hidden" name="fy" value="{{ fy }}"/>
         <input type="hidden" name="tx_type" value="{{ tx_type }}"/>
         <button type="button" class="f-action-btn f-action-del"
@@ -83,7 +83,7 @@
 {% else %}
 <div class="f-empty-state">
   No {{ "income entries" if tx_type=="income" else "expenses" }} recorded for FY{{ fy }}.
-  <a href="/expenses/new?fy={{ fy }}&tx_type={{ tx_type }}">Record one now.</a>
+  <a href="{{ _base }}/expenses/new?fy={{ fy }}&tx_type={{ tx_type }}">Record one now.</a>
 </div>
 {% endif %}
 

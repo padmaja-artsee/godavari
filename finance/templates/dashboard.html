@@ -7,7 +7,7 @@
     <p class="f-subtitle">FY{{ fy }} &mdash; Apr {{ fy-1 }}–Mar {{ fy }}</p>
   </div>
   <div class="f-header-controls">
-    <form method="get" action="/">
+    <form method="get" action="{{ _base }}/">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}
         <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>
@@ -16,18 +16,18 @@
     </form>
     {% if archived %}
     <span class="f-badge f-badge-warning">Archived</span>
-    <form method="post" action="/fy/unarchive" style="display:inline">
+    <form method="post" action="{{ _base }}/fy/unarchive" style="display:inline">
       <input type="hidden" name="fy" value="{{ fy }}"/>
       <button class="f-btn-sm f-btn-outline">Unarchive</button>
     </form>
     {% else %}
-    <form method="post" action="/fy/archive"
+    <form method="post" action="{{ _base }}/fy/archive"
           onsubmit="return confirm('Archive FY{{ fy }}? It will become read-only.')">
       <input type="hidden" name="fy" value="{{ fy }}"/>
       <button class="f-btn-sm f-btn-outline">Archive Year</button>
     </form>
     {% endif %}
-    <a href="/budget?fy={{ fy+1 }}" class="f-btn-sm f-btn-primary">+ New Year (FY{{ fy+1 }})</a>
+    <a href="{{ _base }}/budget?fy={{ fy+1 }}" class="f-btn-sm f-btn-primary">+ New Year (FY{{ fy+1 }})</a>
   </div>
 </div>
 
@@ -67,7 +67,7 @@
 <div class="f-card" style="margin-top:1rem">
   <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
     <span>Recent Transactions</span>
-    <a href="/expenses/new?fy={{ fy }}" class="f-btn-sm f-btn-primary">+ Record Expense</a>
+    <a href="{{ _base }}/expenses/new?fy={{ fy }}" class="f-btn-sm f-btn-primary">+ Record Expense</a>
   </div>
   {% if recent %}
   <table class="f-expense-table">
@@ -84,9 +84,9 @@
     {% endfor %}
     </tbody>
   </table>
-  <div style="padding:.5rem 1rem"><a href="/expenses?fy={{ fy }}" class="f-link-small">View all →</a></div>
+  <div style="padding:.5rem 1rem"><a href="{{ _base }}/expenses?fy={{ fy }}" class="f-link-small">View all →</a></div>
   {% else %}
-  <p class="f-empty-state">No transactions recorded yet. <a href="/expenses/new">Record one now.</a></p>
+  <p class="f-empty-state">No transactions recorded yet. <a href="{{ _base }}/expenses/new">Record one now.</a></p>
   {% endif %}
 </div>
 

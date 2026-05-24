@@ -32,10 +32,12 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 }
 .f-brand {
   padding: 1rem .875rem .75rem;
-  display: flex; align-items: center; gap: .5rem;
+  display: flex; align-items: center; gap: .6rem;
   border-bottom: 1px solid rgba(255,255,255,.15);
-  color: #fff; font-weight: 700; font-size: .95rem;
 }
+.f-brand-text { display: flex; flex-direction: column; line-height: 1.2; }
+.f-brand-name { font-size: .95rem; font-weight: 700; color: #fff; }
+.f-brand-sub  { font-size: .7rem; color: rgba(255,255,255,.55); font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
 .f-logo { width: 32px; height: 32px; object-fit: contain; }
 .f-nav-section { padding: .5rem 0; border-bottom: 1px solid rgba(255,255,255,.08); }
 .f-nav-label {
@@ -53,8 +55,20 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-nav-action { color: #A8DFB9; font-weight: 600; }
 .f-nav-sub { padding-left: 1.6rem; font-size: .78rem; color: rgba(255,255,255,.6); }
 .f-nav-footer { margin-top: auto; padding: .75rem; border-top: 1px solid rgba(255,255,255,.12); }
-.f-back-link { font-size: .78rem; color: rgba(255,255,255,.5) !important; }
-.f-back-link:hover { color: #fff !important; }
+.f-leads-btn {
+  display: block;
+  padding: .5rem .75rem;
+  background: #2E7D52;
+  color: #fff !important;
+  font-size: .82rem;
+  font-weight: 700;
+  text-decoration: none;
+  border-radius: 6px;
+  text-align: center;
+  letter-spacing: .3px;
+  transition: background .15s;
+}
+.f-leads-btn:hover { background: #1C5631; }
 
 /* ─── Main area ─── */
 .f-main { margin-left: var(--sidebar); padding: 1.5rem 1.75rem; flex: 1; max-width: 1600px; }

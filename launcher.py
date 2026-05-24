@@ -19,7 +19,6 @@ import webbrowser
 
 HOST = "127.0.0.1"
 PORT = 8000
-FINANCE_PORT = 8001
 
 
 def _find_free_port(preferred: int) -> int:
@@ -138,7 +137,6 @@ def main() -> None:
 
         # Kill any stale instance of ourselves on PORT before binding.
         _kill_port(PORT)
-        _kill_port(FINANCE_PORT)
     else:
         # Running from source — project root is this file's directory.
         here = os.path.dirname(os.path.abspath(__file__))
@@ -146,23 +144,8 @@ def main() -> None:
 
     port = _find_free_port(PORT)
 
-    # Start Finance mini-app in a background thread.
-    def _start_finance() -> None:
-        try:
-            finance_port = _find_free_port(FINANCE_PORT)
-            os.environ.setdefault("FINANCE_PORT", str(finance_port))
-            import uvicorn as _uv
-            _uv.run(
-                "finance.app.main:app",
-                host=HOST,
-                port=finance_port,
-                reload=False,
-                log_level="warning",
-            )
-        except Exception as exc:
-            print(f"[Finance] failed to start: {exc}")
-
-    threading.Thread(target=_start_finance, daemon=True).start()
+    # Finance is now mounted at /finance inside the Leads app (Option B).
+    # No separate Finance server needed.
 
     # Open browser in a background thread so it waits for the server.
     threading.Thread(target=_open_browser, args=(port,), daemon=True).start()

@@ -22,7 +22,7 @@
       <td>
         <a href="#edit-acct-{{ a.id }}" class="f-action-btn">Edit</a>
         {% if not a.is_system %}
-        <form method="post" action="/settings/accounts/{{ a.id }}/delete" style="display:inline"
+        <form method="post" action="{{ _base }}/settings/accounts/{{ a.id }}/delete" style="display:inline"
               onsubmit="return confirm('Delete account {{ a.name }}?')">
           <button class="f-action-btn f-action-del">Del</button>
         </form>
@@ -37,7 +37,7 @@
   {% for a in accounts %}
   <details id="edit-acct-{{ a.id }}" class="f-edit-details">
     <summary>Edit: {{ a.name }}</summary>
-    <form method="post" action="/settings/accounts/{{ a.id }}/edit" class="f-inline-form">
+    <form method="post" action="{{ _base }}/settings/accounts/{{ a.id }}/edit" class="f-inline-form">
       <input type="text" name="name" value="{{ a.name }}" class="f-input-sm" required/>
       <select name="section" class="f-select-sm">
         {% for sec in ['income','employee','office','admin','travel'] %}
@@ -55,7 +55,7 @@
   </details>
   {% endfor %}
 
-  <form method="post" action="/settings/accounts/new" class="f-inline-form" style="margin-top:.75rem">
+  <form method="post" action="{{ _base }}/settings/accounts/new" class="f-inline-form" style="margin-top:.75rem">
     <input type="text" name="name" placeholder="New account name" class="f-input-sm" required/>
     <select name="section" class="f-select-sm">
       {% for sec in ['income','employee','office','admin','travel'] %}
@@ -84,7 +84,7 @@
       <td><span class="f-group-tag">{{ p.account_type }}</span></td>
       <td>
         {% if not p.is_system %}
-        <form method="post" action="/settings/payment-accounts/{{ p.id }}/delete" style="display:inline"
+        <form method="post" action="{{ _base }}/settings/payment-accounts/{{ p.id }}/delete" style="display:inline"
               onsubmit="return confirm('Delete {{ p.name }}?')">
           <button class="f-action-btn f-action-del">Del</button>
         </form>
@@ -94,7 +94,7 @@
     {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/settings/payment-accounts/new" class="f-inline-form" style="margin-top:.75rem">
+  <form method="post" action="{{ _base }}/settings/payment-accounts/new" class="f-inline-form" style="margin-top:.75rem">
     <input type="text" name="name" placeholder="Account name" class="f-input-sm" required/>
     <select name="account_type" class="f-select-sm">
       <option value="bank">Bank</option>

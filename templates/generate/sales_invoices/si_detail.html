@@ -22,9 +22,9 @@
       <button type="submit" class="btn btn-ghost">Duplicate</button>
     </form>
     <a href="/generate/sales-invoices/{{ si.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
-    <a href="/generate/sales-invoices/{{ si.id }}/print" class="btn btn-ghost">Print</a>
+    <a href="/generate/sales-invoices/{{ si.id }}/print" class="btn btn-ghost" target="_blank">Print</a>
     <form method="post" action="/generate/sales-invoices/{{ si.id }}/delete" style="display:inline"
-          data-confirm="Delete this Commercial Invoice?">
+          onsubmit="return confirm('Delete this Commercial Invoice?');">
       <button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button>
     </form>
   </div>

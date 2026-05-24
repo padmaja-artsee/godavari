@@ -8,7 +8,7 @@
     <p class="f-subtitle">{{ period_label }}</p>
   </div>
   <div class="f-header-controls">
-    <form method="get" action="/report" class="f-filter-row" id="reportForm">
+    <form method="get" action="{{ _base }}/report" class="f-filter-row" id="reportForm">
       <select name="fy" class="f-select-sm" onchange="document.getElementById('reportForm').submit()">
         {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
       </select>
@@ -36,7 +36,7 @@
   <!-- Report header (shown on print) -->
   <div class="f-report-header">
     <div class="f-report-logo">
-      <img src="/leads-static/logo.png" alt="GBInc" class="f-rpt-logo"
+      <img src="{{ _base }}/leads-static/logo.png" alt="GBInc" class="f-rpt-logo"
            onerror="this.style.display='none'"/>
     </div>
     <div class="f-report-title-block">

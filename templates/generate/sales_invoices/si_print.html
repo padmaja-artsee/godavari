@@ -15,16 +15,10 @@
 {% endblock %}
 {% block content %}
 <div class="po-action-bar no-print">
-  <button onclick="history.back()" class="btn btn-ghost">← Back</button>
-  <button onclick="fetch('/open-print?url='+encodeURIComponent(window.location.pathname))" class="btn btn-primary">Print / Save PDF</button>
+  <a href="/generate/sales-invoices/{{ si.id }}" class="btn btn-ghost">← Back</a>
 </div>
 <div class="po-shell">
   {{ si_body(si, readonly=true) }}
 </div>
-<script>
-// Delay gives Tauri's WKWebView time to fully render before opening the print dialog.
-window.addEventListener("load", function(){
-  setTimeout(function(){ window.print(); }, 600);
-});
-</script>
+<script>window.addEventListener("load", function(){ window.print(); });</script>
 {% endblock %}

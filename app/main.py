@@ -148,6 +148,11 @@ from app.seed import load_seed
 
 import sys as _sys
 import os as _os
+
+# Mount Finance as a sub-app at /finance (Option B single-port architecture).
+# Must set env var BEFORE importing finance.app.main so FINANCE_BASE is correct.
+_os.environ.setdefault("FINANCE_BASE_PATH", "/finance")
+
 # When frozen by PyInstaller the launcher sets LEADS_BUNDLE_BASE = sys._MEIPASS,
 # which is the directory that actually contains templates/, static/, data/.
 # Fall back to Path(__file__).parent.parent for source runs.
@@ -196,9 +201,16 @@ _static_dir = BASE / "static"
 if _static_dir.exists():
     app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
 else:
-    # Fallback: serve static from current working directory (shouldn't happen)
     import warnings
     warnings.warn(f"Static directory not found: {_static_dir}")
+
+# Mount the Finance sub-app at /finance (single-port Option B).
+try:
+    from finance.app.main import app as _finance_app
+    app.mount("/finance", _finance_app)
+except Exception as _e:
+    import warnings
+    warnings.warn(f"Finance sub-app could not be mounted: {_e}")
 
 
 @app.on_event("startup")

@@ -62,7 +62,7 @@
     {% if tx_type != "income" %}
     <div class="f-field">
       <label class="f-label">Vendor
-        <a href="/vendors/new" class="f-link-small" target="_blank">+ New</a>
+        <a href="{{ _base }}/vendors/new" class="f-link-small" target="_blank">+ New</a>
       </label>
       <select name="vendor_id" class="f-select">
         <option value="">No vendor</option>
@@ -108,7 +108,7 @@
     <label class="f-label">Receipt (PDF/Image)</label>
     {% if transaction and transaction.receipt_filename %}
     <div class="f-existing-receipt">
-      <a href="/expenses/{{ transaction.id }}/receipt" target="_blank">📎 View current receipt</a>
+      <a href="{{ _base }}/expenses/{{ transaction.id }}/receipt" target="_blank">📎 View current receipt</a>
       <span class="f-text-muted"> — upload a new file to replace</span>
     </div>
     {% endif %}
@@ -128,7 +128,7 @@
     <button type="submit" class="f-btn f-btn-primary">
       {{ "Update" if transaction else "Save" }}
     </button>
-    <a href="/expenses?fy={{ fy }}&tx_type={{ tx_type }}" class="f-btn f-btn-outline">Cancel</a>
+    <a href="{{ _base }}/expenses?fy={{ fy }}&tx_type={{ tx_type }}" class="f-btn f-btn-outline">Cancel</a>
   </div>
 </form>
 </div>

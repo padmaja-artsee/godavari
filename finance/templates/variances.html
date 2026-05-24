@@ -8,7 +8,7 @@
     <p class="f-subtitle">Positive variance = under budget (favorable for expenses, above plan for income).</p>
   </div>
   <div class="f-header-controls">
-    <form method="get" action="/variances">
+    <form method="get" action="{{ _base }}/variances">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
       </select>

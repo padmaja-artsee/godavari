@@ -16,7 +16,7 @@
       {% if editing and si.id %}
       <a href="/generate/sales-invoices/{{ si.id }}" class="btn btn-ghost btn-sm">Preview</a>
       <a href="/generate/sales-invoices/{{ si.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
-      <a href="/generate/sales-invoices/{{ si.id }}/print" class="btn btn-ghost btn-sm">Print</a>
+      <a href="/generate/sales-invoices/{{ si.id }}/print" class="btn btn-ghost btn-sm" target="_blank">Print</a>
       {% endif %}
       <button type="submit" form="si-editor-form" class="btn btn-primary btn-sm">Save</button>
     </div>

@@ -13,7 +13,14 @@
   <div class="layout{% if hide_nav %} layout-full{% endif %}">
     {% if not hide_nav %}
     <aside class="sidebar no-print">
-      <div class="brand"><img src="/static/logo.png" alt="Godavari Leads" class="brand-logo" /></div>
+      <div class="brand">
+        <img src="/static/logo.png" alt="GBInc" class="brand-logo" onerror="this.style.display='none'"/>
+        <div class="brand-text">
+          <span class="brand-name">GBInc</span>
+          <span class="brand-sub">Leads</span>
+        </div>
+      </div>
+      <div class="nav-section-label">Navigation</div>
       <nav class="nav">
         <a href="/" class="{% if page == 'dashboard' %}active{% endif %}">Dashboard</a>
         <a href="/leads" class="{% if page == 'leads' %}active{% endif %}">Leads</a>
@@ -23,8 +30,9 @@
         <a href="/add?tab=log" class="{% if page == 'add' %}active{% endif %}">Add or update</a>
         <a href="/summary" class="{% if page == 'summary' %}active{% endif %}">Summary</a>
       </nav>
-      <p class="nav-hint"><strong>Add or update</strong> = emails &amp; deal story. <strong>Leads</strong> = contacts. <strong>Active leads</strong> = all logged updates in period.</p>
-      <div class="nav-footer-link"><a href="http://127.0.0.1:8001" class="nav-module-link">Finance →</a></div>
+      <div class="nav-footer-area">
+        <a href="/finance/" class="nav-finance-btn">Finance →</a>
+      </div>
     </aside>
     {% endif %}
     <main class="main">
