@@ -1,0 +1,44 @@
+{% macro commercial_extra_fields(d) %}
+<div>
+  <label>Value <span class="form-hint" style="font-weight:400">qty × price</span></label>
+  <input type="text" class="deal-commercial-value" readonly tabindex="-1"
+         value="{{ d.commercial_total or '' }}" placeholder="—" />
+</div>
+<div>
+  <label>Insurance</label>
+  <div class="currency-field-row">
+    <input name="insurance_amount" class="deal-calc-input" value="{{ d.insurance_amount or '' }}" placeholder="Amount" />
+    <select name="insurance_currency">
+      <option value="INR" {% if (d.insurance_currency or 'USD') == 'INR' %}selected{% endif %}>₹ Rupee</option>
+      <option value="USD" {% if (d.insurance_currency or 'USD') == 'USD' %}selected{% endif %}>$ Dollar</option>
+    </select>
+  </div>
+</div>
+<div>
+  <label>Ocean freight</label>
+  <div class="currency-field-row">
+    <input name="ocean_freight_amount" class="deal-calc-input" value="{{ d.ocean_freight_amount or '' }}" placeholder="Amount" />
+    <select name="ocean_freight_currency">
+      <option value="INR" {% if (d.ocean_freight_currency or 'USD') == 'INR' %}selected{% endif %}>₹ Rupee</option>
+      <option value="USD" {% if (d.ocean_freight_currency or 'USD') == 'USD' %}selected{% endif %}>$ Dollar</option>
+    </select>
+  </div>
+</div>
+<div>
+  <label>FOB value <span class="form-hint" style="font-weight:400">Value − Insurance − Ocean freight</span></label>
+  <input type="text" class="deal-commercial-fob" readonly tabindex="-1"
+         value="{{ d.fob_value or '' }}" placeholder="—" />
+</div>
+<div>
+  <label>Commission rate</label>
+  <div class="currency-field-row">
+    <input name="commission_rate" class="deal-calc-input" value="{{ d.commission_rate or '' }}" placeholder="e.g. 3" />
+    <span class="form-hint" style="align-self:center;white-space:nowrap">% of FOB</span>
+  </div>
+</div>
+<div>
+  <label>Commission <span class="form-hint" style="font-weight:400">FOB × rate</span></label>
+  <input type="text" class="deal-commercial-commission" readonly tabindex="-1"
+         value="{{ d.commission_amount or '' }}" placeholder="—" />
+</div>
+{% endmacro %}

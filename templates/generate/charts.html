@@ -125,6 +125,26 @@
     <label class="metric-toggle active" id="tog-shipped">
       <input type="checkbox" checked data-chart="shipped"> Shipped
     </label>
+    <label class="metric-toggle active" id="tog-open-closed">
+      <input type="checkbox" checked data-chart="open-closed"> Open vs Closed
+    </label>
+    <label class="metric-toggle active" id="tog-winrate">
+      <input type="checkbox" checked data-chart="winrate"> Win rate
+    </label>
+    <label class="metric-toggle active" id="tog-funnel">
+      <input type="checkbox" checked data-chart="funnel"> Pipeline funnel
+    </label>
+  </div>
+
+  <div class="charts-divider"></div>
+  <label>Metric:</label>
+  <div class="metric-toggles">
+    <label class="metric-toggle active" id="tog-metric-count" title="Show deal counts">
+      <input type="radio" name="metric" value="count" checked> Count
+    </label>
+    <label class="metric-toggle" id="tog-metric-amount" title="Show deal amount (price × qty)">
+      <input type="radio" name="metric" value="amount"> Amount (€)
+    </label>
   </div>
 
   <div class="charts-actions">
@@ -207,7 +227,7 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Deals by Product</div>
-        <div class="chart-card-subtitle">Top products by deal count</div>
+        <div class="chart-card-subtitle" id="subtitle-products">Top products by deal count</div>
       </div>
       <button class="btn-download-chart" onclick="downloadChart('plot-products','deals_by_product')">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
@@ -222,7 +242,7 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Top Customers</div>
-        <div class="chart-card-subtitle">Companies with most deals in period</div>
+        <div class="chart-card-subtitle" id="subtitle-customers">Companies with most deals in period</div>
       </div>
       <button class="btn-download-chart" onclick="downloadChart('plot-customers','top_customers')">
         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
@@ -245,6 +265,51 @@
       </button>
     </div>
     <div class="chart-card-body"><div id="plot-shipped" class="chart-plot"></div></div>
+  </div>
+
+  {# 8. Open vs Closed — full width stacked bar #}
+  <div class="chart-card chart-card-wide" data-chart-id="open-closed">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Open vs Closed Deals Over Time</div>
+        <div class="chart-card-subtitle">Stacked monthly deal counts: open · shipped · lost</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-open-closed','open_vs_closed')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-open-closed" class="chart-plot"></div></div>
+  </div>
+
+  {# 9. Win rate + Pipeline funnel — side by side #}
+  <div class="chart-card" data-chart-id="winrate">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Win Rate by Month</div>
+        <div class="chart-card-subtitle">% of closed deals that were won (shipped) vs lost</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-winrate','win_rate')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-winrate" class="chart-plot"></div></div>
+  </div>
+
+  {# 10. Pipeline funnel #}
+  <div class="chart-card" data-chart-id="funnel">
+    <div class="chart-card-header">
+      <div>
+        <div class="chart-card-title">Deal Pipeline Funnel</div>
+        <div class="chart-card-subtitle">Total deals → Open → Shipped (won) in period</div>
+      </div>
+      <button class="btn-download-chart" onclick="downloadChart('plot-funnel','pipeline_funnel')">
+        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+        PNG
+      </button>
+    </div>
+    <div class="chart-card-body"><div id="plot-funnel" class="chart-plot"></div></div>
   </div>
 
 </div>{# /charts-grid #}
@@ -381,21 +446,29 @@ function renderStatus() {
   }, CONFIG);
 }
 
+/* ─── Metric helper ─────────────────────────────────────── */
+var currentMetric = 'count'; // 'count' or 'amount'
+
 /* ─── 5. By product ────────────────────────────────── */
 function renderProducts() {
   const d = [...CD.top_products].reverse();
   if (!d.length) return empty('plot-products');
+  const useAmount = currentMetric === 'amount';
+  const x = useAmount ? d.map(r => r.revenue) : d.map(r => r.deal_count);
+  const xlabel = useAmount ? 'Revenue (€)' : 'Deals';
+  const hov = useAmount ? '<b>%{y}</b><br>Revenue: €%{x:,.0f}<extra></extra>'
+                        : '<b>%{y}</b><br>Deals: %{x}<extra></extra>';
+  const sub = document.getElementById('subtitle-products');
+  if (sub) sub.textContent = useAmount ? 'Top products by estimated revenue (€)' : 'Top products by deal count';
   Plotly.newPlot('plot-products', [{
     type: 'bar', orientation: 'h',
-    y: d.map(r => r.product),
-    x: d.map(r => r.deal_count),
-    marker: { color: GREEN2 },
-    name: 'Deals',
-    hovertemplate: '<b>%{y}</b><br>Deals: %{x}<extra></extra>',
+    y: d.map(r => r.product), x,
+    marker: { color: useAmount ? GOLD : GREEN2 },
+    name: xlabel, hovertemplate: hov,
   }], {
     ...BASE_LAYOUT,
     margin: { t: 30, r: 20, b: 45, l: 170 },
-    xaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
+    xaxis: { ...NUM_YAXIS_BASE, title: xlabel, tickformat: useAmount ? ',.0f' : '' },
     yaxis: { showgrid: false, automargin: true, ticklabelstandoff: 8 },
     hovermode: 'closest',
   }, CONFIG);
@@ -405,17 +478,22 @@ function renderProducts() {
 function renderCustomers() {
   const d = [...CD.top_customers].reverse();
   if (!d.length) return empty('plot-customers');
+  const useAmount = currentMetric === 'amount';
+  const x = useAmount ? d.map(r => r.revenue) : d.map(r => r.deal_count);
+  const xlabel = useAmount ? 'Revenue (€)' : 'Deals';
+  const hov = useAmount ? '<b>%{y}</b><br>Revenue: €%{x:,.0f}<extra></extra>'
+                        : '<b>%{y}</b><br>Deals: %{x}<extra></extra>';
+  const sub = document.getElementById('subtitle-customers');
+  if (sub) sub.textContent = useAmount ? 'Companies by estimated revenue (€)' : 'Companies with most deals in period';
   Plotly.newPlot('plot-customers', [{
     type: 'bar', orientation: 'h',
-    y: d.map(r => r.customer),
-    x: d.map(r => r.deal_count),
-    marker: { color: GREEN, opacity: 0.85 },
-    name: 'Deals',
-    hovertemplate: '<b>%{y}</b><br>Deals: %{x}<extra></extra>',
+    y: d.map(r => r.customer), x,
+    marker: { color: useAmount ? GOLD : GREEN, opacity: 0.85 },
+    name: xlabel, hovertemplate: hov,
   }], {
     ...BASE_LAYOUT,
     margin: { t: 30, r: 20, b: 45, l: 180 },
-    xaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
+    xaxis: { ...NUM_YAXIS_BASE, title: xlabel, tickformat: useAmount ? ',.0f' : '' },
     yaxis: { showgrid: false, automargin: true, ticklabelstandoff: 8 },
     hovermode: 'closest',
   }, CONFIG);
@@ -454,6 +532,92 @@ function renderShipped() {
   }, CONFIG);
 }
 
+/* ─── 8. Open vs Closed stacked bar ───────────────── */
+function renderOpenClosed() {
+  const raw = CD.by_status_month;
+  if (!raw.length) return empty('plot-open-closed');
+  // Build month list and per-status maps
+  const months = [...new Set(raw.map(r => r.month))].sort();
+  function series(status, color, name) {
+    const map = {};
+    raw.filter(r => r.status === status).forEach(r => map[r.month] = r.deal_count);
+    return {
+      type: 'bar', name,
+      x: months, y: months.map(m => map[m] || 0),
+      marker: { color },
+      hovertemplate: `<b>%{x}</b><br>${name}: %{y}<extra></extra>`,
+    };
+  }
+  Plotly.newPlot('plot-open-closed', [
+    series('open',    '#1A5632', 'Open'),
+    series('shipped', '#2d9e5f', 'Shipped (won)'),
+    series('lost',    '#c62828', 'Lost'),
+  ], {
+    ...BASE_LAYOUT,
+    barmode: 'stack',
+    yaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
+    xaxis: CAT_XAXIS,
+    legend: { orientation:'h', y:-0.22, x:0, font:{size:11} },
+  }, CONFIG);
+}
+
+/* ─── 9. Win rate by month ─────────────────────────── */
+function renderWinRate() {
+  const d = CD.win_rate_by_month;
+  if (!d.length) return empty('plot-winrate');
+  Plotly.newPlot('plot-winrate', [
+    {
+      type: 'bar', name: 'Won',
+      x: d.map(r => r.month), y: d.map(r => r.won),
+      marker: { color: '#2d9e5f' },
+      hovertemplate: '<b>%{x}</b><br>Won: %{y}<extra></extra>',
+    },
+    {
+      type: 'bar', name: 'Lost',
+      x: d.map(r => r.month), y: d.map(r => r.lost),
+      marker: { color: '#c62828' },
+      hovertemplate: '<b>%{x}</b><br>Lost: %{y}<extra></extra>',
+    },
+    {
+      type: 'scatter', mode: 'lines+markers',
+      name: 'Win rate %',
+      x: d.map(r => r.month), y: d.map(r => r.win_rate),
+      yaxis: 'y2',
+      line: { color: GOLD, width: 2.5 },
+      marker: { size: 7, color: GOLD },
+      hovertemplate: '<b>%{x}</b><br>Win rate: %{y:.1f}%<extra></extra>',
+    },
+  ], {
+    ...BASE_LAYOUT,
+    barmode: 'group',
+    margin: { t: 30, r: 70, b: 55, l: 55 },
+    yaxis:  { ...NUM_YAXIS_BASE, title: 'Deals', side: 'left' },
+    yaxis2: { title: 'Win rate %', overlaying: 'y', side: 'right',
+              range: [0, 110], showgrid: false, ticksuffix: '%' },
+    xaxis:  CAT_XAXIS,
+    legend: { orientation:'h', y:-0.22, x:0, font:{size:11} },
+  }, CONFIG);
+}
+
+/* ─── 10. Pipeline funnel ──────────────────────────── */
+function renderFunnel() {
+  const f = CD.pipeline_funnel;
+  if (!f || !f.total) return empty('plot-funnel');
+  Plotly.newPlot('plot-funnel', [{
+    type: 'funnel',
+    y: ['All Deals', 'Open', 'Shipped (Won)', 'Lost'],
+    x: [f.total, f.open, f.shipped, f.lost],
+    textinfo: 'value+percent initial',
+    marker: { color: ['#1A5632', '#2d9e5f', '#4cae7f', '#c62828'] },
+    connector: { line: { color: '#ccc', width: 1 } },
+    hovertemplate: '<b>%{y}</b><br>Count: %{x}<extra></extra>',
+  }], {
+    ...BASE_LAYOUT,
+    margin: { t: 30, r: 30, b: 30, l: 140 },
+    funnelmode: 'stack',
+  }, CONFIG);
+}
+
 /* ─── empty placeholder ────────────────────────────── */
 function empty(id) {
   const el = document.getElementById(id);
@@ -465,13 +629,24 @@ function downloadChart(divId, filename) {
   Plotly.downloadImage(divId, { format:'png', width:1400, height:700, filename: filename });
 }
 
-/* ─── Metric toggles ───────────────────────────────── */
-document.querySelectorAll('.metric-toggle input').forEach(cb => {
+/* ─── Chart visibility toggles (checkboxes) ──────── */
+document.querySelectorAll('.metric-toggle input[type="checkbox"]').forEach(cb => {
   cb.addEventListener('change', function() {
     const chartId = this.dataset.chart;
     const card = document.querySelector(`[data-chart-id="${chartId}"]`);
     if (card) card.style.display = this.checked ? '' : 'none';
     this.closest('.metric-toggle').classList.toggle('active', this.checked);
+  });
+});
+
+/* ─── Metric radio (Count / Amount) ─────────────────── */
+document.querySelectorAll('input[name="metric"]').forEach(rb => {
+  rb.addEventListener('change', function() {
+    currentMetric = this.value;
+    document.querySelectorAll('input[name="metric"]').forEach(r =>
+      r.closest('.metric-toggle').classList.toggle('active', r.checked));
+    renderProducts();
+    renderCustomers();
   });
 });
 
@@ -483,5 +658,8 @@ renderStatus();
 renderProducts();
 renderCustomers();
 renderShipped();
+renderOpenClosed();
+renderWinRate();
+renderFunnel();
 </script>
 {% endblock %}

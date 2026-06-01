@@ -8,49 +8,47 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 /// Kill any existing process listening on `port` so we can bind a fresh server.
-/// Uses lsof on macOS/Linux, netstat on Windows.
 fn kill_port(port: u16) {
     #[cfg(not(target_os = "windows"))]
     {
-        // lsof -ti tcp:<port> returns pids one per line.
-        if let Ok(out) = Command::new("lsof")
-            .args(["-ti", &format!("tcp:{}", port)])
-            .output()
-        {
+        // Run up to 3 rounds: SIGTERM → wait → SIGKILL → wait → verify gone.
+        for round in 0..3u8 {
+            let Ok(out) = Command::new("lsof")
+                .args(["-ti", &format!("tcp:{}", port)])
+                .output()
+            else { break; };
+
             let stdout = String::from_utf8_lossy(&out.stdout);
-            let mut killed = false;
-            for pid_str in stdout.split_whitespace() {
-                if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                    if pid != std::process::id() {
-                        // SIGTERM first for a clean shutdown, then SIGKILL to
-                        // guarantee the port is released before we try to bind.
-                        let _ = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
-                        killed = true;
-                    }
-                }
+            let pids: Vec<u32> = stdout
+                .split_whitespace()
+                .filter_map(|s| s.trim().parse::<u32>().ok())
+                .filter(|&p| p != std::process::id())
+                .collect();
+
+            if pids.is_empty() { break; }
+
+            let sig = if round == 0 { "-TERM" } else { "-9" };
+            for pid in &pids {
+                let _ = Command::new("kill").args([sig, &pid.to_string()]).status();
             }
-            if killed {
-                // Give SIGTERM a moment, then SIGKILL any survivors.
-                thread::sleep(Duration::from_millis(600));
-                if let Ok(out2) = Command::new("lsof")
-                    .args(["-ti", &format!("tcp:{}", port)])
-                    .output()
-                {
-                    let stdout2 = String::from_utf8_lossy(&out2.stdout);
-                    for pid_str in stdout2.split_whitespace() {
-                        if let Ok(pid) = pid_str.trim().parse::<u32>() {
-                            if pid != std::process::id() {
-                                let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
-                            }
-                        }
-                    }
-                    if !stdout2.trim().is_empty() {
-                        // Wait for SIGKILL to take effect.
-                        thread::sleep(Duration::from_millis(600));
-                    }
-                }
-            }
+            let wait_ms = if round == 0 { 800 } else { 1500 };
+            thread::sleep(Duration::from_millis(wait_ms));
         }
+    }
+}
+
+/// Wait until port is confirmed free (no process listening), up to timeout.
+/// This prevents "Address already in use" when the app is relaunched quickly.
+fn wait_for_port_free(port: u16, timeout_secs: u64) {
+    let deadline = Instant::now() + Duration::from_secs(timeout_secs);
+    while Instant::now() < deadline {
+        // If we can NOT connect, the port is free — good to go.
+        if TcpStream::connect(format!("127.0.0.1:{}", port)).is_err() {
+            return;
+        }
+        // Port still occupied — keep killing and waiting.
+        kill_port(port);
+        thread::sleep(Duration::from_millis(500));
     }
 }
 
@@ -59,9 +57,9 @@ fn wait_for_server(port: u16, timeout_secs: u64) -> bool {
     let deadline = Instant::now() + Duration::from_secs(timeout_secs);
     while Instant::now() < deadline {
         if TcpStream::connect(format!("127.0.0.1:{}", port)).is_ok() {
-            // Give uvicorn one more moment to finish its startup sequence
+            // Give uvicorn time to finish init_db and startup handlers
             // before the WebView tries to load a page.
-            thread::sleep(Duration::from_millis(400));
+            thread::sleep(Duration::from_millis(2500));
             return true;
         }
         thread::sleep(Duration::from_millis(200));
@@ -105,8 +103,10 @@ fn main() {
     // In dev mode `cargo tauri dev` uses beforeDevCommand instead.
     #[cfg(not(debug_assertions))]
     {
-        // Kill any stale instance first so the new one can bind to PORT.
+        // Kill any stale instance and wait until the port is confirmed free.
+        // This prevents "Address already in use" when the app is relaunched quickly.
         kill_port(PORT);
+        wait_for_port_free(PORT, 15);
 
         if let Some(backend) = find_backend() {
             let mut cmd = Command::new(&backend);
@@ -114,11 +114,22 @@ fn main() {
             cmd.env("LEADS_NO_BROWSER", "1");
 
             match cmd.spawn() {
-                Ok(_) => {
+                Ok(mut child) => {
                     // Poll until the server is ready (up to 30 s).
                     if !wait_for_server(PORT, 30) {
                         eprintln!("Warning: Python backend did not respond within 30s on port {}", PORT);
                     }
+                    // When Tauri exits, kill the child so it doesn't become
+                    // an orphan that blocks the port on next launch.
+                    tauri::Builder::default()
+                        .plugin(tauri_plugin_shell::init())
+                        .run(tauri::generate_context!())
+                        .expect("error running Tauri application");
+                    // Kill Python backend and wait for it to fully exit so the
+                    // port is released before the OS reports the app as closed.
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return;
                 }
                 Err(e) => {
                     eprintln!("Failed to start Python backend at {:?}: {}", backend, e);
@@ -126,7 +137,6 @@ fn main() {
             }
         } else {
             eprintln!("Python backend binary not found — tried Resources/leads-bin/leads");
-            // Still wait briefly in case backend is already running.
             thread::sleep(Duration::from_secs(2));
         }
     }

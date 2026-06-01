@@ -295,11 +295,17 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-report-footer { margin-top: 1.5rem; font-size: .72rem; color: var(--muted); border-top: 1px solid var(--grey-b); padding-top: .5rem; }
 
 .f-pl-table { border-collapse: collapse; width: 100%; font-size: .82rem; }
+.f-report { max-width: 1100px !important; }
 .f-pl-table thead th { padding: .35rem .6rem; border-bottom: 2px solid var(--green); font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
-.f-pl-table thead th.f-pl-name { text-align: left; width: 55%; }
-.f-pl-num { text-align: right; min-width: 100px; font-variant-numeric: tabular-nums; }
+.f-pl-table thead th.f-pl-name { text-align: left; width: 34%; }
+.f-pl-num { text-align: right; min-width: 88px; font-variant-numeric: tabular-nums; padding: .32rem .5rem; }
 .f-pl-name { text-align: left; }
 .f-pl-indent { padding-left: 1.75rem !important; }
+/* Column-group headers */
+.f-pl-group-hdr { text-align: center !important; background: var(--green-l); color: var(--green-d) !important; border-bottom: 2px solid var(--green) !important; letter-spacing: .04em; }
+.f-pl-ytd-hdr { background: #EEF4FF !important; color: #1a3a7a !important; }
+/* YTD columns get a subtle left border to separate the two groups */
+.f-pl-ytd { border-left: 2px solid #C8D8F8; background: #FAFCFF; }
 
 .f-pl-section-hdr td { background: var(--green); color: #fff; font-weight: 700; font-size: .75rem; text-transform: uppercase; letter-spacing: .07em; padding: .35rem .6rem; }
 .f-pl-subsection td { background: var(--grey); font-weight: 600; font-size: .78rem; padding: .28rem .6rem; color: var(--green-d); border-top: 1px solid var(--grey-b); }
@@ -320,7 +326,9 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
   .f-main { margin-left: 0 !important; padding: 0 !important; }
   .f-report { border: none !important; padding: 0 !important; max-width: 100% !important; }
   body { background: #fff !important; font-size: 11pt; }
-  .f-pl-table { font-size: 9pt; }
+  .f-pl-table { font-size: 8pt; }
+  .f-pl-ytd { border-left: 1.5pt solid #C8D8F8 !important; background: #FAFCFF !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .f-pl-group-hdr { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .f-pl-section-hdr td { background: #1C5631 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   .f-pl-subsection td, .f-pl-subtotal td, .f-pl-gross td, .f-pl-gross td,
   .f-pl-total-expenses td, .f-pl-net-pos td, .f-pl-net-neg td { -webkit-print-color-adjust: exact; print-color-adjust: exact; }

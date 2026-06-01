@@ -50,16 +50,16 @@
       <td class="f-row-name">{{ row.item.name }}</td>
       {% for m in months %}
       {% set mv = row.monthly[m] %}
-      <td class="num">{{ "${:,.0f}".format(mv.budget) if mv.budget else '—' }}</td>
-      <td class="num">{{ "${:,.0f}".format(mv.actual) if mv.actual else '—' }}</td>
+      <td class="num">{{ "${:,.2f}".format(mv.budget) if mv.budget else '—' }}</td>
+      <td class="num">{{ "${:,.2f}".format(mv.actual) if mv.actual else '—' }}</td>
       <td class="num {% if mv.variance > 0 %}f-var-pos{% elif mv.variance < 0 %}f-var-neg{% endif %}">
-        {% if mv.variance %}{{ "${:,.0f}".format(mv.variance) }}{% else %}—{% endif %}
+        {% if mv.variance %}{{ "${:,.2f}".format(mv.variance) }}{% else %}—{% endif %}
       </td>
       {% endfor %}
-      <td class="num f-bold">{{ "${:,.0f}".format(row.b_total) if row.b_total else '—' }}</td>
-      <td class="num f-bold">{{ "${:,.0f}".format(row.a_total) if row.a_total else '—' }}</td>
+      <td class="num f-bold">{{ "${:,.2f}".format(row.b_total) if row.b_total else '—' }}</td>
+      <td class="num f-bold">{{ "${:,.2f}".format(row.a_total) if row.a_total else '—' }}</td>
       <td class="num f-bold {% if row.v_total > 0 %}f-var-pos{% elif row.v_total < 0 %}f-var-neg{% endif %}">
-        {% if row.v_total %}{{ "${:,.0f}".format(row.v_total) }}{% else %}—{% endif %}
+        {% if row.v_total %}{{ "${:,.2f}".format(row.v_total) }}{% else %}—{% endif %}
       </td>
     </tr>
     {% endfor %}
@@ -74,16 +74,16 @@
       <td class="f-row-name">{{ row.item.name }}</td>
       {% for m in months %}
       {% set mv = row.monthly[m] %}
-      <td class="num">{{ "${:,.0f}".format(mv.budget) if mv.budget else '—' }}</td>
-      <td class="num">{{ "${:,.0f}".format(mv.actual) if mv.actual else '—' }}</td>
+      <td class="num">{{ "${:,.2f}".format(mv.budget) if mv.budget else '—' }}</td>
+      <td class="num">{{ "${:,.2f}".format(mv.actual) if mv.actual else '—' }}</td>
       <td class="num {% if mv.variance > 0 %}f-var-pos{% elif mv.variance < 0 %}f-var-neg{% endif %}">
-        {% if mv.variance %}{{ "${:,.0f}".format(mv.variance) }}{% else %}—{% endif %}
+        {% if mv.variance %}{{ "${:,.2f}".format(mv.variance) }}{% else %}—{% endif %}
       </td>
       {% endfor %}
-      <td class="num f-bold">{{ "${:,.0f}".format(row.b_total) if row.b_total else '—' }}</td>
-      <td class="num f-bold">{{ "${:,.0f}".format(row.a_total) if row.a_total else '—' }}</td>
+      <td class="num f-bold">{{ "${:,.2f}".format(row.b_total) if row.b_total else '—' }}</td>
+      <td class="num f-bold">{{ "${:,.2f}".format(row.a_total) if row.a_total else '—' }}</td>
       <td class="num f-bold {% if row.v_total > 0 %}f-var-pos{% elif row.v_total < 0 %}f-var-neg{% endif %}">
-        {% if row.v_total %}{{ "${:,.0f}".format(row.v_total) }}{% else %}—{% endif %}
+        {% if row.v_total %}{{ "${:,.2f}".format(row.v_total) }}{% else %}—{% endif %}
       </td>
     </tr>
     {% endfor %}

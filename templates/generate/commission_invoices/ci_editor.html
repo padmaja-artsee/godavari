@@ -1,10 +1,11 @@
 {% extends "base.html" %}
-{% from "generate/commission_invoices/_ci_body.html" import ci_body %}
+{% from "generate/commission_invoices/_ci_body.html" import ci_body with context %}
 {% block title %}{% if editing %}Edit{% else %}New{% endif %} Commission Invoice{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="/static/generate.css" />
 <link rel="stylesheet" href="/static/po_wysiwyg.css" />
-<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css?v=2.4" />
+<link rel="stylesheet" href="/static/ci_template_us.css?v=2.9" />
 {% endblock %}
 {% block content %}
 <div class="po-shell">
@@ -17,6 +18,7 @@
       <a href="/generate/commission-invoices/{{ ci.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
       <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost btn-sm">Print</a>
       {% endif %}
+      <a href="/generate/commission-invoices/data-request-template.xlsx" class="btn btn-ghost btn-sm">↓ Data template</a>
       <button type="submit" form="ci-editor-form" class="btn btn-primary btn-sm">Save</button>
     </div>
   </div>
@@ -50,5 +52,5 @@
     </div>
   </section>
 </div>
-<script src="/static/ci_wysiwyg.js"></script>
+<script src="/static/ci_wysiwyg.js?v=2.4"></script>
 {% endblock %}

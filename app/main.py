@@ -2,9 +2,9 @@ from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-from typing import List
+from typing import List, Optional, Union
 
-from fastapi import FastAPI, File, Form, Query, Request, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import (
     FileResponse,
     HTMLResponse,
@@ -25,6 +25,9 @@ from app.database import (
     update_activity,
     dashboard_stats,
     get_deal_detail,
+    compute_commercial_total,
+    compute_fob_value,
+    compute_commission_amount,
     get_lead_by_company,
     init_db,
     list_customers,
@@ -42,6 +45,7 @@ from app.database import (
     delete_deal,
     mark_deal_lost,
     mark_deal_shipped,
+    reopen_deal,
     unarchive_deal,
     update_deal_fields,
     PRICE_UNITS,
@@ -99,9 +103,17 @@ from app.commission_invoices import (
     get_commission_invoice_for_export,
     list_commission_invoices,
     parse_ci_form,
+    update_commission_invoice_dates,
     upgrade_commission_invoices_schema,
 )
 from app.ci_exports import export_ci_xlsx
+from app.ci_data_template import generate_data_request_template, generate_prefilled_data_request
+from app.ci_data_fill import period_label_from_filters
+from app.database import (
+    list_commission_companies,
+    list_commission_products,
+    list_deals_for_commission,
+)
 # ── Sales (Commercial) Invoice ──────────────────────────────────────────────
 from app.sales_invoices import (
     DEFAULT_SI,
@@ -144,6 +156,12 @@ from app.purchase_orders import (
     validate_purchase_order,
     validation_warnings,
 )
+from app.document_assets import (
+    authorized_signature_url,
+    save_authorized_signature,
+    signature_media_type,
+    signature_path,
+)
 from app.seed import load_seed
 
 import sys as _sys
@@ -161,6 +179,7 @@ BASE = Path(_bundle_base) if _bundle_base else Path(__file__).resolve().parent.p
 templates = Jinja2Templates(directory=str(BASE / "templates"))
 templates.env.filters["qty_display"] = format_quantity_display
 templates.env.filters["iso_date"] = iso_date_input
+templates.env.globals["get_authorized_signature_url"] = authorized_signature_url
 
 
 def _money_filter(value):
@@ -178,8 +197,24 @@ def _num_filter(value):
         return value or "—"
 
 
+def _ci_date_filter(value):
+    if not value:
+        return "—"
+    from datetime import datetime
+    s = str(value).strip()[:20]
+    for cand in (s, s.title()):
+        for fmt in ("%Y-%m-%d", "%d-%b-%Y", "%b-%d-%Y", "%d.%m.%Y", "%m-%d-%Y"):
+            try:
+                d = datetime.strptime(cand, fmt)
+                return d.strftime("%d-%b-%Y")
+            except ValueError:
+                continue
+    return str(value)
+
+
 templates.env.filters["money"] = _money_filter
 templates.env.filters["num"] = _num_filter
+templates.env.filters["ci_date"] = _ci_date_filter
 
 
 def _timeline_deal_ids(timeline: dict) -> set[int]:
@@ -336,6 +371,7 @@ def ctx(request: Request, **extra):
         "request": request,
         "price_units": PRICE_UNITS,
         "quantity_units": list_quantity_unit_options(),
+        "authorized_signature_url": authorized_signature_url(),
         **extra,
     }
 
@@ -549,6 +585,11 @@ async def deal_update_meta(
     incoterms: str = Form(""),
     payment_terms: str = Form(""),
     shipment_timing: str = Form(""),
+    insurance_amount: str = Form(""),
+    insurance_currency: str = Form("USD"),
+    ocean_freight_amount: str = Form(""),
+    ocean_freight_currency: str = Form("USD"),
+    commission_rate: str = Form(""),
     next_url: str = Form(""),
 ):
     update_deal_fields(
@@ -574,6 +615,11 @@ async def deal_update_meta(
         incoterms=incoterms,
         payment_terms=payment_terms,
         shipment_timing=shipment_timing,
+        insurance_amount=insurance_amount,
+        insurance_currency=insurance_currency,
+        ocean_freight_amount=ocean_freight_amount,
+        ocean_freight_currency=ocean_freight_currency,
+        commission_rate=commission_rate,
     )
     return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
 
@@ -695,6 +741,18 @@ async def deal_page(
     detail = get_deal_detail(deal_id)
     if not detail:
         return RedirectResponse("/deals", status_code=303)
+    d = detail["deal"]
+    if not d.get("commercial_total") and d.get("quantity") and d.get("price"):
+        d["commercial_total"] = compute_commercial_total(d.get("quantity") or "", d.get("price") or "")
+    ct = d.get("commercial_total") or ""
+    if not d.get("fob_value") and ct:
+        d["fob_value"] = compute_fob_value(
+            ct, d.get("insurance_amount") or "", d.get("ocean_freight_amount") or ""
+        )
+    if not d.get("commission_amount") and d.get("fob_value") and d.get("commission_rate"):
+        d["commission_amount"] = compute_commission_amount(
+            d.get("fob_value") or "", d.get("commission_rate") or ""
+        )
     pid = detail["deal"].get("product_id")
     product_record = get_product(pid) if pid else None
     company = detail["deal"]["company"]
@@ -815,6 +873,11 @@ async def post_deal(
     incoterms: str = Form(""),
     payment_terms: str = Form(""),
     shipment_timing: str = Form(""),
+    insurance_amount: str = Form(""),
+    insurance_currency: str = Form("USD"),
+    ocean_freight_amount: str = Form(""),
+    ocean_freight_currency: str = Form("USD"),
+    commission_rate: str = Form(""),
 ):
     deal_id = create_deal(
         {
@@ -840,6 +903,10 @@ async def post_deal(
         "transit_time": transit_time, "destination": destination, "eta": eta,
         "incoterms": incoterms, "payment_terms": payment_terms,
         "shipment_timing": shipment_timing,
+        "insurance_amount": insurance_amount, "insurance_currency": insurance_currency,
+        "ocean_freight_amount": ocean_freight_amount,
+        "ocean_freight_currency": ocean_freight_currency,
+        "commission_rate": commission_rate,
     }
     if any(v.strip() for v in extra.values()):
         update_deal_fields(
@@ -896,6 +963,11 @@ async def post_log(
     incoterms: str = Form(""),
     payment_terms: str = Form(""),
     shipment_timing: str = Form(""),
+    insurance_amount: str = Form(""),
+    insurance_currency: str = Form("USD"),
+    ocean_freight_amount: str = Form(""),
+    ocean_freight_currency: str = Form("USD"),
+    commission_rate: str = Form(""),
 ):
     if link_mode == "new":
         product_val = product_new or product
@@ -937,18 +1009,52 @@ async def post_log(
             f"/add?tab=log&company={quote(company)}&error={quote(str(e))}",
             status_code=303,
         )
-    # Save shipping + commercial fields for new or existing deals when provided
+    # Save commercial + shipping fields when linked to a deal
     if result.get("deal_id") and link_mode in ("new", "existing"):
-        extra = {
-            "po_date": po_date, "packing": packing, "gbl_invoice": gbl_invoice,
-            "gbl_invoice_date": gbl_invoice_date, "container_number": container_number,
-            "vessel_name": vessel_name, "etd_india": etd_india,
-            "transit_time": transit_time, "destination": destination, "eta": eta,
-            "incoterms": incoterms, "payment_terms": payment_terms,
-            "shipment_timing": shipment_timing,
-        }
-        if any(v.strip() for v in extra.values()):
-            update_deal_fields(result["deal_id"], **extra)
+        detail = get_deal_detail(result["deal_id"])
+        cur = detail["deal"] if detail else {}
+        if link_mode == "existing":
+            po = deal_po_number.strip() or cur.get("po_number") or ""
+            qty = deal_quantity.strip() if deal_quantity.strip() else (cur.get("quantity") or "")
+            pr = deal_price.strip() if deal_price.strip() else (cur.get("price") or "")
+            pu = deal_price_unit or cur.get("price_unit") or "/MT"
+            qu = normalize_quantity_unit(deal_quantity_unit, deal_quantity_unit_other)
+        else:
+            po = cur.get("po_number") or po_number or ""
+            qty = cur.get("quantity") or quantity or ""
+            pr = cur.get("price") or price or ""
+            pu = cur.get("price_unit") or price_unit or "/MT"
+            qu = cur.get("quantity_unit") or normalize_quantity_unit(
+                quantity_unit, quantity_unit_other
+            )
+        update_deal_fields(
+            result["deal_id"],
+            notes=cur.get("notes") or "",
+            quote_ref=cur.get("quote_ref") or "",
+            po_number=po,
+            quantity=qty,
+            quantity_unit=qu,
+            price=pr,
+            price_unit=pu,
+            po_date=po_date or cur.get("po_date") or "",
+            packing=packing or cur.get("packing") or "",
+            gbl_invoice=gbl_invoice or cur.get("gbl_invoice") or "",
+            gbl_invoice_date=gbl_invoice_date or cur.get("gbl_invoice_date") or "",
+            container_number=container_number or cur.get("container_number") or "",
+            vessel_name=vessel_name or cur.get("vessel_name") or "",
+            etd_india=etd_india or cur.get("etd_india") or "",
+            transit_time=transit_time or cur.get("transit_time") or "",
+            destination=destination or cur.get("destination") or "",
+            eta=eta or cur.get("eta") or "",
+            incoterms=incoterms or cur.get("incoterms") or "",
+            payment_terms=payment_terms or cur.get("payment_terms") or "",
+            shipment_timing=shipment_timing or cur.get("shipment_timing") or "",
+            insurance_amount=insurance_amount or cur.get("insurance_amount") or "",
+            insurance_currency=insurance_currency or cur.get("insurance_currency") or "USD",
+            ocean_freight_amount=ocean_freight_amount or cur.get("ocean_freight_amount") or "",
+            ocean_freight_currency=ocean_freight_currency or cur.get("ocean_freight_currency") or "USD",
+            commission_rate=commission_rate or cur.get("commission_rate") or "",
+        )
     return_to = request.query_params.get("return_to", "")
     if return_to.startswith("/"):
         return RedirectResponse(return_to, status_code=303)
@@ -972,6 +1078,12 @@ async def lost_deal(
 ):
     mark_deal_lost(deal_id, closed_date or None, lost_reason)
     return RedirectResponse(next_url or "/deals?status=open", status_code=303)
+
+
+@app.post("/deals/{deal_id}/reopen")
+async def reopen_deal_route(deal_id: int, next_url: str = Form("")):
+    reopen_deal(deal_id)
+    return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
 
 
 @app.post("/deals/{deal_id}/archive")
@@ -1377,6 +1489,26 @@ async def generate_index(request: Request):
     )
 
 
+@app.get("/generate/document-assets/authorized-signature")
+async def get_authorized_signature():
+    path = signature_path()
+    if not path:
+        raise HTTPException(status_code=404, detail="No signature uploaded")
+    return FileResponse(path, media_type=signature_media_type(path))
+
+
+@app.post("/generate/document-assets/authorized-signature")
+async def upload_authorized_signature(signature_file: UploadFile = File(...)):
+    content = await signature_file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="Empty file")
+    try:
+        save_authorized_signature(content, signature_file.filename or "signature.png")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return RedirectResponse(url="/generate?signature=uploaded", status_code=303)
+
+
 @app.get("/generate/charts", response_class=HTMLResponse)
 async def charts_page(request: Request, period: str = "12m"):
     import json
@@ -1612,12 +1744,180 @@ async def po_export_pdf_route(request: Request, po_id: int):
 # Remove this entire block (and the imports above) to drop the CI feature.
 # ════════════════════════════════════════════════════════════════════════════
 
+_CI_FY_MONTHS = [4, 5, 6, 7, 8, 9, 10, 11, 12, 1, 2, 3]
+
+
+def _ci_commission_defaults() -> tuple[int, int]:
+    import datetime
+    import calendar
+    today = datetime.date.today()
+    fy = today.year + 1 if today.month >= 4 else today.year
+    month = today.month if today.month in _CI_FY_MONTHS else _CI_FY_MONTHS[0]
+    return fy, month
+
+
+def _ci_fiscal_years() -> list[int]:
+    import datetime
+    y = datetime.date.today().year
+    return [y + 1, y, y - 1]
+
+
+def _qi(val: Optional[Union[str, int]], default: int = 0) -> int:
+    """Parse optional int query param (empty string → default)."""
+    if val is None or val == "":
+        return default
+    try:
+        return int(val)
+    except (TypeError, ValueError):
+        return default
+
+
+def _ci_export_deals(
+    *,
+    mode: str,
+    fy: int,
+    month: int,
+    date_from: str,
+    date_to: str,
+    product: str,
+    company: str,
+    status: str,
+) -> list[dict]:
+    monthly = mode != "range"
+    return list_deals_for_commission(
+        fiscal_year=fy if monthly and month else 0,
+        month=month if monthly else 0,
+        date_from=date_from.strip() if not monthly else "",
+        date_to=date_to.strip() if not monthly else "",
+        product=product.strip(),
+        company=company.strip(),
+        status=status or "open",
+    )
+
+
 @app.get("/generate/commission-invoices", response_class=HTMLResponse)
-async def ci_list_page(request: Request):
+async def ci_list_page(
+    request: Request,
+    fy: str = Query(""),
+    month: str = Query(""),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    product: str = Query(""),
+    company: str = Query(""),
+    status: str = Query("open"),
+    mode: str = Query("monthly"),
+):
     rows = list_commission_invoices()
+    def_fy, def_month = _ci_commission_defaults()
+    fy_i = _qi(fy, def_fy)
+    month_i = _qi(month, def_month)
+    monthly = mode != "range"
+    preview_deals = _ci_export_deals(
+        mode=mode,
+        fy=fy_i,
+        month=month_i,
+        date_from=date_from,
+        date_to=date_to,
+        product=product,
+        company=company,
+        status=status,
+    )
+    import calendar
+    month_labels = {m: calendar.month_name[m] for m in _CI_FY_MONTHS}
+    period_label = period_label_from_filters(
+        month=month_i if monthly and month_i else 0,
+        fiscal_year=fy_i if monthly else 0,
+        date_from="" if monthly else date_from,
+        date_to="" if monthly else date_to,
+    )
+    if monthly and not month_i:
+        period_label = f"All months FY{fy_i % 100:02d}" if fy_i else "All dates"
     return templates.TemplateResponse(
         "generate/commission_invoices/ci_list.html",
-        {"request": request, "rows": rows},
+        {
+            "request": request,
+            "rows": rows,
+            "fy": fy_i,
+            "month": month_i,
+            "date_from": date_from,
+            "date_to": date_to,
+            "product": product,
+            "company": company,
+            "status": status,
+            "mode": mode,
+            "fiscal_years": _ci_fiscal_years(),
+            "months": _CI_FY_MONTHS,
+            "month_labels": month_labels,
+            "products": list_commission_products(),
+            "companies": list_commission_companies(),
+            "preview_deals": preview_deals,
+            "period_label": period_label,
+            "filters_applied": bool(request.query_params),
+        },
+    )
+
+
+@app.get("/generate/commission-invoices/prefilled-template.xlsx")
+async def ci_prefilled_template_route(
+    fy: str = Query(""),
+    month: str = Query(""),
+    date_from: str = Query(""),
+    date_to: str = Query(""),
+    product: str = Query(""),
+    company: str = Query(""),
+    status: str = Query("open"),
+    mode: str = Query("monthly"),
+    deal_ids: list[int] = Query([]),
+):
+    def_fy, def_month = _ci_commission_defaults()
+    fy_i = _qi(fy, def_fy)
+    month_i = _qi(month, def_month)
+    monthly = mode != "range"
+    all_deals = _ci_export_deals(
+        mode=mode,
+        fy=fy_i,
+        month=month_i,
+        date_from=date_from,
+        date_to=date_to,
+        product=product,
+        company=company,
+        status=status,
+    )
+    if deal_ids:
+        allowed = {d["id"] for d in all_deals}
+        pick = {i for i in deal_ids if i in allowed}
+        deals = [d for d in all_deals if d["id"] in pick]
+    else:
+        deals = all_deals
+    if not deals:
+        raise HTTPException(status_code=400, detail="No deals selected for export.")
+    period_label = period_label_from_filters(
+        month=month_i if monthly and month_i else 0,
+        fiscal_year=fy_i if monthly else 0,
+        date_from="" if monthly else date_from,
+        date_to="" if monthly else date_to,
+    )
+    if monthly and not month_i:
+        period_label = f"All months FY{fy_i % 100:02d}" if fy_i else "All dates"
+    content, fname = generate_prefilled_data_request(
+        deals,
+        company=company.strip(),
+        period_label=period_label,
+        product=product.strip().upper() if product else "",
+        month_hint=month_i if monthly else 0,
+    )
+    return _download_response(
+        content, fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/generate/commission-invoices/data-request-template.xlsx")
+async def ci_data_request_template_route():
+    content, fname = generate_data_request_template()
+    return _download_response(
+        content, fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
 
@@ -1645,7 +1945,7 @@ async def ci_new_page(
         ci = deepcopy(DEFAULT_CI)
     return templates.TemplateResponse(
         "generate/commission_invoices/ci_editor.html",
-        {"request": request, "ci": ci, "editing": False, "errors": []},
+        ctx(request, ci=ci, editing=False, errors=[]),
     )
 
 
@@ -1656,8 +1956,8 @@ async def ci_new_post(request: Request):
     if not data.get("invoice_number"):
         return templates.TemplateResponse(
             "generate/commission_invoices/ci_editor.html",
-            {"request": request, "ci": {**data, "line_items": line_items},
-             "editing": False, "errors": ["Invoice number is required."]},
+            ctx(request, ci={**data, "line_items": line_items},
+                editing=False, errors=["Invoice number is required."]),
             status_code=422,
         )
     deal_id    = int(form.get("deal_id") or 0) or None
@@ -1674,7 +1974,7 @@ async def ci_detail_page(request: Request, ci_id: int):
     saved_msg = "Saved successfully." if request.query_params.get("saved") else None
     return templates.TemplateResponse(
         "generate/commission_invoices/ci_detail.html",
-        {"request": request, "ci": ci, "saved_msg": saved_msg},
+        ctx(request, ci=ci, saved_msg=saved_msg),
     )
 
 
@@ -1685,7 +1985,7 @@ async def ci_edit_page(request: Request, ci_id: int):
         return RedirectResponse("/generate/commission-invoices", status_code=303)
     return templates.TemplateResponse(
         "generate/commission_invoices/ci_editor.html",
-        {"request": request, "ci": ci, "editing": True, "errors": []},
+        ctx(request, ci=ci, editing=True, errors=[]),
     )
 
 
@@ -1699,8 +1999,7 @@ async def ci_edit_post(request: Request, ci_id: int):
         ci["line_items"] = line_items
         return templates.TemplateResponse(
             "generate/commission_invoices/ci_editor.html",
-            {"request": request, "ci": ci, "editing": True,
-             "errors": ["Invoice number is required."]},
+            ctx(request, ci=ci, editing=True, errors=["Invoice number is required."]),
             status_code=422,
         )
     from app.commission_invoices import update_commission_invoice
@@ -1729,7 +2028,20 @@ async def ci_print_page(request: Request, ci_id: int):
         return RedirectResponse("/generate/commission-invoices", status_code=303)
     return templates.TemplateResponse(
         "generate/commission_invoices/ci_print.html",
-        {"request": request, "ci": ci},
+        ctx(request, ci=ci),
+    )
+
+
+@app.post("/generate/commission-invoices/{ci_id}/dates")
+async def ci_update_dates(
+    ci_id: int,
+    invoice_date: str = Form(""),
+    notice_date: str = Form(""),
+):
+    if not update_commission_invoice_dates(ci_id, invoice_date, notice_date):
+        return RedirectResponse("/generate/commission-invoices", status_code=303)
+    return RedirectResponse(
+        f"/generate/commission-invoices/{ci_id}/print?dates=saved", status_code=303
     )
 
 

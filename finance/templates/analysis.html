@@ -24,16 +24,16 @@
   <div class="f-summary-label">{{ s.label }}</div>
   <div class="f-summary-row">
     <span class="f-sum-key">Planned</span>
-    <span class="f-sum-val">${{ "{:,.0f}".format(s.planned) }}</span>
+    <span class="f-sum-val">${{ "{:,.2f}".format(s.planned) }}</span>
   </div>
   <div class="f-summary-row">
     <span class="f-sum-key">Actual</span>
-    <span class="f-sum-val">${{ "{:,.0f}".format(s.actual) }}</span>
+    <span class="f-sum-val">${{ "{:,.2f}".format(s.actual) }}</span>
   </div>
   <div class="f-summary-row">
     <span class="f-sum-key">Variance</span>
     <span class="f-sum-val {% if s.variance >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-      {% if s.variance >= 0 %}+{% endif %}${{ "{:,.0f}".format(s.variance) }}
+      {% if s.variance >= 0 %}+{% endif %}${{ "{:,.2f}".format(s.variance) }}
       {% if s.var_pct is not none %}
       <small>({{ "{:.0f}".format(s.var_pct) }}%)</small>
       {% endif %}
@@ -71,7 +71,7 @@ new Chart(document.getElementById('expChart'), {
     {label:'Actuals', data:{{ exp_actual  | tojson }}, backgroundColor:'rgba(192,57,43,.45)', borderColor:'#C0392B', borderWidth:1}
   ]},
   options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
 });
 new Chart(document.getElementById('incChart'), {
   type:'bar',
@@ -79,7 +79,7 @@ new Chart(document.getElementById('incChart'), {
     {label:'Income Actual',data:{{ income_actual | tojson }},backgroundColor:'rgba(28,86,49,.5)',borderColor:'#1C5631',borderWidth:1}
   ]},
   options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
 });
 
 function saveChart(canvasId, filename) {

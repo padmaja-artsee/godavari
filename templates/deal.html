@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_activity_row.html" import activity_row %}
 {% from "_deal_shipping_fields.html" import shipping_inputs %}
+{% from "_deal_commercial_extra.html" import commercial_extra_fields %}
 {% from "_quantity_fields.html" import quantity_fields %}
 {% block title %}Deal · {{ detail.deal.product }}{% endblock %}
 {% block content %}
@@ -20,6 +21,7 @@
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     <a href="/generate/purchase-orders/new?deal_id={{ d.id }}" class="btn btn-ghost">Generate Purchase Order</a>
+    <a href="/generate/commission-invoices/new?deal_id={{ d.id }}" class="btn btn-ghost">Generate Commission Invoice</a>
     <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary">+ Log update</a>
     <a href="/add?tab=deal&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}" class="btn btn-ghost">+ Create deal</a>
   </div>
@@ -79,16 +81,17 @@
     {{ quantity_fields(d.quantity or '', d.quantity_unit or 'MT', '', units=quantity_units) }}
     <div>
       <label>Price</label>
-      <input name="price" value="{{ d.price or '' }}" placeholder="e.g. 150" />
+      <input name="price" id="deal-commercial-price" value="{{ d.price or '' }}" placeholder="e.g. 150" />
     </div>
     <div>
       <label>Price unit</label>
-      <select name="price_unit">
+      <select name="price_unit" class="deal-commercial-price-unit">
         {% for u in price_units %}
         <option value="{{ u }}" {% if (d.price_unit or '/MT') == u %}selected{% endif %}>{{ u }}</option>
         {% endfor %}
       </select>
     </div>
+    {{ commercial_extra_fields(d) }}
     <div>
       <label>Incoterms <span class="form-hint" style="font-weight:400">→ PO "Terms"</span></label>
       <input name="incoterms" value="{{ d.incoterms or '' }}" placeholder="e.g. CFR Antwerp" />
@@ -214,8 +217,20 @@
     </form>
     {% elif d.status == 'shipped' %}
     <p class="muted">Deal completed{% if d.closed_date %} on {{ d.closed_date }}{% endif %}.</p>
+    <form method="post" action="/deals/{{ d.id }}/reopen" class="inline-form" style="margin-top:0.75rem"
+          data-confirm="Reopen this deal? It will be moved back to Open status."
+          data-confirm-ok="Yes, Reopen">
+      <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+      <button type="submit" class="btn btn-ghost btn-sm">↩ Reopen deal</button>
+    </form>
     {% elif d.status == 'lost' %}
     <p class="muted">Deal marked lost{% if d.closed_date %} on {{ d.closed_date }}{% endif %}.</p>
+    <form method="post" action="/deals/{{ d.id }}/reopen" class="inline-form" style="margin-top:0.75rem"
+          data-confirm="Reopen this deal? It will be moved back to Open status."
+          data-confirm-ok="Yes, Reopen">
+      <input type="hidden" name="next_url" value="/deal/{{ d.id }}" />
+      <button type="submit" class="btn btn-ghost btn-sm">↩ Reopen deal</button>
+    </form>
     {% endif %}
     {% if d.archived %}
     <form method="post" action="/deals/{{ d.id }}/unarchive" class="inline-form">
@@ -248,5 +263,6 @@
   {% for u in quantity_units if u not in ['MT', 'FCL', 'Other'] %}<option value="{{ u }}">{% endfor %}
 </datalist>
 <script src="/static/qty-unit.js"></script>
+<script src="/static/deal_commercial.js"></script>
 <script src="/static/activity-edit.js"></script>
 {% endblock %}

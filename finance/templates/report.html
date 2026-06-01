@@ -9,24 +9,18 @@
   </div>
   <div class="f-header-controls">
     <form method="get" action="{{ _base }}/report" class="f-filter-row" id="reportForm">
-      <select name="fy" class="f-select-sm" onchange="document.getElementById('reportForm').submit()">
+      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
       </select>
-      <select name="view" class="f-select-sm" onchange="document.getElementById('reportForm').submit()">
-        <option value="ytd"     {% if view=='ytd'     %}selected{% endif %}>Full Year (YTD)</option>
+      <select name="month" class="f-select-sm" onchange="this.form.submit()">
         {% for m in months %}
-        <option value="monthly" data-month="{{ m }}"
-          {% if view=='monthly' and month==m %}selected{% endif %}>
-          {{ month_labels[m] }} FY{{ fy }}
-        </option>
+        {% set yr = (fy - 1) if m >= 4 else fy %}
+        <option value="{{ m }}" {% if m==month %}selected{% endif %}>{{ month_labels[m] }} {{ yr }}</option>
         {% endfor %}
       </select>
-      {% if view == 'monthly' %}
-      <input type="hidden" name="month" value="{{ month }}"/>
-      {% endif %}
     </form>
     <button onclick="window.print()" class="f-btn-sm f-btn-primary no-print">🖨 Print / PDF</button>
-    <a href="{{ _base }}/export/report.xlsx?fy={{ fy }}&view={{ view }}&month={{ month }}" class="f-btn-sm f-btn-outline no-print">↓ Export Excel</a>
+    <a href="{{ _base }}/export/report.xlsx?fy={{ fy }}&month={{ month }}" class="f-btn-sm f-btn-outline no-print">↓ Export Excel</a>
     {% if archived %}<span class="f-badge f-badge-warning no-print">Archived</span>{% endif %}
   </div>
 </div>
@@ -51,90 +45,119 @@
   <table class="f-pl-table">
     <thead>
       <tr>
-        <th class="f-pl-name"></th>
+        <th class="f-pl-name" rowspan="2"></th>
+        <th class="f-pl-num f-pl-group-hdr" colspan="3">{{ month_label }} {{ cal_yr }}</th>
+        <th class="f-pl-num f-pl-group-hdr f-pl-ytd-hdr" colspan="3">YTD (Apr {{ fy_start }} – {{ month_label }} {{ cal_yr }})</th>
+      </tr>
+      <tr>
         <th class="f-pl-num">Actual</th>
         <th class="f-pl-num">Budget</th>
         <th class="f-pl-num">Variance</th>
+        <th class="f-pl-num f-pl-ytd">Actual</th>
+        <th class="f-pl-num f-pl-ytd">Budget</th>
+        <th class="f-pl-num f-pl-ytd">Variance</th>
       </tr>
     </thead>
     <tbody>
 
       <!-- ── INCOME ────────────────────────────────── -->
-      <tr class="f-pl-section-hdr"><td colspan="4">INCOME</td></tr>
+      <tr class="f-pl-section-hdr"><td colspan="7">INCOME</td></tr>
       {% for line in income_lines %}
+      {% set mv = line.m_actual - line.m_budget %}
+      {% set yv = line.ytd_actual - line.ytd_budget %}
       <tr class="f-pl-row">
         <td class="f-pl-name f-pl-indent">{{ line.name }}</td>
-        <td class="f-pl-num">{{ "${:,.2f}".format(line.actual) if line.actual else "—" }}</td>
-        <td class="f-pl-num f-muted">{{ "${:,.2f}".format(line.budget) if line.budget else "—" }}</td>
-        <td class="f-pl-num {% if line.actual - line.budget >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-          {% set v = line.actual - line.budget %}
-          {% if v %}{{ "${:,.2f}".format(v) }}{% else %}—{% endif %}
-        </td>
+        <td class="f-pl-num">{{ "${:,.2f}".format(line.m_actual)   if line.m_actual   else "—" }}</td>
+        <td class="f-pl-num f-muted">{{ "${:,.2f}".format(line.m_budget)   if line.m_budget   else "—" }}</td>
+        <td class="f-pl-num {% if mv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">{% if mv %}{{ "${:,.2f}".format(mv) }}{% else %}—{% endif %}</td>
+        <td class="f-pl-num f-pl-ytd">{{ "${:,.2f}".format(line.ytd_actual) if line.ytd_actual else "—" }}</td>
+        <td class="f-pl-num f-muted f-pl-ytd">{{ "${:,.2f}".format(line.ytd_budget) if line.ytd_budget else "—" }}</td>
+        <td class="f-pl-num f-pl-ytd {% if yv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">{% if yv %}{{ "${:,.2f}".format(yv) }}{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
+
+      <!-- Total Income -->
+      {% set mv = total_income.m_actual - total_income.m_budget %}
+      {% set yv = total_income.ytd_actual - total_income.ytd_budget %}
       <tr class="f-pl-subtotal">
         <td class="f-pl-name">Total Income</td>
-        <td class="f-pl-num">${{ "{:,.2f}".format(total_income_actual) }}</td>
-        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_income_budget) }}</td>
-        <td class="f-pl-num {% if total_income_actual - total_income_budget >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-          ${{ "{:,.2f}".format(total_income_actual - total_income_budget) }}
-        </td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(total_income.m_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_income.m_budget) }}</td>
+        <td class="f-pl-num {% if mv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(mv) }}</td>
+        <td class="f-pl-num f-pl-ytd">${{ "{:,.2f}".format(total_income.ytd_actual) }}</td>
+        <td class="f-pl-num f-muted f-pl-ytd">${{ "{:,.2f}".format(total_income.ytd_budget) }}</td>
+        <td class="f-pl-num f-pl-ytd {% if yv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(yv) }}</td>
       </tr>
 
       <tr class="f-pl-gross">
         <td class="f-pl-name">Gross Profit</td>
-        <td class="f-pl-num">${{ "{:,.2f}".format(total_income_actual) }}</td>
-        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_income_budget) }}</td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(total_income.m_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_income.m_budget) }}</td>
         <td class="f-pl-num"></td>
+        <td class="f-pl-num f-pl-ytd">${{ "{:,.2f}".format(total_income.ytd_actual) }}</td>
+        <td class="f-pl-num f-muted f-pl-ytd">${{ "{:,.2f}".format(total_income.ytd_budget) }}</td>
+        <td class="f-pl-num f-pl-ytd"></td>
       </tr>
 
       <!-- ── EXPENSES ───────────────────────────────── -->
-      <tr class="f-pl-spacer"><td colspan="4"></td></tr>
-      <tr class="f-pl-section-hdr"><td colspan="4">EXPENSES</td></tr>
+      <tr class="f-pl-spacer"><td colspan="7"></td></tr>
+      <tr class="f-pl-section-hdr"><td colspan="7">EXPENSES</td></tr>
 
       {% for sec in expense_sections %}
       {% if sec.lines %}
-      <tr class="f-pl-subsection"><td colspan="4">{{ sec.label }}</td></tr>
+      <tr class="f-pl-subsection"><td colspan="7">{{ sec.label }}</td></tr>
       {% for line in sec.lines %}
+      {% set mv = line.m_budget - line.m_actual %}
+      {% set yv = line.ytd_budget - line.ytd_actual %}
       <tr class="f-pl-row">
         <td class="f-pl-name f-pl-indent">{{ line.name }}</td>
-        <td class="f-pl-num">{{ "${:,.2f}".format(line.actual) if line.actual else "—" }}</td>
-        <td class="f-pl-num f-muted">{{ "${:,.2f}".format(line.budget) if line.budget else "—" }}</td>
-        <td class="f-pl-num {% if line.budget - line.actual >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-          {% set v = line.budget - line.actual %}
-          {% if v %}{{ "${:,.2f}".format(v) }}{% else %}—{% endif %}
-        </td>
+        <td class="f-pl-num">{{ "${:,.2f}".format(line.m_actual)   if line.m_actual   else "—" }}</td>
+        <td class="f-pl-num f-muted">{{ "${:,.2f}".format(line.m_budget)   if line.m_budget   else "—" }}</td>
+        <td class="f-pl-num {% if mv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">{% if mv %}{{ "${:,.2f}".format(mv) }}{% else %}—{% endif %}</td>
+        <td class="f-pl-num f-pl-ytd">{{ "${:,.2f}".format(line.ytd_actual) if line.ytd_actual else "—" }}</td>
+        <td class="f-pl-num f-muted f-pl-ytd">{{ "${:,.2f}".format(line.ytd_budget) if line.ytd_budget else "—" }}</td>
+        <td class="f-pl-num f-pl-ytd {% if yv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">{% if yv %}{{ "${:,.2f}".format(yv) }}{% else %}—{% endif %}</td>
       </tr>
       {% endfor %}
+      <!-- Section subtotal -->
+      {% set mv = sec.m_total_budget - sec.m_total_actual %}
+      {% set yv = sec.ytd_total_budget - sec.ytd_total_actual %}
       <tr class="f-pl-subtotal">
         <td class="f-pl-name">Total {{ sec.label }}</td>
-        <td class="f-pl-num">${{ "{:,.2f}".format(sec.total_actual) }}</td>
-        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(sec.total_budget) }}</td>
-        <td class="f-pl-num {% if sec.total_budget - sec.total_actual >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-          ${{ "{:,.2f}".format(sec.total_budget - sec.total_actual) }}
-        </td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(sec.m_total_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(sec.m_total_budget) }}</td>
+        <td class="f-pl-num {% if mv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(mv) }}</td>
+        <td class="f-pl-num f-pl-ytd">${{ "{:,.2f}".format(sec.ytd_total_actual) }}</td>
+        <td class="f-pl-num f-muted f-pl-ytd">${{ "{:,.2f}".format(sec.ytd_total_budget) }}</td>
+        <td class="f-pl-num f-pl-ytd {% if yv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(yv) }}</td>
       </tr>
-      <tr class="f-pl-spacer"><td colspan="4"></td></tr>
+      <tr class="f-pl-spacer"><td colspan="7"></td></tr>
       {% endif %}
       {% endfor %}
 
       <!-- ── TOTALS ─────────────────────────────────── -->
+      {% set mv = total_expenses.m_budget - total_expenses.m_actual %}
+      {% set yv = total_expenses.ytd_budget - total_expenses.ytd_actual %}
       <tr class="f-pl-total-expenses">
         <td class="f-pl-name">Total Expenses</td>
-        <td class="f-pl-num">${{ "{:,.2f}".format(total_expenses_actual) }}</td>
-        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_expenses_budget) }}</td>
-        <td class="f-pl-num {% if total_expenses_budget - total_expenses_actual >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-          ${{ "{:,.2f}".format(total_expenses_budget - total_expenses_actual) }}
-        </td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(total_expenses.m_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(total_expenses.m_budget) }}</td>
+        <td class="f-pl-num {% if mv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(mv) }}</td>
+        <td class="f-pl-num f-pl-ytd">${{ "{:,.2f}".format(total_expenses.ytd_actual) }}</td>
+        <td class="f-pl-num f-muted f-pl-ytd">${{ "{:,.2f}".format(total_expenses.ytd_budget) }}</td>
+        <td class="f-pl-num f-pl-ytd {% if yv >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(yv) }}</td>
       </tr>
 
-      <tr class="f-pl-net {% if net_actual >= 0 %}f-pl-net-pos{% else %}f-pl-net-neg{% endif %}">
+      {% set mn = net.m_actual - net.m_budget %}
+      {% set yn = net.ytd_actual - net.ytd_budget %}
+      <tr class="f-pl-net {% if net.m_actual >= 0 %}f-pl-net-pos{% else %}f-pl-net-neg{% endif %}">
         <td class="f-pl-name">Net Income / (Loss)</td>
-        <td class="f-pl-num">${{ "{:,.2f}".format(net_actual) }}</td>
-        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(net_budget) }}</td>
-        <td class="f-pl-num {% if net_actual - net_budget >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-          ${{ "{:,.2f}".format(net_actual - net_budget) }}
-        </td>
+        <td class="f-pl-num">${{ "{:,.2f}".format(net.m_actual) }}</td>
+        <td class="f-pl-num f-muted">${{ "{:,.2f}".format(net.m_budget) }}</td>
+        <td class="f-pl-num {% if mn >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(mn) }}</td>
+        <td class="f-pl-num f-pl-ytd">${{ "{:,.2f}".format(net.ytd_actual) }}</td>
+        <td class="f-pl-num f-muted f-pl-ytd">${{ "{:,.2f}".format(net.ytd_budget) }}</td>
+        <td class="f-pl-num f-pl-ytd {% if yn >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">${{ "{:,.2f}".format(yn) }}</td>
       </tr>
 
     </tbody>
@@ -144,20 +167,4 @@
     Generated {{ now }} &mdash; Godavari Biorefineries Inc &mdash; Accrual Basis
   </div>
 </div>
-
-<script>
-// Fix the month selector — keep month param in sync with view
-document.querySelector('select[name="view"]').addEventListener('change', function() {
-  const form = document.getElementById('reportForm');
-  const opt = this.options[this.selectedIndex];
-  let mInput = form.querySelector('input[name="month"]');
-  if (this.value === 'monthly') {
-    if (!mInput) { mInput = document.createElement('input'); mInput.type='hidden'; mInput.name='month'; form.appendChild(mInput); }
-    mInput.value = opt.dataset.month || '{{ month or months[0] }}';
-  } else {
-    if (mInput) mInput.remove();
-  }
-  form.submit();
-});
-</script>
 {% endblock %}

@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% set page = "commission" %}
+{% block title %}Commission Report{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Commission Report</h1>
+    <p class="f-subtitle">Monthly schedule from Leads deals — same layout as GBINC commission Excel template</p>
+  </div>
+  <div class="f-header-controls">
+    <form method="get" action="{{ _base }}/commission" class="f-filter-row" id="commissionForm">
+      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
+        {% for y in fiscal_years %}
+        <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>
+        {% endfor %}
+      </select>
+      <select name="month" class="f-select-sm" onchange="this.form.submit()">
+        {% for m in months %}
+        {% set yr = (fy - 1) if m >= 4 else fy %}
+        <option value="{{ m }}" {% if m==month %}selected{% endif %}>{{ month_labels[m] }} {{ yr }}</option>
+        {% endfor %}
+      </select>
+      <select name="product" class="f-select-sm" onchange="this.form.submit()">
+        <option value="">All products</option>
+        {% for p in products %}
+        <option value="{{ p }}" {% if p==product %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+      <select name="company" class="f-select-sm" onchange="this.form.submit()">
+        <option value="">All companies</option>
+        {% for co in companies %}
+        <option value="{{ co }}" {% if co==company %}selected{% endif %}>{{ co }}</option>
+        {% endfor %}
+      </select>
+      <select name="status" class="f-select-sm" onchange="this.form.submit()">
+        <option value="all" {% if status=='all' %}selected{% endif %}>All statuses</option>
+        <option value="open" {% if status=='open' %}selected{% endif %}>Open</option>
+        <option value="shipped" {% if status=='shipped' %}selected{% endif %}>Shipped</option>
+        <option value="lost" {% if status=='lost' %}selected{% endif %}>Lost</option>
+      </select>
+    </form>
+    <a href="{{ _base }}/export/commission.xlsx?fy={{ fy }}&month={{ month }}&product={{ product | urlencode }}&company={{ company | urlencode }}&status={{ status }}"
+       class="f-btn-sm f-btn-primary">↓ Download Excel</a>
+  </div>
+</div>
+
+{% if error %}
+<div class="f-alert f-alert-warning">{{ error }}</div>
+{% else %}
+
+<div class="f-card" style="margin-bottom:1rem;padding:1rem 1.25rem;font-size:.85rem;color:var(--muted)">
+  <strong>How rows are built</strong>
+  <ul style="margin:.5rem 0 0 1.1rem;line-height:1.6">
+    <li><strong>Sail month / date</strong> — shipped date, else GBL invoice date, else deal date</li>
+    <li><strong>Invoice no.</strong> — GBL invoice from the deal’s Shipping fields; otherwise left blank</li>
+    <li><strong>Ship to / port</strong> — customer name and destination from deal shipping fields</li>
+    <li><strong>Qty / rate / value</strong> — quantity and price on the deal; Excel uses <code>=QTY×RATE</code></li>
+  </ul>
+  <p style="margin-top:.75rem">Fill in <strong>GBL Invoice</strong>, <strong>Destination</strong>, and <strong>Shipped date</strong> on each deal for best accuracy. Commission income in Finance Actuals stays separate from this export.</p>
+</div>
+
+<p class="f-subtitle" style="margin-bottom:.75rem">{{ period_label }} — {{ deal_count }} deal(s)</p>
+
+<div class="f-table-wrap">
+  <table class="f-table f-var-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Status</th>
+        <th>Product</th>
+        <th>Invoice</th>
+        <th>Sail date</th>
+        <th>Ship to</th>
+        <th>Port</th>
+        <th class="num">Qty</th>
+        <th class="num">Rate</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for d in deals %}
+      <tr>
+        <td>{{ loop.index }}</td>
+        <td>{{ d.status }}</td>
+        <td>{{ d.product }}</td>
+        <td>{{ d.gbl_invoice or d.quote_ref or ('Deal ' ~ d.id) }}</td>
+        <td>{{ d.shipped_date or d.gbl_invoice_date or d.deal_date }}</td>
+        <td>{{ d.company }}</td>
+        <td>{{ d.destination or '—' }}</td>
+        <td class="num">{{ d.quantity or '—' }}</td>
+        <td class="num">{{ d.price or '—' }}{{ d.price_unit or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">No deals match these filters. Try another month or set status to All.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

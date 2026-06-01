@@ -23,9 +23,11 @@ a = Analysis(
         (str(ROOT / "templates"),              "templates"),
         (str(ROOT / "static"),                 "static"),
         (str(ROOT / "data"),                   "data"),
+        (str(ROOT / "app" / "assets"),         "app/assets"),
         # ── Finance sub-app ────────────────────────────────────────────────
         (str(ROOT / "finance" / "templates"),  "finance/templates"),
         (str(ROOT / "finance" / "static"),     "finance/static"),
+        (str(ROOT / "finance" / "assets"),     "finance/assets"),
         # finance/__init__.py and app/__init__.py are picked up via hiddenimports
     ],
 
@@ -75,6 +77,7 @@ a = Analysis(
         "finance.app.database",
         "finance.app.expenses",
         "finance.app.exports",
+        "finance.app.commission_exports",
     ],
     hookspath=[],
     runtime_hooks=[],

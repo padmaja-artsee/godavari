@@ -1,299 +1,234 @@
-"""Commission Invoice Excel export.
-
-Self-contained module — no imports from purchase_orders.py or po_exports.py.
-"""
+"""Commission Invoice Excel export — fills app/assets/commission_invoice_template.xlsx."""
 from __future__ import annotations
 
 import io
+import os
+import re
+from copy import copy
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import openpyxl
-from openpyxl.drawing.image import Image as XLImage
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
-from openpyxl.utils import get_column_letter
+from openpyxl.styles import PatternFill
 
-from app.commission_invoices import _float, safe_ci_filename
+from app.commission_invoices import _float, dollars_in_words, safe_ci_filename
 from app.database import get_data_dir
+from app.document_assets import signature_path
 
-BASE       = Path(__file__).resolve().parent.parent
-XLSX_DIR   = get_data_dir() / "exports" / "commission_invoices" / "xlsx"
-LOGO_PNG   = BASE / "static" / "gbbv-logo.png"
-FOOTER_PNG = BASE / "static" / "footer logo.png"
+XLSX_DIR = get_data_dir() / "exports" / "commission_invoices" / "xlsx"
 
-# ── Style constants ──────────────────────────────────────────────────────────
-_GREEN  = "1A5632"
-_WHITE  = "FFFFFF"
-_LGREY  = "F2F2F2"
-_BORDER = "B0C4B8"
+_MISSING_FILL = PatternFill("solid", fgColor="FFFDE7")  # light yellow highlight
 
-_thin  = Side(style="thin",   color=_BORDER)
-_thick = Side(style="medium", color="888888")
-
-_all_thin   = Border(left=_thin, right=_thin, top=_thin, bottom=_thin)
-_all_thick  = Border(left=_thick, right=_thick, top=_thick, bottom=_thick)
-_bottom_med = Border(bottom=Side(style="medium", color=_GREEN))
-
-_hdr_font  = Font(bold=True, color=_WHITE, size=9)
-_bold9     = Font(bold=True, size=9)
-_reg9      = Font(size=9)
-_hdr_fill  = PatternFill("solid", fgColor=_GREEN)
-_grey_fill = PatternFill("solid", fgColor=_LGREY)
-_c         = Alignment(horizontal="center", vertical="center", wrap_text=True)
-_l         = Alignment(horizontal="left",   vertical="center", wrap_text=True)
-_r         = Alignment(horizontal="right",  vertical="center")
+_DATA_START = 19
+_DATA_SLOTS = 8
+_WORDS_ROW = 27
+_NOTICE_DATA = 69
 
 
-def _s(ws, coord_or_cell, value=None, *, bold=False, fill=None, border=None,
-        align=None, font=None):
-    """Set value + style on a cell (coord string or cell object)."""
-    cell = ws[coord_or_cell] if isinstance(coord_or_cell, str) else coord_or_cell
-    if value is not None:
-        cell.value = value
-    if font:
-        cell.font = font
-    elif bold:
-        cell.font = _bold9
-    else:
-        cell.font = _reg9
-    if fill:
-        cell.fill = fill
-    if border:
-        cell.border = border
-    if align:
-        cell.alignment = align
-    return cell
+def _template_path() -> Path:
+    bundle = os.environ.get("LEADS_BUNDLE_BASE")
+    if bundle:
+        p = Path(bundle) / "app" / "assets" / "commission_invoice_template.xlsx"
+        if p.exists():
+            return p
+    return Path(__file__).resolve().parent / "assets" / "commission_invoice_template.xlsx"
 
 
-def _add_logo(ws) -> None:
-    if not LOGO_PNG.exists():
+def _excel_date(val: str) -> datetime | str:
+    if not val:
+        return ""
+    s = str(val).strip()[:10]
+    for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y"):
+        try:
+            return datetime.strptime(s, fmt)
+        except ValueError:
+            continue
+    return val
+
+
+def _rate_decimal(rate_pct: float) -> float:
+    """Template column E uses decimal rate (0.03 for 3%)."""
+    r = _float(rate_pct)
+    return round(r / 100, 4) if r > 1 else r
+
+
+def _copy_style(src, dst) -> None:
+    if src and dst:
+        dst.font = copy(src.font)
+        dst.fill = copy(src.fill)
+        dst.border = copy(src.border)
+        dst.alignment = copy(src.alignment)
+        dst.number_format = src.number_format
+
+
+def _mark_missing(ws, coord: str, value: Any, placeholder: str = "⚠ NEEDS INPUT") -> None:
+    cell = ws[coord]
+    cell.value = value if value not in (None, "", 0) else placeholder
+    if cell.value == placeholder:
+        cell.fill = _MISSING_FILL
+
+
+def _find_row_with(ws, col: int, text: str, start: int = 1) -> int | None:
+    for r in range(start, ws.max_row + 1):
+        v = ws.cell(r, col).value
+        if v and str(v).strip().lower() == text.lower():
+            return r
+    return None
+
+
+def _add_signature_image(ws, anchor: str) -> None:
+    path = signature_path()
+    if not path:
         return
     try:
-        img = XLImage(str(LOGO_PNG))
-        img.width  = 80
-        img.height = 60
-        ws.add_image(img, "A1")
+        from openpyxl.drawing.image import Image as XLImage
+
+        img = XLImage(str(path))
+        img.width = 130
+        img.height = 45
+        ws.add_image(img, anchor)
     except Exception:
         pass
 
 
-def _money(val: Any) -> str:
-    v = _float(val)
-    return f"{v:,.2f}" if v else "0.00"
-
-
 def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
-    wb = openpyxl.Workbook()
+    path = _template_path()
+    if not path.exists():
+        raise FileNotFoundError(f"Commission invoice template not found: {path}")
+
+    wb = openpyxl.load_workbook(path)
     ws = wb.active
-    ws.title = "Commission Invoice"
+    safe_title = re.sub(r'[\\/*?:\[\]]', "-", ci.get("invoice_number") or "Commission")[:31]
+    ws.title = safe_title or "Commission"
 
-    # ── column widths ───────────────────────────────────────────────────────
-    widths = [20, 16, 10, 12, 14, 14, 14]
-    for i, w in enumerate(widths, 1):
-        ws.column_dimensions[get_column_letter(i)].width = w
+    lines = ci.get("line_items") or [{}]
+    n = len(lines)
+    extra = max(0, n - _DATA_SLOTS)
+    if extra:
+        ws.insert_rows(_WORDS_ROW, extra)
 
-    # ── Logo placeholder (rows 1-3) ─────────────────────────────────────────
-    _add_logo(ws)
-    ws.row_dimensions[1].height = 20
-    ws.row_dimensions[2].height = 20
-    ws.row_dimensions[3].height = 20
+    words_row = _WORDS_ROW + extra
+    notice_row = _NOTICE_DATA + extra
+    total_row = _find_row_with(ws, 5, "Total") or (30 + extra)
 
-    # ── Company name (B4) ───────────────────────────────────────────────────
-    ws.row_dimensions[4].height = 16
-    _s(ws, "B4", ci.get("company_name") or "Godavari Biorefineries Inc",
-       bold=True, align=_l)
+    sample = {c: ws.cell(_DATA_START, c) for c in range(1, 8)}
 
-    # ── Document title (A9) ─────────────────────────────────────────────────
-    for r in range(5, 9):
-        ws.row_dimensions[r].height = 12
-    ws.merge_cells("A9:D9")
-    _s(ws, "A9", ci.get("document_title") or "COMMISSION INVOICE",
-       font=Font(bold=True, size=13, color=_GREEN), align=_c,
-       border=_bottom_med)
-    ws.row_dimensions[9].height = 20
+    # ── Header (yellow per-invoice fields) ───────────────────────────────────
+    inv_date = _excel_date(ci.get("invoice_date") or "")
+    ws["F3"] = inv_date
+    ws["F4"] = ci.get("invoice_number") or "⚠ NEEDS INPUT"
+    if not ci.get("invoice_number"):
+        ws["F4"].fill = _MISSING_FILL
 
-    # ── Bill-to + Invoice meta (rows 13-18) ────────────────────────────────
-    ws.row_dimensions[13].height = 13
-    _s(ws, "A13", "TO", bold=True, align=_l)
-    _s(ws, "D13", "Invoice No", bold=True, align=_r)
-    _s(ws, "E13", ci.get("invoice_number") or "", align=_l)
+    ws["A16"] = ci.get("contact_person") or "Padmaja Ganapathy"
+    ws["F16"] = ci.get("payment_terms") or "PROMPT"
 
-    _s(ws, "A14", ci.get("bill_to_name") or "", bold=True, align=_l)
-    _s(ws, "D14", "Date", bold=True, align=_r)
-    _s(ws, "E14", ci.get("invoice_date") or "", align=_l)
+    products = []
+    # ── Line items (rows 19+) ────────────────────────────────────────────────
+    for i, li in enumerate(lines):
+        r = _DATA_START + i
+        end_co = (li.get("end_customer") or li.get("company") or "").strip()
+        product = (li.get("product_description") or "").strip()
+        gbl = (li.get("gbl_invoice_number") or "").strip()
+        qty = _float(li.get("quantity"))
+        rate_dec = _rate_decimal(li.get("commission_rate"))
+        fob = _float(li.get("fob_value"))
+        if not fob and qty and _float(li.get("unit_price")):
+            fob = round(qty * _float(li.get("unit_price")), 2)
+        comm = _float(li.get("commission_value"))
+        if not comm and fob and rate_dec:
+            comm = round(fob * rate_dec, 2)
 
-    for r, fld in [(15, "bill_to_address_1"), (16, "bill_to_address_2"), (17, "bill_to_address_3")]:
-        ws.row_dimensions[r].height = 13
-        _s(ws, f"A{r}", ci.get(fld) or "", align=_l)
+        if product:
+            products.append(product)
 
-    ws.row_dimensions[18].height = 13
-    _s(ws, "A18", "Customer Order no", bold=True, align=_l)
-    _s(ws, "C18", ci.get("customer_order_no") or "", align=_l)
+        mapping = [
+            (1, end_co or "⚠ NEEDS INPUT"),
+            (2, gbl or f"=F4"),
+            (3, qty or None),
+            (4, f"=F{r}/E{r}" if rate_dec else (fob or None)),
+            (5, rate_dec or None),
+            (6, comm or None),
+            (7, product or "⚠ NEEDS INPUT"),
+        ]
+        for col, val in mapping:
+            cell = ws.cell(r, col)
+            if col == 2 and gbl:
+                cell.value = gbl
+            elif col == 4 and not rate_dec and fob:
+                cell.value = fob
+            else:
+                cell.value = val
+            if col in sample:
+                _copy_style(sample[col], cell)
+            if isinstance(val, str) and val.startswith("⚠"):
+                cell.fill = _MISSING_FILL
 
-    # ── Transaction description (rows 20-21) ───────────────────────────────
-    for r in (19, 20, 21):
-        ws.row_dimensions[r].height = 13
-    ws.merge_cells("A20:G20")
-    _s(ws, "A20", "TRANSACTION DESCRIPTION", bold=True, fill=_grey_fill,
-       border=_all_thin, align=_c)
-    ws.merge_cells("A21:G21")
-    _s(ws, "A21", ci.get("transaction_description") or "", align=_l, border=_all_thin)
-    ws.row_dimensions[21].height = 28
+    last_data = _DATA_START + n - 1
+    total_comm = round(sum(_float(li.get("commission_value")) or (
+        _float(li.get("fob_value")) * _rate_decimal(li.get("commission_rate"))
+    ) for li in lines), 2)
 
-    # ── Shipment details (rows 22-26) ──────────────────────────────────────
-    for r in range(22, 27):
-        ws.row_dimensions[r].height = 13
+    # Amount in words + total formulas
+    words = (ci.get("amount_in_words") or "").strip() or dollars_in_words(total_comm)
+    ws.cell(words_row, 1, words)
+    ws.cell(words_row, 6, f'=IF(SUM(F{_DATA_START}:F{last_data})>0,SUM(F{_DATA_START}:F{last_data}),"")')
+    ws.cell(total_row, 6, f"=F{words_row}")
 
-    ws.merge_cells("A22:D22")
-    _s(ws, "A22", f"Shipment Direct from GBL on  {ci.get('shipment_date') or ''}", align=_l)
-    _s(ws, "E22", "BL No", bold=True, align=_r)
-    ws.merge_cells("F22:G22")
-    _s(ws, "F22", ci.get("bl_number") or "", align=_l)
+    # ── Notice of Order section ──────────────────────────────────────────────
+    notice_seller_row = 53 + extra
+    notice_customer_row = 60 + extra
+    delivery_row = 66 + extra
+    notice_date = _excel_date(ci.get("notice_date") or ci.get("invoice_date") or "")
+    ws.cell(notice_seller_row, 6, notice_date)
+    first_end = (lines[0].get("end_customer") or "").strip() if lines else ""
+    ws.cell(notice_customer_row, 1, first_end or "⚠ NEEDS INPUT")
+    if not first_end:
+        ws.cell(notice_customer_row, 1).fill = _MISSING_FILL
+    ws.cell(delivery_row, 1, ci.get("contact_person") or "")
+    delivery = (ci.get("delivery_port") or "").strip()
+    _mark_missing(ws, f"C{delivery_row}", delivery)
+    ship_cell = f"F{notice_row}"
+    ship_val = _excel_date(ci.get("shipment_date") or "")
+    ws[ship_cell] = ship_val if ship_val else "⚠ NEEDS INPUT"
+    if not ci.get("shipment_date"):
+        ws[ship_cell].fill = _MISSING_FILL
 
-    ws.merge_cells("A23:D23")
-    _s(ws, "A23", f"Port of Loading : {ci.get('port_of_loading') or ''}", align=_l)
-    _s(ws, "E23", "BL Date", bold=True, align=_r)
-    ws.merge_cells("F23:G23")
-    _s(ws, "F23", ci.get("bl_date") or "", align=_l)
+    notice_extra = max(0, n - 1)
+    if notice_extra:
+        ws.insert_rows(notice_row + 1, notice_extra)
 
-    ws.merge_cells("A24:G24")
-    _s(ws, "A24", f"Container No :  {ci.get('container_numbers') or ''}", align=_l)
+    for i, li in enumerate(lines):
+        nr = notice_row + i
+        end_co = (li.get("end_customer") or "").strip()
+        product = (li.get("product_description") or "").strip()
+        qty = _float(li.get("quantity"))
+        rate_dec = _rate_decimal(li.get("commission_rate"))
+        cif = _float(li.get("cif_price"))
 
-    # ── Product table header (rows 26-27) ──────────────────────────────────
-    ws.row_dimensions[26].height = 16
-    ws.row_dimensions[27].height = 16
+        ws.cell(nr, 1, f"=A{_DATA_START + i}")
+        ws.cell(nr, 2, f"=G{_DATA_START + i}")
+        if cif:
+            ws.cell(nr, 3, cif)
+        else:
+            _mark_missing(ws, f"C{nr}", None, "⚠ NEEDS INPUT")
+        ws.cell(nr, 4, f"=C{_DATA_START + i}")
+        ws.cell(nr, 5, rate_dec or None)
+        ship = _excel_date(ci.get("shipment_date") or "") if i == 0 else f"=F{notice_row}"
+        ws.cell(nr, 6, ship)
 
-    headers_top = [
-        ("A26", "C26", "PRODUCT AND OTHER DESCRIPTION"),
-        ("D26", "D26", "GBL Invoice #"),
-        ("E26", "E26", "QUANTITY"),
-        ("F26", "F26", "Value"),
-        ("G26", "G26", "Commission"),
-    ]
-    for start, end, txt in headers_top:
-        if start != end:
-            ws.merge_cells(f"{start}:{end}")
-        _s(ws, start, txt, font=_hdr_font, fill=_hdr_fill, border=_all_thin, align=_c)
+    # Document title product list in B2 area — template uses static; update if product known
+    if products:
+        prod_label = products[0] if len(products) == 1 else ", ".join(products[:3])
+        ws["B2"] = f"GBINC COMMISSION TOWARDS SUPPLY OF {prod_label.upper()}"
 
-    headers_sub = [
-        ("A27", "C27", ""),
-        ("D27", "D27", ""),
-        ("E27", "E27", "MT"),
-        ("F27", "F27", "FOB Euro"),
-        ("G27", "G27", "Euro"),
-    ]
-    for start, end, txt in headers_sub:
-        if start != end:
-            ws.merge_cells(f"{start}:{end}")
-        _s(ws, start, txt, font=_hdr_font, fill=_hdr_fill, border=_all_thin, align=_c)
+    # Drop embedded images (broken refs break openpyxl save)
+    if hasattr(ws, "_images"):
+        ws._images = []
 
-    # ── Line items (from row 28) ────────────────────────────────────────────
-    r = 28
-    lines = ci.get("line_items") or []
-    for li in lines:
-        ws.row_dimensions[r].height = 14
-        ws.merge_cells(f"A{r}:C{r}")
-        _s(ws, f"A{r}", li.get("product_description") or "", align=_l, border=_all_thin)
-        _s(ws, f"D{r}", li.get("gbl_invoice_number") or "",  align=_l, border=_all_thin)
-        _s(ws, f"E{r}", _float(li.get("quantity")),           align=_r, border=_all_thin)
-        _s(ws, f"F{r}", _float(li.get("fob_value")),          align=_r, border=_all_thin)
-
-        # Commission rate + value in same cell group
-        rate_txt = f"{_float(li.get('commission_rate')):g}% on FOB"
-        _s(ws, f"G{r}", rate_txt, align=_c, border=_all_thin)
-        r += 1
-
-        ws.row_dimensions[r].height = 13
-        ws.merge_cells(f"A{r}:F{r}")
-        _s(ws, f"A{r}", "", border=_all_thin)
-        cv = _float(li.get("commission_value"))
-        _s(ws, f"G{r}", cv, align=_r, border=_all_thin)
-        r += 1
-
-    # ── Totals block ────────────────────────────────────────────────────────
-    r += 1
-    ws.row_dimensions[r].height = 13
-    ws.merge_cells(f"A{r}:F{r}")
-    _s(ws, f"A{r}", "TOTAL", bold=True, fill=_grey_fill, border=_all_thin, align=_r)
-    _s(ws, f"G{r}", ci.get("total_commission") or 0, bold=True,
-       fill=_grey_fill, border=_all_thin, align=_r)
-    r += 1
-
-    for label, key in [("Net VALUE", "net_value"), ("VAT (0 %)", "vat_amount"),
-                        ("TOTAL TO PAY", "total_to_pay")]:
-        ws.row_dimensions[r].height = 13
-        ws.merge_cells(f"A{r}:D{r}")
-        _s(ws, f"A{r}", label, bold=(label == "TOTAL TO PAY"),
-           fill=_grey_fill if label == "TOTAL TO PAY" else None,
-           border=_all_thin, align=_l)
-        ws.merge_cells(f"E{r}:G{r}")
-        _s(ws, f"E{r}", ci.get(key) or 0,
-           bold=(label == "TOTAL TO PAY"),
-           fill=_grey_fill if label == "TOTAL TO PAY" else None,
-           border=_all_thin, align=_r)
-        r += 1
-
-    # ── In Words ────────────────────────────────────────────────────────────
-    r += 1
-    ws.row_dimensions[r].height = 13
-    ws.merge_cells(f"A{r}:G{r}")
-    _s(ws, f"A{r}", f"In Words :  {ci.get('amount_in_words') or ''}", align=_l, border=_all_thin)
-
-    # ── Payment Terms ───────────────────────────────────────────────────────
-    r += 2
-    ws.row_dimensions[r].height = 13
-    _s(ws, f"A{r}", "Payment Terms", bold=True, align=_l)
-    ws.merge_cells(f"C{r}:G{r}")
-    _s(ws, f"C{r}", ci.get("payment_terms") or "Prompt", align=_l)
-
-    # ── Enclosures ──────────────────────────────────────────────────────────
-    r += 1
-    ws.row_dimensions[r].height = 13
-    _s(ws, f"A{r}", "Enclosures", bold=True, align=_l)
-    ws.merge_cells(f"C{r}:G{r}")
-    _s(ws, f"C{r}", ci.get("enclosures") or "", align=_l)
-
-    # ── Bank Details ────────────────────────────────────────────────────────
-    r += 2
-    ws.row_dimensions[r].height = 13
-    _s(ws, f"A{r}", "BANK DETAILS", bold=True, fill=_grey_fill, align=_l, border=_all_thin)
-    r += 1
-    ws.merge_cells(f"C{r}:G{r}")
-    _s(ws, f"C{r}", ci.get("bank_name") or "", bold=True, align=_l)
-    r += 1
-    ws.merge_cells(f"C{r}:G{r}")
-    _s(ws, f"C{r}", ci.get("bank_account_no") or "", align=_l)
-    r += 1
-    _s(ws, f"C{r}", "IBAN", bold=True, align=_l)
-    _s(ws, f"D{r}", ci.get("bank_iban") or "", align=_l)
-    ws.merge_cells(f"F{r}:G{r}")
-    _s(ws, f"F{r}", f"BIC : {ci.get('bank_bic') or ''}", align=_l)
-
-    # ── Signature block ─────────────────────────────────────────────────────
-    r += 2
-    ws.merge_cells(f"A{r}:C{r}")
-    _s(ws, f"A{r}", "For Godavari Biorefineries Inc", bold=True, align=_l)
-    r += 4
-    ws.merge_cells(f"A{r}:C{r}")
-    _s(ws, f"A{r}", "Authorised Signatory", bold=True,
-       border=Border(top=Side(style="medium", color="333333")), align=_c)
-
-    # ── Footer ──────────────────────────────────────────────────────────────
-    r += 3
-    ws.merge_cells(f"C{r}:D{r}")
-    _s(ws, f"C{r}", "Commercial Register Number", align=_r)
-    _s(ws, f"E{r}", 34325188, align=_l)
-    ws.merge_cells(f"F{r}:G{r}")
-    _s(ws, f"F{r}", "VAT : NL8203.86.157.B.01", align=_l)
-    r += 1
-    ws.merge_cells(f"C{r}:E{r}")
-    _s(ws, f"C{r}",
-       "Godavari Biorefineries Inc   Opaallaan 1180,   2132 LN,   Hoofddorp", align=_l)
-    r += 1
-    ws.merge_cells(f"C{r}:D{r}")
-    _s(ws, f"C{r}", "The Netherlands", align=_l)
-    ws.merge_cells(f"F{r}:G{r}")
-    _s(ws, f"F{r}", "TEL : + 31 6 11 12 61 66", align=_l)
+    sig_row = 36 + extra
+    _add_signature_image(ws, f"D{sig_row}")
 
     return wb
 
@@ -301,8 +236,8 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
 def export_ci_xlsx(ci: dict[str, Any]) -> tuple[bytes, str]:
     XLSX_DIR.mkdir(parents=True, exist_ok=True)
     fname = f"CI_{safe_ci_filename(ci.get('invoice_number', 'CI'))}.xlsx"
-    path  = XLSX_DIR / fname
-    wb    = build_ci_workbook(ci)
+    path = XLSX_DIR / fname
+    wb = build_ci_workbook(ci)
     wb.save(path)
     buf = io.BytesIO()
     wb.save(buf)

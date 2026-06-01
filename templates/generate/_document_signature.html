@@ -1,0 +1,12 @@
+{% macro document_signature(label='Authorized Signatory', for_line='', css_class='doc-sig-block') %}
+{% set sig_url = get_authorized_signature_url() %}
+<div class="{{ css_class }}">
+  {% if for_line %}<p class="po-sig-for doc-sig-for">{{ for_line }}</p>{% endif %}
+  {% if sig_url %}
+  <img src="{{ sig_url }}" alt="Signature" class="doc-sig-img" />
+  {% else %}
+  <div class="po-sig-line doc-sig-line"></div>
+  {% endif %}
+  <p class="po-sig-label doc-sig-label">{{ label }}</p>
+</div>
+{% endmacro %}

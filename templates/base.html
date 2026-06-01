@@ -6,7 +6,7 @@
   <title>{% block title %}Leads{% endblock %} · GBInc</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=1.1.0" />
+  <link rel="stylesheet" href="/static/style.css?v=1.2.0" />
   {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -47,6 +47,7 @@
       <div style="display:flex;gap:.75rem;justify-content:flex-end;">
         <button id="app-confirm-cancel" class="btn btn-ghost">Cancel</button>
         <button id="app-confirm-ok" class="btn btn-danger">Delete</button>
+        <button id="app-confirm-ok-safe" class="btn btn-primary" style="display:none"></button>
       </div>
     </div>
   </div>
@@ -55,20 +56,28 @@
     var overlay = document.getElementById('app-confirm-overlay');
     var msgEl   = document.getElementById('app-confirm-msg');
     var okBtn   = document.getElementById('app-confirm-ok');
+    var okBtnSafe = document.getElementById('app-confirm-ok-safe');
     var cancelBtn = document.getElementById('app-confirm-cancel');
     var _resolve = null;
 
     function showConfirm(msg, okLabel) {
       msgEl.textContent = msg;
-      okBtn.textContent = okLabel || 'Delete';
+      // Use red danger button for "Delete", neutral primary for everything else
+      var isDanger = !okLabel || okLabel === 'Delete';
+      okBtn.textContent = isDanger ? (okLabel || 'Delete') : '';
+      okBtn.style.display = isDanger ? '' : 'none';
+      okBtnSafe.textContent = isDanger ? '' : okLabel;
+      okBtnSafe.style.display = isDanger ? 'none' : '';
       overlay.style.display = 'flex';
       return new Promise(function (resolve) { _resolve = resolve; });
     }
 
-    okBtn.addEventListener('click', function () {
+    function handleOk() {
       overlay.style.display = 'none';
       if (_resolve) { _resolve(true); _resolve = null; }
-    });
+    }
+    okBtn.addEventListener('click', handleOk);
+    okBtnSafe.addEventListener('click', handleOk);
     cancelBtn.addEventListener('click', function () {
       overlay.style.display = 'none';
       if (_resolve) { _resolve(false); _resolve = null; }

@@ -31,6 +31,48 @@ def safe_ci_filename(invoice_number: str) -> str:
     return text or "CI"
 
 
+_ONES = (
+    "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+    "Seventeen", "Eighteen", "Nineteen",
+)
+_TENS = ("", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety")
+
+
+def _under_thousand(n: int) -> str:
+    if n < 20:
+        return _ONES[n]
+    if n < 100:
+        t, o = divmod(n, 10)
+        return (_TENS[t] + (" " + _ONES[o] if o else "")).strip()
+    h, rem = divmod(n, 100)
+    rest = _under_thousand(rem)
+    return f"{_ONES[h]} Hundred" + (f" {rest}" if rem else "")
+
+
+def _int_words(n: int) -> str:
+    if n == 0:
+        return "Zero"
+    parts: list[str] = []
+    for label, div in (("Million", 1_000_000), ("Thousand", 1_000), ("", 1)):
+        if n >= div:
+            chunk, n = divmod(n, div)
+            w = _under_thousand(chunk)
+            parts.append(f"{w} {label}".strip() if label else w)
+    return " ".join(parts)
+
+
+def dollars_in_words(amount: float) -> str:
+    """USD amount in words for invoice (e.g. commission total)."""
+    v = round(_float(amount), 2)
+    dollars = int(v)
+    cents = int(round((v - dollars) * 100))
+    words = _int_words(dollars) + " Dollar" + ("s" if dollars != 1 else "")
+    if cents:
+        words += f" and {_int_words(cents)} Cent" + ("s" if cents != 1 else "")
+    return words
+
+
 def form_getlist(form: Any, key: str) -> list[str]:
     if hasattr(form, "getlist"):
         return [str(v) for v in form.getlist(key)]
@@ -45,16 +87,19 @@ def form_getlist(form: Any, key: str) -> list[str]:
 # ── defaults ─────────────────────────────────────────────────────────────────
 
 DEFAULT_CI: dict[str, Any] = {
-    "document_title":        "COMMISSION INVOICE",
+    "document_title":        "Commercial Invoice",
     "company_name":          "Godavari Biorefineries Inc",
     "invoice_number":        "",
     "invoice_date":          date.today().isoformat(),
-    # Bill-to
+    "notice_date":           "",
+    # Bill-to (GBL — static in template, editable)
     "bill_to_name":          "Godavari Biorefineries Ltd",
-    "bill_to_address_1":     "Somaiya Bhavan, 45/47 Mahatma Gandhi Road",
-    "bill_to_address_2":     "Fort, MUMBAI - 400 001. INDIA.",
-    "bill_to_address_3":     "",
+    "bill_to_address_1":     "Factory: Sakarwadi (Stn. Kanhegaon)",
+    "bill_to_address_2":     "Dist. Ahmednagar",
+    "bill_to_address_3":     "Maharashtra - 413 708",
     "customer_order_no":     "",
+    "contact_person":        "Padmaja Ganapathy",
+    "delivery_port":         "",
     # Transaction
     "transaction_description": "",
     # Shipment
@@ -64,17 +109,17 @@ DEFAULT_CI: dict[str, Any] = {
     "port_of_loading":       "",
     "container_numbers":     "",
     # Payment
-    "payment_terms":         "Prompt",
-    "enclosures":            "a)  Statement of DN",
-    # Bank
-    "bank_name":             "RABO BANK - HAARLEM",
-    "bank_account_no":       "Account no 0311323650",
-    "bank_iban":             "NL83RABO0311323650",
-    "bank_bic":              "RABONL2U",
+    "payment_terms":         "PROMPT",
+    "enclosures":            "",
+    # Bank (US — Chemung Canal, per template)
+    "bank_name":             "Chemung Canal Trust Company",
+    "bank_account_no":       "204082566",
+    "bank_iban":             "",
+    "bank_bic":              "CCTRUS31",
     # Editable table units
     "qty_unit":              "MT",
-    "fob_currency":          "Euro",
-    "value_currency":        "Euro",
+    "fob_currency":          "USD",
+    "value_currency":        "USD",
     # Totals
     "vat_percent":           0,
     "amount_in_words":       "",
@@ -85,10 +130,12 @@ DEFAULT_CI: dict[str, Any] = {
     # Lines
     "line_items": [
         {
+            "end_customer":        "",
             "product_description": "",
             "gbl_invoice_number":  "",
             "quantity":            0.0,
             "unit_price":          0.0,
+            "cif_price":           0.0,
             "fob_value":           0.0,
             "commission_rate":     3.0,
             "commission_value":    0.0,
@@ -103,9 +150,11 @@ def recalc_line(line: dict[str, Any]) -> dict[str, Any]:
     line = dict(line)
     qty        = _float(line.get("quantity"))
     unit_price = _float(line.get("unit_price"))
-    # Auto-derive FOB value from qty × unit_price when unit_price is set
+    cif        = _float(line.get("cif_price"))
     if unit_price:
         line["fob_value"] = round(qty * unit_price, 2)
+    elif cif:
+        line["fob_value"] = round(qty * cif, 2)
     fob  = _float(line.get("fob_value"))
     rate = _float(line.get("commission_rate"))
     line["commission_value"] = round(fob * rate / 100, 2) if fob and rate else 0.0
@@ -128,19 +177,20 @@ def calculate_ci_totals(line_items: list[dict[str, Any]], vat_percent: float = 0
 # ── form parsing ─────────────────────────────────────────────────────────────
 
 CI_SCALAR_FIELDS = [
-    "document_title", "company_name", "invoice_number", "invoice_date",
+    "document_title", "company_name", "invoice_number", "invoice_date", "notice_date",
     "bill_to_name", "bill_to_address_1", "bill_to_address_2", "bill_to_address_3",
-    "customer_order_no", "transaction_description",
+    "customer_order_no", "contact_person", "delivery_port", "transaction_description",
     "shipment_date", "bl_number", "bl_date", "port_of_loading", "container_numbers",
     "payment_terms", "enclosures",
     "bank_name", "bank_account_no", "bank_iban", "bank_bic",
     "amount_in_words", "status", "prepared_by", "internal_notes",
-    # editable table header units
     "qty_unit", "fob_currency", "value_currency",
 ]
 
-# Extra columns added after initial schema creation — migrated automatically
-CI_EXTRA_FIELDS = ["qty_unit", "fob_currency", "value_currency"]
+CI_EXTRA_FIELDS = [
+    "qty_unit", "fob_currency", "value_currency",
+    "contact_person", "delivery_port", "notice_date",
+]
 
 
 def _upgrade_ci_extra_columns(conn) -> None:
@@ -150,8 +200,13 @@ def _upgrade_ci_extra_columns(conn) -> None:
             conn.execute(f"ALTER TABLE commission_invoices ADD COLUMN {col} TEXT")
     # Migrate line-items table
     li_cols = {r[1] for r in conn.execute("PRAGMA table_info(commission_invoice_line_items)").fetchall()}
-    if "unit_price" not in li_cols:
-        conn.execute("ALTER TABLE commission_invoice_line_items ADD COLUMN unit_price REAL DEFAULT 0")
+    for col, ddl in [
+        ("unit_price", "REAL DEFAULT 0"),
+        ("end_customer", "TEXT DEFAULT ''"),
+        ("cif_price", "REAL DEFAULT 0"),
+    ]:
+        if col not in li_cols:
+            conn.execute(f"ALTER TABLE commission_invoice_line_items ADD COLUMN {col} {ddl}")
 
 
 def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -159,17 +214,24 @@ def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     data["vat_percent"] = _float(form.get("vat_percent"), 0)
     if not data.get("document_title"):
         data["document_title"] = "COMMISSION INVOICE"
+    if not data.get("notice_date"):
+        data["notice_date"] = data.get("invoice_date", "")
 
     products = form_getlist(form, "product_description")
+    end_customers = form_getlist(form, "end_customer")
     text_fields    = ["gbl_invoice_number"]
-    numeric_fields = ["quantity", "unit_price", "fob_value", "commission_rate"]
+    numeric_fields = ["quantity", "unit_price", "cif_price", "fob_value", "commission_rate"]
 
     line_items: list[dict[str, Any]] = []
     for i, product in enumerate(products):
         product = product.strip()
-        if not product:
+        end_co = (end_customers[i] if i < len(end_customers) else "").strip()
+        if not product and not end_co:
             continue
-        line: dict[str, Any] = {"product_description": product}
+        line: dict[str, Any] = {
+            "end_customer": end_co,
+            "product_description": product,
+        }
         for tf in text_fields:
             vals = form_getlist(form, tf)
             line[tf] = (vals[i] if i < len(vals) else "").strip()
@@ -302,14 +364,16 @@ def _save_ci_lines(conn, ci_id: int, line_items: list[dict[str, Any]]) -> None:
         conn.execute(
             """
             INSERT INTO commission_invoice_line_items (
-                commission_invoice_id, product_description, gbl_invoice_number,
-                quantity, unit_price, fob_value, commission_rate, commission_value, sort_order
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                commission_invoice_id, end_customer, product_description, gbl_invoice_number,
+                quantity, unit_price, cif_price, fob_value, commission_rate, commission_value, sort_order
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ci_id,
-                line.get("product_description"), line.get("gbl_invoice_number"),
-                line.get("quantity"), line.get("unit_price"), line.get("fob_value"),
+                line.get("end_customer"), line.get("product_description"),
+                line.get("gbl_invoice_number"),
+                line.get("quantity"), line.get("unit_price"), line.get("cif_price"),
+                line.get("fob_value"),
                 line.get("commission_rate"), line.get("commission_value"),
                 sort_order,
             ),
@@ -398,6 +462,31 @@ def update_commission_invoice(
             )
 
 
+def update_commission_invoice_dates(
+    ci_id: int, invoice_date: str, notice_date: str
+) -> bool:
+    inv = (invoice_date or "").strip()[:10]
+    notice = (notice_date or "").strip()[:10] or inv
+    if not inv:
+        return False
+    now = now_iso()
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id FROM commission_invoices WHERE id = ?", (ci_id,)
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            """
+            UPDATE commission_invoices
+            SET invoice_date = ?, notice_date = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (inv, notice, now, ci_id),
+        )
+    return True
+
+
 def delete_commission_invoice(ci_id: int) -> bool:
     with get_db() as conn:
         row = conn.execute(
@@ -435,13 +524,14 @@ def _deal_to_ci_line(d: dict) -> dict:
     qty_nums = re.findall(r"\d+\.?\d*", qty_raw.replace(",", ""))
     qty      = float(qty_nums[0]) if qty_nums else 0.0
     line = deepcopy(DEFAULT_CI["line_items"][0])
+    line["end_customer"]        = d.get("company") or ""
     line["product_description"] = d.get("product") or ""
     line["gbl_invoice_number"]  = d.get("gbl_invoice") or ""
     line["quantity"]    = qty
     line["unit_price"]  = price or 0.0
-    # fob_value will be recalculated by recalc_line (qty × unit_price)
+    line["cif_price"]   = price or 0.0
     line["fob_value"]   = round(price * qty, 2) if price and qty else 0.0
-    return line
+    return recalc_line(line)
 
 
 def create_ci_from_deal(deal_id: int) -> dict[str, Any] | None:
@@ -475,17 +565,36 @@ def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
     ci = deepcopy(DEFAULT_CI)
     first = dict(rows[0])
 
-    # Header from first deal
     ci["deal_id"]      = first["id"]
     ci["customer_id"]  = first.get("customer_id")
-    ci["invoice_date"] = (first.get("po_date") or first.get("deal_date") or ci["invoice_date"])[:10]
+    ci["invoice_date"] = (
+        first.get("gbl_invoice_date") or first.get("po_date") or first.get("deal_date")
+        or ci["invoice_date"]
+    )[:10]
+    ci["notice_date"] = ci["invoice_date"]
+    ci["invoice_number"] = first.get("gbl_invoice") or ""
     ci["customer_order_no"] = first.get("po_number") or ""
+    ci["delivery_port"] = first.get("destination") or ""
+    ci["shipment_date"] = (
+        first.get("shipped_date") or first.get("etd_india") or first.get("gbl_invoice_date") or ""
+    )[:10]
+    ci["container_numbers"] = first.get("container_number") or ""
+    ci["port_of_loading"] = first.get("etd_india") and "India" or (ci.get("port_of_loading") or "")
 
-    # Build one line item per deal
-    companies = list(dict.fromkeys(dict(r)["company"] for r in rows))  # unique, ordered
+    companies = list(dict.fromkeys(dict(r)["company"] for r in rows))
     products  = list(dict.fromkeys(dict(r)["product"]  for r in rows))
     ci["transaction_description"] = (
-        f"Commission For Sales of {', '.join(products)} to {', '.join(companies)}"
+        f"Commission for supply of {', '.join(products)} to {', '.join(companies)}"
     )
     ci["line_items"] = [_deal_to_ci_line(dict(r)) for r in rows]
+    totals = calculate_ci_totals(ci["line_items"], 0)
+    ci["line_items"] = totals["line_items"]
+    ci["amount_in_words"] = dollars_in_words(totals["total_commission"])
+
+    ci["_field_hints"] = {
+        "invoice_number": "deal" if first.get("gbl_invoice") else "missing",
+        "delivery_port":  "deal" if first.get("destination") else "missing",
+        "shipment_date":  "deal" if ci["shipment_date"] else "missing",
+        "cif_price":      "deal" if _float(first.get("price")) else "missing",
+    }
     return ci

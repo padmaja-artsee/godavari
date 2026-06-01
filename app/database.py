@@ -125,6 +125,23 @@ SHIPPING_FIELDS = (
     "eta",
 )
 
+COMMERCIAL_EXTRA_FIELDS = (
+    "commercial_total",
+    "insurance_amount",
+    "insurance_currency",
+    "ocean_freight_amount",
+    "ocean_freight_currency",
+    "fob_value",
+    "fob_currency",
+    "commission_rate",
+    "commission_amount",
+)
+
+COMMERCIAL_CURRENCIES = (
+    ("INR", "₹ Rupee"),
+    ("USD", "$ Dollar"),
+)
+
 
 def format_deal_value(
     quantity: str = "",
@@ -150,6 +167,54 @@ def format_deal_value(
     if q and price_str:
         return f"{q}, {price_str}"
     return q or price_str
+
+
+def _parse_commercial_number(text: str) -> float:
+    if not text:
+        return 0.0
+    s = str(text).replace(",", "").strip()
+    m = re.search(r"-?\d+(?:\.\d+)?", s)
+    return float(m.group()) if m else 0.0
+
+
+def compute_commercial_total(quantity: str, price: str) -> str:
+    """Qty × price per unit (numeric string, empty if either missing)."""
+    qty = _parse_commercial_number(quantity)
+    rate = _parse_commercial_number(price)
+    if not qty or not rate:
+        return ""
+    total = qty * rate
+    if total == int(total):
+        return str(int(total))
+    return f"{total:.2f}".rstrip("0").rstrip(".")
+
+
+def _format_commercial_number(n: float) -> str:
+    if n == int(n):
+        return str(int(n))
+    return f"{n:.2f}".rstrip("0").rstrip(".")
+
+
+def compute_fob_value(
+    commercial_total: str,
+    insurance_amount: str,
+    ocean_freight_amount: str,
+) -> str:
+    """FOB = Value − Insurance − Ocean freight."""
+    total = _parse_commercial_number(commercial_total)
+    if not total:
+        return ""
+    fob = total - _parse_commercial_number(insurance_amount) - _parse_commercial_number(ocean_freight_amount)
+    return _format_commercial_number(fob)
+
+
+def compute_commission_amount(fob_value: str, commission_rate: str) -> str:
+    """Commission = FOB × (rate / 100)."""
+    fob = _parse_commercial_number(fob_value)
+    rate = _parse_commercial_number(commission_rate)
+    if not fob or not rate:
+        return ""
+    return _format_commercial_number(fob * rate / 100.0)
 
 
 def default_quote_ref(
@@ -442,6 +507,9 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
         if col not in cols:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
     for col in ("incoterms", "payment_terms", "shipment_timing"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
+    for col in COMMERCIAL_EXTRA_FIELDS:
         if col not in cols:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
     conn.execute(
@@ -1215,10 +1283,28 @@ def update_deal_fields(
     incoterms: str = "",
     payment_terms: str = "",
     shipment_timing: str = "",
+    insurance_amount: str = "",
+    insurance_currency: str = "USD",
+    ocean_freight_amount: str = "",
+    ocean_freight_currency: str = "USD",
+    commission_rate: str = "",
+    fob_currency: str = "USD",
 ) -> None:
     unit = (price_unit or "/MT").strip() or "/MT"
     qty_unit = normalize_quantity_unit(quantity_unit, quantity_unit_other)
     value = format_deal_value(quantity, price, unit, qty_unit)
+    commercial_total = compute_commercial_total(quantity, price)
+    ins_cur = (insurance_currency or "USD").strip().upper()
+    if ins_cur not in ("INR", "USD"):
+        ins_cur = "USD"
+    freight_cur = (ocean_freight_currency or "USD").strip().upper()
+    if freight_cur not in ("INR", "USD"):
+        freight_cur = "USD"
+    fob_val = compute_fob_value(commercial_total, insurance_amount, ocean_freight_amount)
+    comm_amt = compute_commission_amount(fob_val, commission_rate)
+    fob_cur = (fob_currency or freight_cur or "USD").strip().upper()
+    if fob_cur not in ("INR", "USD"):
+        fob_cur = "USD"
     shipping_vals = {
         "po_date": po_date.strip(),
         "packing": packing.strip(),
@@ -1242,6 +1328,10 @@ def update_deal_fields(
                 container_number = ?, vessel_name = ?, etd_india = ?, transit_time = ?,
                 destination = ?, eta = ?,
                 incoterms = ?, payment_terms = ?, shipment_timing = ?,
+                commercial_total = ?, insurance_amount = ?, insurance_currency = ?,
+                ocean_freight_amount = ?, ocean_freight_currency = ?,
+                fob_value = ?, fob_currency = ?,
+                commission_rate = ?, commission_amount = ?,
                 updated_at = ?
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -1267,6 +1357,15 @@ def update_deal_fields(
                 incoterms.strip(),
                 payment_terms.strip(),
                 shipment_timing.strip(),
+                commercial_total,
+                insurance_amount.strip(),
+                ins_cur,
+                ocean_freight_amount.strip(),
+                freight_cur,
+                fob_val,
+                fob_cur,
+                commission_rate.strip(),
+                comm_amt,
                 now_iso(),
                 deal_id,
             ),
@@ -1729,6 +1828,117 @@ def mark_deal_lost(
     _close_deal(deal_id, "lost", closed_date, lost_reason)
 
 
+def reopen_deal(deal_id: int) -> None:
+    """Revert a shipped or lost deal back to open status."""
+    ts = now_iso()
+    with get_db() as conn:
+        conn.execute(
+            """
+            UPDATE deals
+            SET status = 'open', shipped_date = NULL, closed_date = NULL, updated_at = ?
+            WHERE id = ?
+            """,
+            (ts, deal_id),
+        )
+
+
+def list_deals_for_commission(
+    *,
+    fiscal_year: int = 0,
+    month: int = 0,
+    date_from: str = "",
+    date_to: str = "",
+    product: str = "",
+    company: str = "",
+    status: str = "all",
+) -> list[dict]:
+    """Deals for commission Excel / data-request template (open, shipped, lost)."""
+    clauses = ["d.deleted_at IS NULL", "d.archived = 0"]
+    params: list[Any] = []
+
+    if status and status != "all":
+        clauses.append("d.status = ?")
+        params.append(status)
+
+    if product:
+        clauses.append("p.name = ? COLLATE NOCASE")
+        params.append(product.strip())
+
+    if company:
+        clauses.append("c.name = ? COLLATE NOCASE")
+        params.append(company.strip())
+
+    date_expr = (
+        "substr(COALESCE(NULLIF(d.shipped_date,''), NULLIF(d.gbl_invoice_date,''), d.deal_date), 1, 10)"
+    )
+
+    if date_from:
+        clauses.append(f"{date_expr} >= ?")
+        params.append(str(date_from).strip()[:10])
+    if date_to:
+        clauses.append(f"{date_expr} <= ?")
+        params.append(str(date_to).strip()[:10])
+
+    if month and fiscal_year and not date_from and not date_to:
+        cal_yr = fiscal_year - 1 if month >= 4 else fiscal_year
+        month_key = f"{cal_yr:04d}-{month:02d}"
+        clauses.append(f"substr({date_expr}, 1, 7) = ?")
+        params.append(month_key)
+
+    where = " AND ".join(clauses)
+    sql = f"""
+        SELECT d.id, d.po_number, d.po_date, d.packing, d.quote_ref,
+               d.quantity, d.quantity_unit, d.price, d.price_unit,
+               d.deal_date, d.status,
+               d.shipped_date, d.closed_date, d.value, d.notes,
+               d.gbl_invoice, d.gbl_invoice_date, d.vessel_name,
+               d.container_number, d.etd_india, d.transit_time,
+               d.destination, d.eta,
+               d.commercial_total, d.insurance_amount, d.insurance_currency,
+               d.ocean_freight_amount, d.ocean_freight_currency,
+               d.fob_value, d.fob_currency, d.commission_rate, d.commission_amount,
+               c.name AS company, p.name AS product
+        FROM deals d
+        JOIN customers c ON c.id = d.customer_id
+        JOIN products p ON p.id = d.product_id
+        WHERE {where}
+        ORDER BY COALESCE(d.shipped_date, d.gbl_invoice_date, d.deal_date), d.id
+    """
+    with get_db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def list_commission_products() -> list[str]:
+    """Distinct products that appear on deals (for report filters)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT p.name
+            FROM deals d
+            JOIN products p ON p.id = d.product_id
+            WHERE d.deleted_at IS NULL AND d.archived = 0
+            ORDER BY p.name COLLATE NOCASE
+            """
+        ).fetchall()
+    return [r["name"] for r in rows]
+
+
+def list_commission_companies() -> list[str]:
+    """Distinct customers that appear on deals (for report filters)."""
+    with get_db() as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT c.name
+            FROM deals d
+            JOIN customers c ON c.id = d.customer_id
+            WHERE d.deleted_at IS NULL AND d.archived = 0
+            ORDER BY c.name COLLATE NOCASE
+            """
+        ).fetchall()
+    return [r["name"] for r in rows]
+
+
 def deal_counts_for_customer(customer_id: int) -> dict:
     with get_db() as conn:
         rows = conn.execute(
@@ -1757,6 +1967,9 @@ def list_deals_for_company(company: str, active_only: bool = True) -> list[dict]
                    d.container_number, d.vessel_name, d.etd_india, d.transit_time,
                    d.destination, d.eta,
                    d.incoterms, d.payment_terms, d.shipment_timing,
+                   d.commercial_total, d.insurance_amount, d.insurance_currency,
+                   d.ocean_freight_amount, d.ocean_freight_currency,
+                   d.fob_value, d.fob_currency, d.commission_rate, d.commission_amount,
                    p.name AS product
             FROM deals d
             JOIN customers c ON c.id = d.customer_id

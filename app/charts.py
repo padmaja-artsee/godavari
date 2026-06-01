@@ -188,14 +188,95 @@ def shipped_by_month(period: str = "12m") -> list[dict]:
         return [dict(r) for r in conn.execute(sql, params).fetchall()]
 
 
+def deals_by_status_month(period: str = "12m") -> list[dict]:
+    """Per-month counts of open, shipped, and lost deals — for stacked bar."""
+    start = chart_period_start(period)
+    end   = chart_period_end(period)
+    clauses = ["d.deleted_at IS NULL", "d.archived = 0",
+               "d.status IN ('open','shipped','lost')"]
+    params: list[Any] = []
+    if start:
+        clauses.append("d.deal_date >= ?")
+        params.append(start)
+    if end:
+        clauses.append("d.deal_date <= ?")
+        params.append(end)
+    where = " AND ".join(clauses)
+    sql = f"""
+        SELECT strftime('%Y-%m', d.deal_date) AS month,
+               d.status,
+               COUNT(*) AS deal_count
+        FROM deals d
+        WHERE {where}
+        GROUP BY month, d.status
+        ORDER BY month
+    """
+    with get_db() as conn:
+        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+
+def win_rate_by_month(period: str = "12m") -> list[dict]:
+    """Per-month win rate: shipped / (shipped + lost), for closed deals."""
+    start = chart_period_start(period)
+    end   = chart_period_end(period)
+    clauses = ["d.deleted_at IS NULL", "d.status IN ('shipped','lost')",
+               "d.closed_date IS NOT NULL"]
+    params: list[Any] = []
+    if start:
+        clauses.append("d.closed_date >= ?")
+        params.append(start)
+    if end:
+        clauses.append("d.closed_date <= ?")
+        params.append(end)
+    where = " AND ".join(clauses)
+    sql = f"""
+        SELECT strftime('%Y-%m', d.closed_date) AS month,
+               SUM(CASE WHEN d.status = 'shipped' THEN 1 ELSE 0 END) AS won,
+               SUM(CASE WHEN d.status = 'lost'    THEN 1 ELSE 0 END) AS lost,
+               COUNT(*) AS total
+        FROM deals d
+        WHERE {where}
+        GROUP BY month
+        ORDER BY month
+    """
+    with get_db() as conn:
+        rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+    for r in rows:
+        r["win_rate"] = round(r["won"] / r["total"] * 100, 1) if r["total"] else 0
+    return rows
+
+
+def pipeline_funnel(period: str = "12m") -> dict:
+    """Counts for funnel: total open + closed + lost, for a funnel chart."""
+    start = chart_period_start(period)
+    end   = chart_period_end(period)
+    where, params = _period_where(start, end)
+    sql = f"""
+        SELECT d.status, COUNT(*) AS n
+        FROM deals d
+        WHERE {where}
+        GROUP BY d.status
+    """
+    with get_db() as conn:
+        rows = {r["status"]: r["n"] for r in conn.execute(sql, params).fetchall()}
+    total  = sum(rows.values())
+    open_  = rows.get("open", 0)
+    shipped = rows.get("shipped", 0)
+    lost   = rows.get("lost", 0)
+    return {"total": total, "open": open_, "shipped": shipped, "lost": lost}
+
+
 def all_chart_data(period: str = "12m") -> dict:
     """Return all datasets in one call for the static page render."""
     return {
         "period":              period,
         "by_month":            deals_by_month(period),
         "by_status":           deals_by_status(period),
+        "by_status_month":     deals_by_status_month(period),
         "by_product_month":    deals_by_product_month(period),
         "top_customers":       top_customers(period),
         "top_products":        top_products(period),
         "shipped_by_month":    shipped_by_month(period),
+        "win_rate_by_month":   win_rate_by_month(period),
+        "pipeline_funnel":     pipeline_funnel(period),
     }

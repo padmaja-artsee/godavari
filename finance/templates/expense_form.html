@@ -32,7 +32,15 @@
           {% if a.section != cur_section.v %}
           {% if cur_section.v %}</optgroup>{% endif %}
           {% set cur_section.v = a.section %}
-          <optgroup label="{{ a.section|upper }}">
+          {% set sec_labels = {
+              'income':     'INCOME',
+              'employee':   'EMPLOYEE COSTS',
+              'office':     'OFFICE COSTS',
+              'admin':      'BANK / LEGAL / ADMIN',
+              'travel':     'CONFERENCE / TRAVEL',
+              'investment': 'INVESTMENT'
+          } %}
+          <optgroup label="{{ sec_labels.get(a.section, a.section|upper) }}">
           {% endif %}
           <option value="{{ a.id }}"
             {% if transaction and a.id==transaction.account_id %}selected

@@ -7,8 +7,146 @@
     <h1>Commission Invoices</h1>
     <p class="subtitle"><a class="link" href="/generate">← Back to Generate</a></p>
   </div>
-  <a href="/generate/commission-invoices/new" class="btn btn-primary">New Commission Invoice</a>
+  <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+    <a href="/generate/commission-invoices/new" class="btn btn-primary">New Commission Invoice</a>
+    <a href="/generate/commission-invoices/data-request-template.xlsx" class="btn btn-ghost">↓ Blank template</a>
+  </div>
 </div>
+
+<section class="card" id="ci-export" style="margin-bottom:1.25rem;padding:1.25rem">
+  <h2 style="margin:0 0 0.35rem;font-size:1rem">Export data request (prefilled from deals)</h2>
+  <p style="margin:0 0 1rem;color:#374151;font-size:.9rem">
+    Set filters, click <strong>Run</strong> to preview matching deals, check rows to include, then download the Excel.
+    Monthly filter uses shipped date → GBL invoice date → deal date.
+  </p>
+
+  <form method="get" action="/generate/commission-invoices#ci-export-results" id="ci-export-form">
+    <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
+      <label style="display:flex;align-items:center;gap:.35rem;font-size:.88rem;cursor:pointer">
+        <input type="radio" name="mode" value="monthly" {% if mode != 'range' %}checked{% endif %} /> Monthly
+      </label>
+      <label style="display:flex;align-items:center;gap:.35rem;font-size:.88rem;cursor:pointer">
+        <input type="radio" name="mode" value="range" {% if mode == 'range' %}checked{% endif %} /> Custom date range
+      </label>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.65rem;align-items:end">
+      <div class="ci-filter-monthly">
+        <label class="form-label">Fiscal year</label>
+        <select name="fy" class="form-input ci-monthly-field">
+          {% for y in fiscal_years %}
+          <option value="{{ y }}" {% if y == fy %}selected{% endif %}>FY{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ci-filter-monthly">
+        <label class="form-label">Month</label>
+        <select name="month" class="form-input ci-monthly-field">
+          <option value="0" {% if not month %}selected{% endif %}>All months</option>
+          {% for m in months %}
+          {% set yr = (fy - 1) if m >= 4 else fy %}
+          <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ month_labels[m] }} {{ yr }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="ci-filter-range">
+        <label class="form-label">From</label>
+        <input type="date" name="date_from" class="form-input ci-range-field" value="{{ date_from }}" />
+      </div>
+      <div class="ci-filter-range">
+        <label class="form-label">To</label>
+        <input type="date" name="date_to" class="form-input ci-range-field" value="{{ date_to }}" />
+      </div>
+      <div>
+        <label class="form-label">Company</label>
+        <select name="company" class="form-input">
+          <option value="">All companies</option>
+          {% for co in companies %}
+          <option value="{{ co }}" {% if co == company %}selected{% endif %}>{{ co }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Product</label>
+        <select name="product" class="form-input">
+          <option value="">All products</option>
+          {% for p in products %}
+          <option value="{{ p }}" {% if p == product %}selected{% endif %}>{{ p }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="form-label">Deal status</label>
+        <select name="status" class="form-input">
+          <option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
+          <option value="shipped" {% if status == 'shipped' %}selected{% endif %}>Shipped</option>
+          <option value="all" {% if status == 'all' %}selected{% endif %}>All</option>
+        </select>
+      </div>
+    </div>
+
+    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem;align-items:center">
+      <button type="submit" class="btn btn-primary btn-sm">Run</button>
+      <a href="/generate/commission-invoices" class="btn btn-ghost btn-sm">Reset</a>
+      <button type="button" id="ci-prefilled-dl" class="btn btn-ghost btn-sm">↓ Download prefilled Excel</button>
+    </div>
+  </form>
+
+  <div id="ci-export-results" style="margin-top:1rem">
+    {% if filters_applied %}
+    <p style="margin:0;font-size:.88rem;color:#4b5563">
+      <strong>{{ preview_deals|length }}</strong> deal(s) match
+      {% if period_label %} · {{ period_label }}{% endif %}
+      {% if company %} · {{ company }}{% endif %}
+      {% if product %} · {{ product }}{% endif %}
+      · status: {{ status }}
+    </p>
+
+    {% if preview_deals %}
+    <p style="margin:.35rem 0 0;font-size:.82rem;color:#6b7280">
+      <span id="ci-deal-selected-count">{{ preview_deals|length }}</span> of {{ preview_deals|length }} selected for export
+      · <button type="button" class="link-btn" id="ci-deal-select-all-btn">All</button>
+      · <button type="button" class="link-btn" id="ci-deal-select-none-btn">None</button>
+    </p>
+    <div class="table-wrap" style="margin-top:.5rem;max-height:240px;overflow:auto">
+      <table class="data-table" style="font-size:.82rem" id="ci-deal-preview-table">
+        <thead>
+          <tr>
+            <th style="width:2rem;text-align:center">
+              <input type="checkbox" id="ci-deal-select-all" checked title="Select all" aria-label="Select all deals" />
+            </th>
+            <th>Status</th><th>Company</th><th>Product</th><th>GBL Invoice</th>
+            <th>Sail / deal date</th><th>Qty</th><th>Rate</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for d in preview_deals %}
+          <tr>
+            <td style="text-align:center">
+              <input type="checkbox" class="ci-deal-cb" value="{{ d.id }}" checked aria-label="Include deal {{ d.id }}" />
+            </td>
+            <td>{{ d.status }}</td>
+            <td>{{ d.company }}</td>
+            <td>{{ d.product }}</td>
+            <td>{{ d.gbl_invoice or '—' }}</td>
+            <td>{{ (d.shipped_date or d.gbl_invoice_date or d.deal_date or '') | ci_date }}</td>
+            <td>{{ d.quantity or '—' }}</td>
+            <td>{{ d.price or '—' }}{{ d.price_unit or '' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="margin-top:.75rem;color:#9ca3af;font-size:.85rem">
+      No deals match — try <strong>All months</strong>, status <strong>All</strong>, or a different date range.
+    </p>
+    {% endif %}
+    {% else %}
+    <p style="margin:0;color:#9ca3af;font-size:.85rem">Select filters and click <strong>Run</strong> to preview deals.</p>
+    {% endif %}
+  </div>
+</section>
 
 <div class="table-wrap card" style="padding:0;overflow-x:auto">
   <table class="data-table">
@@ -54,4 +192,120 @@
     </tbody>
   </table>
 </div>
+
+<script>
+(function () {
+  const form = document.getElementById("ci-export-form");
+  const dl = document.getElementById("ci-prefilled-dl");
+  const selectAll = document.getElementById("ci-deal-select-all");
+  const selectAllBtn = document.getElementById("ci-deal-select-all-btn");
+  const selectNoneBtn = document.getElementById("ci-deal-select-none-btn");
+  const selectedCount = document.getElementById("ci-deal-selected-count");
+  if (!form) return;
+
+  function dealCheckboxes() {
+    return Array.from(document.querySelectorAll(".ci-deal-cb"));
+  }
+
+  function selectedDealIds() {
+    return dealCheckboxes().filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+  }
+
+  function syncSelectAllState() {
+    const boxes = dealCheckboxes();
+    if (!boxes.length || !selectAll) return;
+    const checked = boxes.filter(function (cb) { return cb.checked; }).length;
+    selectAll.checked = checked === boxes.length;
+    selectAll.indeterminate = checked > 0 && checked < boxes.length;
+    if (selectedCount) selectedCount.textContent = String(checked);
+  }
+
+  function setAllDeals(checked) {
+    dealCheckboxes().forEach(function (cb) { cb.checked = checked; });
+    syncSelectAllState();
+  }
+
+  if (selectAll) {
+    selectAll.addEventListener("change", function () {
+      setAllDeals(selectAll.checked);
+    });
+  }
+  if (selectAllBtn) {
+    selectAllBtn.addEventListener("click", function () { setAllDeals(true); });
+  }
+  if (selectNoneBtn) {
+    selectNoneBtn.addEventListener("click", function () { setAllDeals(false); });
+  }
+  dealCheckboxes().forEach(function (cb) {
+    cb.addEventListener("change", syncSelectAllState);
+  });
+  syncSelectAllState();
+
+  function isRangeMode() {
+    const r = form.querySelector('input[name="mode"][value="range"]');
+    return r && r.checked;
+  }
+
+  function syncModeFields() {
+    const range = isRangeMode();
+    form.querySelectorAll(".ci-filter-monthly").forEach(function (el) {
+      el.style.display = range ? "none" : "";
+    });
+    form.querySelectorAll(".ci-filter-range").forEach(function (el) {
+      el.style.display = range ? "" : "none";
+    });
+    form.querySelectorAll(".ci-monthly-field").forEach(function (el) {
+      el.disabled = range;
+    });
+    form.querySelectorAll(".ci-range-field").forEach(function (el) {
+      el.disabled = !range;
+    });
+  }
+
+  function buildExportUrl() {
+    const ids = selectedDealIds();
+    if (dealCheckboxes().length && !ids.length) {
+      alert("Select at least one deal to include in the Excel export.");
+      return null;
+    }
+    const params = new URLSearchParams();
+    const mode = isRangeMode() ? "range" : "monthly";
+    params.set("mode", mode);
+    if (mode === "monthly") {
+      const fy = form.querySelector('[name="fy"]');
+      const month = form.querySelector('[name="month"]');
+      if (fy && !fy.disabled) params.set("fy", fy.value);
+      if (month && !month.disabled) params.set("month", month.value);
+    } else {
+      const df = form.querySelector('[name="date_from"]');
+      const dt = form.querySelector('[name="date_to"]');
+      if (df && df.value) params.set("date_from", df.value);
+      if (dt && dt.value) params.set("date_to", dt.value);
+    }
+    ["company", "product", "status"].forEach(function (name) {
+      const el = form.querySelector('[name="' + name + '"]');
+      if (el && el.value) params.set(name, el.value);
+    });
+    ids.forEach(function (id) { params.append("deal_ids", id); });
+    return "/generate/commission-invoices/prefilled-template.xlsx?" + params.toString();
+  }
+
+  form.querySelectorAll('input[name="mode"]').forEach(function (r) {
+    r.addEventListener("change", syncModeFields);
+  });
+
+  form.addEventListener("submit", function () {
+    syncModeFields();
+  });
+
+  if (dl) {
+    dl.addEventListener("click", function () {
+      const url = buildExportUrl();
+      if (url) window.location.href = url;
+    });
+  }
+
+  syncModeFields();
+})();
+</script>
 {% endblock %}

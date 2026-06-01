@@ -48,14 +48,14 @@
         <div class="f-hybrid-cell">
           {% if row.item.is_calculated %}
             <span class="f-ro-val f-calc-cell" data-lid="{{ row.item.id }}" data-month="{{ m }}">
-              {{ "${:,.0f}".format(row.monthly_t[m]) if row.monthly_t[m] else '—' }}
+              {{ "${:,.2f}".format(row.monthly_t[m]) if row.monthly_t[m] else '—' }}
             </span>
           {% else %}
             {% if row.monthly_r[m] %}
-            <span class="f-rollup-badge">${{ "{:,.0f}".format(row.monthly_r[m]) }}</span>
+            <span class="f-rollup-badge">${{ "{:,.2f}".format(row.monthly_r[m]) }}</span>
             {% endif %}
             {% if row.monthly_m[m] %}
-            <span class="f-manual-badge">+${{ "{:,.0f}".format(row.monthly_m[m]) }}</span>
+            <span class="f-manual-badge">+${{ "{:,.2f}".format(row.monthly_m[m]) }}</span>
             {% endif %}
             {% if not row.monthly_r[m] and not row.monthly_m[m] %}
             <span class="f-text-muted">—</span>
@@ -67,7 +67,7 @@
       <td class="f-col-total">
         <span class="{% if row.item.is_calculated %}f-calc-total-cell{% else %}f-ro-total{% endif %}"
               data-lid="{{ row.item.id }}">
-          {{ "${:,.0f}".format(row.total) if row.total else '—' }}
+          {{ "${:,.2f}".format(row.total) if row.total else '—' }}
         </span>
       </td>
     </tr>
@@ -82,9 +82,9 @@
     <tr class="f-row-{{ row.style or 'total' }}">
       <td class="f-row-name">{{ row.item.name }}</td>
       {% for m in months %}
-      <td><span class="f-ro-val">${{ "{:,.0f}".format(row.monthly_t[m]) if row.monthly_t[m] else '—' }}</span></td>
+      <td><span class="f-ro-val">${{ "{:,.2f}".format(row.monthly_t[m]) if row.monthly_t[m] else '—' }}</span></td>
       {% endfor %}
-      <td class="f-col-total"><span class="f-ro-val">${{ "{:,.0f}".format(row.total) if row.total else '—' }}</span></td>
+      <td class="f-col-total"><span class="f-ro-val">${{ "{:,.2f}".format(row.total) if row.total else '—' }}</span></td>
     </tr>
     {% endfor %}
     {% endif %}

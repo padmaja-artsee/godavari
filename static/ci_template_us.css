@@ -1,0 +1,501 @@
+/*
+ * Commission Invoice – US Commercial Invoice template (matches Excel layout)
+ */
+
+.ci-document.ci-template-us {
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.ci-document.ci-template-us > .po-page.ci-template-us {
+  margin-bottom: 1.5rem;
+}
+
+.ci-document.ci-template-us > .po-page.ci-template-us:last-child {
+  margin-bottom: 0;
+}
+
+.po-page.ci-template-us {
+  font-family: "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif !important;
+  font-size: 12pt;
+  color: #000;
+  max-width: 820px;
+  padding: 32px 72px 48px;
+  box-sizing: border-box;
+  border-top: 2px solid #4472c4;
+  line-height: 1.35;
+}
+
+.ci-template-us.ci-sheet {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  max-width: none;
+  margin: 0;
+  line-height: inherit;
+  /* padding lives on .po-page.ci-template-us — do not zero it here */
+}
+
+/* Row 1 — title */
+.ci-main-title {
+  text-align: center;
+  font-size: 28pt;
+  font-style: italic;
+  font-weight: 400;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  border: none;
+  color: #000;
+}
+
+/* Rows 3–5 seller + meta */
+.ci-seller-meta {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 1rem;
+  align-items: start;
+  margin-bottom: 0.5rem;
+}
+
+.ci-seller-name {
+  font-weight: 700;
+  font-size: 12pt;
+  margin: 0 0 2px;
+}
+
+.ci-seller-addr {
+  margin: 0;
+  font-size: 12pt;
+}
+
+.ci-meta-col {
+  padding-top: 0;
+  min-width: 240px;
+}
+
+.ci-meta-line {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 0.35rem;
+  align-items: baseline;
+  margin-bottom: 4px;
+  font-size: 12pt;
+}
+
+.ci-meta-label {
+  text-align: left;
+}
+
+.ci-meta-val,
+.ci-meta-col input[name="invoice_number"],
+.ci-meta-col .ci-date-show {
+  text-align: right;
+  width: 100%;
+}
+
+/* Date picker — calendar input + dd-Mon-yyyy display (e.g. 22-May-2026) */
+.ci-date-wrap {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 1.25rem;
+}
+
+.ci-date-show {
+  width: 100%;
+  pointer-events: none;
+  background: transparent !important;
+}
+
+.ci-date-native {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  font-size: inherit;
+}
+
+.ci-field-yellow.ci-date-show {
+  background: #fffde7 !important;
+}
+
+.ci-spacer { height: 28px; }
+.ci-spacer-sm { height: 14px; }
+
+/* Customer + logo */
+.ci-customer-row {
+  display: grid;
+  grid-template-columns: 1fr 200px;
+  gap: 1rem;
+  align-items: start;
+}
+
+.ci-customer-label-row {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 0.25rem;
+}
+
+.ci-customer-label {
+  font-size: 12pt;
+}
+
+.ci-customer-addr p,
+.ci-customer-addr input {
+  margin: 0 0 2px;
+}
+
+.ci-logo-col {
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.ci-logo-img {
+  max-width: 180px;
+  max-height: 90px;
+  object-fit: contain;
+}
+
+/* Contact / Due Date bar */
+.ci-contact-bar {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  margin-bottom: 0;
+}
+
+.ci-contact-bar th,
+.ci-contact-bar td {
+  border: 1px solid #000;
+  padding: 4px 8px;
+  font-size: 10pt;
+}
+
+.ci-bar-green th {
+  background: #008000;
+  color: #fff;
+  font-weight: 700;
+  font-size: 8pt;
+}
+
+.ci-bar-green th.ci-bar-left { text-align: left; }
+.ci-bar-green th.ci-bar-right { text-align: right; }
+
+.ci-bar-data td {
+  font-weight: 700;
+  font-size: 10pt;
+  background: #fff;
+}
+
+.ci-bar-left { width: 70%; text-align: left; }
+.ci-bar-right { width: 30%; text-align: right; }
+.ci-notice-contact-bar .ci-bar-left,
+.ci-notice-contact-bar .ci-bar-mid { width: 50%; text-align: left; }
+.ci-bar-green th.ci-bar-mid { text-align: left; }
+
+/* Main table */
+.ci-template-us .ci-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0;
+  font-size: 10pt;
+}
+
+.ci-template-us .ci-table th {
+  background: #008000;
+  color: #fff;
+  font-weight: 700;
+  text-align: center;
+  padding: 6px 4px;
+  border: 1px solid #000;
+  font-size: 10pt;
+}
+
+.ci-template-us .ci-table td {
+  border: 1px solid #000;
+  padding: 4px 6px;
+  vertical-align: middle;
+  font-size: 10pt;
+}
+
+.ci-col-company { width: 22%; text-align: left; }
+.ci-col-inv     { width: 18%; }
+.ci-col-qty     { width: 10%; }
+.ci-col-fob     { width: 14%; }
+.ci-col-rate    { width: 10%; }
+.ci-col-val     { width: 14%; }
+.ci-col-prod    { width: 12%; text-align: left; }
+.ci-bar-right input.ci-inline { text-align: right; }
+
+.ci-template-us .ci-table thead th.ci-col-company { text-align: left; }
+.ci-template-us .ci-table thead th.ci-col-prod  { text-align: center; }
+
+.ci-template-us .ci-num { text-align: center; }
+.ci-val-cell { font-weight: 400; text-align: right; }
+.ci-val-cell output,
+.ci-template-us .ci-table td.ci-val-cell { text-align: right; }
+
+/* Inline inputs — borderless like Excel cells */
+.ci-inline,
+.ci-cell-input,
+.ci-cell-num {
+  font-family: inherit;
+  font-size: inherit;
+  border: none;
+  background: transparent;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.ci-cell-num { text-align: center; }
+
+.ci-field-yellow { background: #fffde7 !important; }
+
+.ci-src { font-size: 9px; margin-left: 2px; vertical-align: super; }
+.ci-src-ok { color: #008000; }
+.ci-src-warn { color: #b7950b; }
+
+/* Amount in words row */
+.ci-words-row {
+  margin-top: 0.75rem;
+  font-size: 10pt;
+  font-weight: 700;
+  min-height: 1.5rem;
+}
+
+.ci-words-input {
+  width: 100%;
+  font-weight: 700;
+}
+
+/* Total row */
+.ci-total-row-excel {
+  display: grid;
+  grid-template-columns: 1fr 140px;
+  margin-top: 1rem;
+  font-weight: 700;
+  font-size: 10pt;
+}
+
+.ci-total-label {
+  text-align: right;
+  padding-right: 1rem;
+}
+
+.ci-total-amt {
+  text-align: right;
+  border-top: 1px solid #000;
+  padding-top: 2px;
+}
+
+/* Bank section */
+.ci-bank-section {
+  margin-top: 1.5rem;
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+.ci-bank-section p { margin: 0 0 2px; }
+
+.ci-bank-hdr {
+  font-weight: 700;
+  margin-bottom: 4px !important;
+}
+
+.ci-sig-line {
+  margin-top: 2rem;
+  text-align: center;
+  font-weight: 700;
+}
+
+.ci-bank-sig-row {
+  display: grid;
+  grid-template-columns: 1fr 240px;
+  align-items: end;
+  gap: 1rem;
+  margin-top: 0.25rem;
+}
+
+.ci-bank-phone { margin: 0; }
+
+.ci-sig-block {
+  text-align: center;
+}
+
+.ci-sig-block .doc-sig-img {
+  display: block;
+  margin: 0 auto 0.15rem;
+  max-height: 52px;
+  max-width: 200px;
+  object-fit: contain;
+}
+
+.ci-sig-block .doc-sig-label,
+.ci-sig-block .po-sig-label {
+  font-weight: 700;
+  font-size: 10pt;
+  color: #000;
+  margin: 0;
+}
+
+.ci-mail-checks,
+.ci-emergency,
+.ci-imdg {
+  margin: 0.35rem 0 0;
+  font-size: 10pt;
+}
+
+.ci-emergency,
+.ci-imdg {
+  padding-left: 1.5rem;
+}
+
+.ci-cert-block {
+  margin-top: 0.75rem;
+  font-size: 9pt;
+  line-height: 1.45;
+}
+
+.ci-cert-block p {
+  margin: 0 0 0.5rem;
+}
+
+/* Notice of Order — second page in print */
+.ci-notice-page {
+  font-size: 10pt;
+}
+
+.ci-notice-title {
+  margin-bottom: 0.75rem;
+}
+
+.ci-notice-customer-row {
+  align-items: start;
+}
+
+.ci-notice-customer-label {
+  margin: 0 0 2px;
+  font-size: 12pt;
+}
+
+.ci-notice-customer-name {
+  margin: 0;
+  font-weight: 700;
+  font-size: 12pt;
+}
+
+.ci-notice-ship-edit {
+  margin: 0.5rem 0;
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+  font-size: 10pt;
+}
+
+.ci-notice-table { margin-top: 0; }
+
+.ci-notice-table .ci-notice-empty-row td {
+  height: 1.35rem;
+}
+
+.ci-notice-bank-section {
+  margin-top: 1rem;
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+.ci-notice-bank-section p {
+  margin: 0 0 2px;
+}
+
+.ci-notice-bank-hdr {
+  font-weight: 700;
+  text-decoration: underline;
+  margin-bottom: 4px !important;
+}
+
+.ci-notice-mail-checks {
+  margin-top: 0.35rem !important;
+}
+
+.ci-notice-sig-bar {
+  margin-top: 1.25rem;
+  height: 32px;
+  border: 2px solid #008000;
+  box-sizing: border-box;
+}
+
+.ci-notice-footer {
+  margin-top: 1rem;
+  text-align: center;
+  font-size: 10pt;
+  line-height: 1.4;
+}
+
+.ci-notice-footer-name {
+  margin: 0 0 2px;
+  font-weight: 400;
+}
+
+.ci-notice-footer-addr {
+  margin: 0;
+}
+
+/* legacy notice section selectors */
+.ci-notice-section { display: none; }
+
+.ci-line-actions { margin-top: 0.35rem; }
+
+/* Override legacy ci-page flex header when using template */
+.ci-template-us .ci-header-row,
+.ci-template-us .ci-title-row,
+.ci-template-us .ci-meta-grid { display: none; }
+
+@media print {
+  .po-page.ci-template-us {
+    padding: 24px 64px !important;
+  }
+  .ci-document.ci-template-us {
+    max-width: none;
+  }
+  .ci-document.ci-template-us > .po-page.ci-template-us {
+    margin-bottom: 0;
+    box-shadow: none;
+    border: none;
+  }
+  .ci-template-us.ci-sheet { max-width: 100%; }
+  .ci-invoice-page {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+  .ci-notice-page {
+    page-break-before: always !important;
+    break-before: page !important;
+    margin-top: 0;
+    padding-top: 0;
+  }
+  .ci-date-native { display: none !important; }
+  .ci-date-show {
+    background: transparent !important;
+    pointer-events: none;
+  }
+  .ci-template-us .ci-table th,
+  .ci-bar-green th { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .ci-inline, .ci-cell-input, .ci-cell-num {
+    border: none !important;
+    background: transparent !important;
+  }
+  .ci-field-yellow { background: transparent !important; }
+  .doc-sig-img {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .no-print { display: none !important; }
+}

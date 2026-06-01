@@ -134,6 +134,14 @@
           <a class="btn btn-primary btn-sm" href="/add?tab=log&company={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% if row.deal_id %}&deal_id={{ row.deal_id }}{% endif %}&return_to=/deals">Log</a>
           {% if row.deal_id %}
           <a class="link" href="/deal/{{ row.deal_id }}">View</a>
+          {% if row.status in ('shipped', 'lost') %}
+          <form method="post" action="/deals/{{ row.deal_id }}/reopen" class="inline-form"
+                data-confirm="Reopen this deal? It will be moved back to Open status."
+                data-confirm-ok="Yes, Reopen">
+            <input type="hidden" name="next_url" value="/deals?status={{ status }}" />
+            <button type="submit" class="btn btn-ghost btn-sm">↩ Reopen</button>
+          </form>
+          {% endif %}
           {% else %}
           <a class="link" href="/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}">View</a>
           {% endif %}

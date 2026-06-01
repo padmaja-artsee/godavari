@@ -413,6 +413,19 @@
   width: 80%;
   margin-bottom: 0.25rem;
 }
+.doc-sig-img {
+  display: block;
+  max-height: 52px;
+  max-width: 200px;
+  object-fit: contain;
+  margin-bottom: 0.25rem;
+}
+.po-sig-block .doc-sig-img {
+  width: auto;
+}
+.po-sig-block:has(.doc-sig-img) .po-sig-for {
+  margin-bottom: 0.75rem;
+}
 .po-sig-label {
   font-size: 0.85rem;
   color: #555;

@@ -35,19 +35,19 @@
 <div class="f-kpi-row">
   <div class="f-kpi {% if total_income > 0 %}f-kpi-green{% endif %}">
     <span class="f-kpi-label">Total Income</span>
-    <span class="f-kpi-val">${{ "{:,.0f}".format(total_income) }}</span>
+    <span class="f-kpi-val">${{ "{:,.2f}".format(total_income) }}</span>
   </div>
   <div class="f-kpi {% if total_expenses > 0 %}f-kpi-red{% endif %}">
     <span class="f-kpi-label">Total Expenses</span>
-    <span class="f-kpi-val">${{ "{:,.0f}".format(total_expenses) }}</span>
+    <span class="f-kpi-val">${{ "{:,.2f}".format(total_expenses) }}</span>
   </div>
   <div class="f-kpi {% if budget_expenses > 0 %}f-kpi-blue{% endif %}">
     <span class="f-kpi-label">Budgeted Expenses</span>
-    <span class="f-kpi-val">${{ "{:,.0f}".format(budget_expenses) }}</span>
+    <span class="f-kpi-val">${{ "{:,.2f}".format(budget_expenses) }}</span>
   </div>
   <div class="f-kpi {% if net >= 0 %}f-kpi-green{% else %}f-kpi-red{% endif %}">
     <span class="f-kpi-label">Net (Income − Expenses)</span>
-    <span class="f-kpi-val">${{ "{:,.0f}".format(net) }}</span>
+    <span class="f-kpi-val">${{ "{:,.2f}".format(net) }}</span>
   </div>
 </div>
 
@@ -100,7 +100,7 @@ new Chart(document.getElementById('expChart'), {
     {label:'Actuals', data:{{ exp_actual | tojson }}, backgroundColor:'rgba(192,57,43,.45)', borderColor:'#C0392B', borderWidth:1}
   ]},
   options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
 });
 new Chart(document.getElementById('incChart'), {
   type:'bar',
@@ -108,7 +108,7 @@ new Chart(document.getElementById('incChart'), {
     {label:'Income', data:{{ income_actual | tojson }}, backgroundColor:'rgba(28,86,49,.5)', borderColor:'#1C5631', borderWidth:1}
   ]},
   options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString()}}}}
+           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
 });
 </script>
 {% endblock %}

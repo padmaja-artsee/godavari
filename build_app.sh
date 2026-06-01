@@ -9,6 +9,7 @@ cd "$SCRIPT_DIR"
 export PATH="$HOME/.cargo/bin:$HOME/Library/Python/3.9/bin:$PATH"
 
 echo "▶ Step 1: Build Python bundle with PyInstaller (clean build)..."
+chmod -R u+w build/ dist/ 2>/dev/null || true
 rm -rf build/ dist/
 pyinstaller -y leads.spec
 echo "  ✓ Python bundle built: dist/leads/"
@@ -82,14 +83,16 @@ cp -r "$TAURI_APP" "$DMG_STAGING/GodavariLeads.app"
 codesign --force --deep --sign - "$DMG_STAGING/GodavariLeads.app" 2>&1 | head -2 || true
 ln -s /Applications "$DMG_STAGING/Applications"
 
-# Build writable DMG, inject background, position icons, then compress
+# Pre-populate background so it exists when the DMG is mounted
+mkdir -p "$DMG_STAGING/.background"
+cp "$SCRIPT_DIR/src-tauri/assets/dmg-background.png" "$DMG_STAGING/.background/bg.png"
+
+# Build writable DMG, position icons via AppleScript, then compress
+rm -f "$RW_DMG"
 hdiutil create -srcfolder "$DMG_STAGING" -volname "Godavari Leads" \
     -fs HFS+ -format UDRW -size 120m "$RW_DMG" 2>&1 | tail -1
 DEVICE=$(hdiutil attach -readwrite -noverify "$RW_DMG" 2>&1 | awk 'END{print $1}')
 sleep 2
-mkdir -p "/Volumes/Godavari Leads/.background"
-cp "$SCRIPT_DIR/src-tauri/assets/dmg-background.png" "/Volumes/Godavari Leads/.background/bg.png"
-sleep 1
 osascript <<APPLESCRIPT
 tell application "Finder"
   tell disk "Godavari Leads"

@@ -213,12 +213,14 @@
   vertical-align: middle;
 }
 
-.ci-subunit {
-  font-weight: 400;
-  font-size: .7rem;
-  display: block;
-  opacity: .9;
-}
+.ci-field-yellow { background: #fffde7; }
+.ci-src { font-size: .65rem; margin-left: .35rem; font-weight: 600; }
+.ci-src-ok { color: #1a5632; }
+.ci-src-warn { color: #b7950b; }
+.ci-static-addr { font-size: .82rem; color: #555; margin: .25rem 0 0; }
+.ci-notice-block { margin-top: 1.25rem; padding-top: .75rem; border-top: 1px solid #ddd; }
+.ci-static-note { font-size: .78rem; color: #666; margin-top: .5rem; }
+.ci-header-left { display: flex; gap: 1rem; align-items: flex-start; }
 
 /* Editable unit/currency inputs inside green table header cells */
 .ci-subunit-input {

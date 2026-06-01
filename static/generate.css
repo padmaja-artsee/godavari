@@ -9,6 +9,36 @@
   border-radius: 4px;
   font-size: 0.85em;
 }
+.generate-signature-panel {
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: var(--radius, 10px);
+  box-shadow: var(--shadow, 0 1px 3px rgba(0,0,0,0.06));
+}
+.generate-signature-preview {
+  margin-bottom: 0.75rem;
+}
+.generate-signature-img {
+  max-height: 64px;
+  max-width: 240px;
+  object-fit: contain;
+  border: 1px solid var(--border, #e2e8f0);
+  padding: 0.35rem 0.5rem;
+  background: #fff;
+}
+.generate-signature-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+}
+.generate-signature-ok {
+  margin: 0.75rem 0 0;
+  color: #15803d;
+  font-size: 0.92rem;
+}
 .generate-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));

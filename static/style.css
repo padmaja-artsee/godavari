@@ -717,6 +717,31 @@ tr:hover td { background: #f8fafc; }
   font-family: inherit;
 }
 
+.currency-field-row {
+  display: flex;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.currency-field-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.currency-field-row select {
+  width: 7.5rem;
+  flex-shrink: 0;
+}
+
+#deal-commercial-value,
+.deal-commercial-value,
+.deal-commercial-fob,
+.deal-commercial-commission {
+  background: #f3f4f6;
+  color: #374151;
+  cursor: default;
+}
+
 .form-section-title {
   margin: 0.5rem 0 0;
   font-size: 0.8rem;

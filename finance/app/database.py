@@ -96,6 +96,7 @@ LINE_ITEMS_SEED = [
     ("office",   "Postage and Delivery",      0, 1, 65),
     ("office",   "Repairs and Maintenance",   0, 1, 70),
     ("office",   "Depreciation",              0, 1, 75),
+    ("office",   "Amortization",             0, 1, 76),
     ("office",   "Miscellaneous expenses",    0, 1, 80),
     ("office",   "Total Office Costs",        1, 1, 99),
     # ── Bank/Legal/Admin ────────────────────────────────────────────────────
@@ -114,10 +115,16 @@ LINE_ITEMS_SEED = [
     ("travel",   "Meals and Entertainment",   0, 1, 15),
     ("travel",   "Travel costs",              0, 1, 20),
     ("travel",   "Car Rental",                0, 1, 25),
-    ("travel",   "Total Travel",              1, 1, 99),
+    ("travel",       "Total Travel",              1, 1, 99),
+    # ── Investment ──────────────────────────────────────────────────────────
+    ("investment",   "Capital Expenditure",       0, 1, 10),
+    ("investment",   "Equipment Purchase",        0, 1, 20),
+    ("investment",   "R&D Investment",            0, 1, 30),
+    ("investment",   "Other Investment",          0, 1, 40),
+    ("investment",   "Total Investment",          1, 1, 99),
     # ── Grand totals ────────────────────────────────────────────────────────
-    ("totals",   "Total Expenses",            1, 1, 10),
-    ("totals",   "Net (Income - Expenses)",   1, 1, 20),
+    ("totals",       "Total Expenses",            1, 1, 10),
+    ("totals",       "Net (Income - Expenses)",   1, 1, 20),
 ]
 
 # Items added after initial release — used by the migration to patch existing DBs
@@ -129,23 +136,30 @@ _MIGRATION_LINE_ITEMS = [
     ("office",   "Postage and Delivery",    0, 1, 65),
     ("office",   "Repairs and Maintenance", 0, 1, 70),
     ("office",   "Depreciation",            0, 1, 75),
+    ("office",   "Amortization",           0, 1, 76),
     ("admin",    "Taxes",                   0, 1, 15),
     ("admin",    "Interest Expense",        0, 1, 65),
     ("admin",    "Fees",                    0, 1, 70),
     ("travel",   "Meals and Entertainment", 0, 1, 15),
-    ("travel",   "Car Rental",              0, 1, 25),
+    ("travel",      "Car Rental",              0, 1, 25),
+    ("investment",  "Capital Expenditure",     0, 1, 10),
+    ("investment",  "Equipment Purchase",      0, 1, 20),
+    ("investment",  "R&D Investment",          0, 1, 30),
+    ("investment",  "Other Investment",        0, 1, 40),
+    ("investment",  "Total Investment",        1, 1, 99),
 ]
 
 SECTION_LABELS = {
-    "income":   "INCOME",
-    "employee": "EMPLOYEE COSTS",
-    "office":   "OFFICE COSTS",
-    "admin":    "BANK / LEGAL / ADMIN",
-    "travel":   "CONFERENCE / TRAVEL",
-    "totals":   "",
+    "income":     "INCOME",
+    "employee":   "EMPLOYEE COSTS",
+    "office":     "OFFICE COSTS",
+    "admin":      "BANK / LEGAL / ADMIN",
+    "travel":     "CONFERENCE / TRAVEL",
+    "investment": "INVESTMENT",
+    "totals":     "",
 }
 
-SECTION_ORDER = ["income", "employee", "office", "admin", "travel", "totals"]
+SECTION_ORDER = ["income", "employee", "office", "admin", "travel", "investment", "totals"]
 
 # Default account → line item mapping
 ACCOUNTS_SEED = [
@@ -172,14 +186,15 @@ ACCOUNTS_SEED = [
     ("Postage and Delivery",        "office",   "Postage and Delivery",     1, 115),
     ("Repairs and Maintenance",     "office",   "Repairs and Maintenance",  1, 118),
     ("Depreciation Expense",        "office",   "Depreciation",             1, 120),
+    ("Amortization Expense",        "office",   "Amortization",             1, 122),
     ("Miscellaneous",               "office",   "Miscellaneous expenses",   1, 125),
     # Admin
     ("Bank Charges",                "admin",    "Bank charges",             1, 130),
     ("Taxes",                       "admin",    "Taxes",                    1, 133),
     ("Commercial Liability Ins",    "admin",    "Insurance expense",        1, 135),
     ("Directors & Officers Ins",    "admin",    "Insurance expense",        1, 137),
-    ("Business Owners Insurance",   "admin",    "Insurance expense",        1, 139),
-    ("Insurance",                   "admin",    "Insurance expense",        1, 140),
+    ("Business Owners Ins",         "admin",    "Insurance expense",        1, 139),
+    ("Insurance (Business)",        "admin",    "Insurance expense",        1, 140),
     ("Accounting & Audit",          "admin",    "Accounting",               1, 150),
     ("Legal Fees",                  "admin",    "Legal",                    1, 160),
     ("Professional Fees",           "admin",    "Legal",                    1, 170),
@@ -190,13 +205,18 @@ ACCOUNTS_SEED = [
     ("Fees",                        "admin",    "Fees",                     1, 198),
     ("Membership",                  "admin",    "Fees",                     1, 199),
     # Travel
-    ("Registration / Events",       "travel",   "Registration",             1, 200),
-    ("Conference Expense",          "travel",   "Registration",             1, 202),
-    ("Meals and Entertainment",     "travel",   "Meals and Entertainment",  1, 205),
-    ("Travel Expense",              "travel",   "Travel costs",             1, 210),
-    ("Airfare",                     "travel",   "Travel costs",             1, 212),
-    ("Hotel / Lodging",             "travel",   "Travel costs",             1, 214),
-    ("Car Rental",                  "travel",   "Car Rental",               1, 220),
+    ("Registration / Events",       "travel",      "Registration",             1, 200),
+    ("Conference Expense",          "travel",      "Registration",             1, 202),
+    ("Meals and Entertainment",     "travel",      "Meals and Entertainment",  1, 205),
+    ("Travel Expense",              "travel",      "Travel costs",             1, 210),
+    ("Airfare",                     "travel",      "Travel costs",             1, 212),
+    ("Hotel / Lodging",             "travel",      "Travel costs",             1, 214),
+    ("Car Rental",                  "travel",      "Car Rental",               1, 220),
+    # Investment
+    ("Capital Expenditure",         "investment",  "Capital Expenditure",      1, 300),
+    ("Equipment Purchase",          "investment",  "Equipment Purchase",       1, 310),
+    ("R&D Investment",              "investment",  "R&D Investment",           1, 320),
+    ("Other Investment",            "investment",  "Other Investment",         1, 330),
 ]
 
 PAYMENT_ACCOUNTS_SEED = [
@@ -340,15 +360,25 @@ def _run_migrations(conn) -> None:
         "(section,name,is_calculated,is_system,sort_order) VALUES (?,?,?,?,?)",
         _MIGRATION_LINE_ITEMS,
     )
-    # 2. Add missing accounts (INSERT OR IGNORE respects UNIQUE(name))
+    # 2. Add missing accounts and fix any with NULL line_item_id
     for name, section, li_name, is_sys, srt in ACCOUNTS_SEED:
-        row = conn.execute("SELECT id FROM line_items WHERE name=?", (li_name,)).fetchone()
+        row = conn.execute(
+            "SELECT id FROM line_items WHERE name=? AND section=?", (li_name, section)
+        ).fetchone()
+        if not row:
+            row = conn.execute("SELECT id FROM line_items WHERE name=?", (li_name,)).fetchone()
         li_id = row["id"] if row else None
         conn.execute(
             "INSERT OR IGNORE INTO accounts "
             "(name,section,line_item_id,is_system,sort_order) VALUES (?,?,?,?,?)",
             (name, section, li_id, is_sys, srt),
         )
+        # Fix any existing account that was inserted with NULL line_item_id
+        if li_id:
+            conn.execute(
+                "UPDATE accounts SET line_item_id=? WHERE name=? AND section=? AND line_item_id IS NULL",
+                (li_id, name, section),
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -361,7 +391,7 @@ def list_line_items() -> list[dict]:
             "SELECT * FROM line_items ORDER BY "
             "CASE section WHEN 'income' THEN 1 WHEN 'employee' THEN 2 "
             "WHEN 'office' THEN 3 WHEN 'admin' THEN 4 WHEN 'travel' THEN 5 "
-            "ELSE 6 END, sort_order"
+            "WHEN 'investment' THEN 6 ELSE 7 END, sort_order"
         ).fetchall()]
 
 
@@ -467,12 +497,13 @@ def compute_grid(raw: dict, items: list[dict]) -> dict:
         )
 
     for month in FY_MONTHS:
-        ti  = sec_sum("income",   month)
-        tec = sec_sum("employee", month)
-        toc = sec_sum("office",   month)
-        tad = sec_sum("admin",    month)
-        ttr = sec_sum("travel",   month)
-        tex = tec + toc + tad + ttr
+        ti  = sec_sum("income",     month)
+        tec = sec_sum("employee",   month)
+        toc = sec_sum("office",     month)
+        tad = sec_sum("admin",      month)
+        ttr = sec_sum("travel",     month)
+        tin = sec_sum("investment", month)
+        tex = tec + toc + tad + ttr + tin
         net = ti - tex
 
         for name, val in [
@@ -481,6 +512,7 @@ def compute_grid(raw: dict, items: list[dict]) -> dict:
             ("Total Office Costs",      toc),
             ("Total Admin",             tad),
             ("Total Travel",            ttr),
+            ("Total Investment",        tin),
             ("Total Expenses",          tex),
             ("Net (Income - Expenses)", net),
         ]:

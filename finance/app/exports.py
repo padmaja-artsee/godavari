@@ -514,40 +514,59 @@ def export_vendors_xlsx(vendors: list) -> tuple:
 
 def export_report_xlsx(
     period_label: str,
+    month_label: str,
+    cal_yr: int,
+    fy_start: int,
     income_lines: list,
-    total_income_actual: float,
-    total_income_budget: float,
+    total_income: dict,
     expense_sections: list,
-    total_expenses_actual: float,
-    total_expenses_budget: float,
-    net_actual: float,
-    net_budget: float,
+    total_expenses: dict,
+    net: dict,
     fiscal_year: int,
 ) -> tuple:
+    _BLUE_H = "C8D8F8"   # YTD header tint
+    _BLUE_L = "EEF4FF"   # YTD column tint
+
     wb = openpyxl.Workbook()
     ws = wb.active; ws.title = "P&L Report"
 
     # ── Header rows ───────────────────────────────────────────────────────────
-    ws.merge_cells("A1:D1")
+    ws.merge_cells("A1:G1")
     c = ws["A1"]; c.value = "Godavari Biorefineries Inc"
     c.font = _f(bold=True, size=13, color=_WHITE); c.fill = _fill(_GREEN_D)
     c.alignment = _al(h="left"); ws.row_dimensions[1].height = 22
 
-    ws.merge_cells("A2:D2")
+    ws.merge_cells("A2:G2")
     c = ws["A2"]; c.value = f"Profit & Loss — {period_label}"
     c.font = _f(bold=True, size=11, color=_WHITE); c.fill = _fill(_GREEN)
     c.alignment = _al(h="left"); ws.row_dimensions[2].height = 18
 
-    # ── Column headers ────────────────────────────────────────────────────────
-    for ci, h in enumerate(["", "Actual", "Budget", "Variance"], 1):
-        c = ws.cell(3, ci, h)
-        c.font = _f(bold=True, size=9, color=_WHITE)
-        c.fill = _fill(_GREEN); c.alignment = _al(h="right" if ci > 1 else "left")
+    # ── Group header row (row 3) ──────────────────────────────────────────────
+    ws.merge_cells("B3:D3")
+    c = ws["B3"]; c.value = f"{month_label} {cal_yr}"
+    c.font = _f(bold=True, size=9, color=_WHITE); c.fill = _fill(_GREEN)
+    c.alignment = _al(h="center"); c.border = _border()
+
+    ws.merge_cells("E3:G3")
+    c = ws["E3"]; c.value = f"YTD (Apr {fy_start} – {month_label} {cal_yr})"
+    c.font = _f(bold=True, size=9, color="1a3a7a"); c.fill = _fill(_BLUE_H)
+    c.alignment = _al(h="center"); c.border = _border()
+
+    ws.cell(3, 1).fill = _fill(_GREEN); ws.cell(3, 1).border = _border()
+
+    # ── Column sub-headers (row 4) ─────────────────────────────────────────────
+    headers = ["", "Actual", "Budget", "Variance", "Actual", "Budget", "Variance"]
+    for ci, h in enumerate(headers, 1):
+        c = ws.cell(4, ci, h)
+        c.font = _f(bold=True, size=9, color=_WHITE if ci <= 4 else "1a3a7a")
+        c.fill = _fill(_GREEN if ci <= 4 else _BLUE_H)
+        c.alignment = _al(h="right" if ci > 1 else "left")
         c.border = _border()
     ws.column_dimensions["A"].width = 32
-    for col in ["B", "C", "D"]:
+    for col in ["B", "C", "D", "E", "F", "G"]:
         ws.column_dimensions[col].width = 14
     ws.row_dimensions[3].height = 14
+    ws.row_dimensions[4].height = 14
 
     def _money(ws, row, col, val, bold=False, fill=None):
         c = ws.cell(row, col, val if val else 0)
@@ -558,84 +577,91 @@ def export_report_xlsx(
         c.border = _border()
         return c
 
-    def _label(ws, row, val, indent=0, bold=False, fill=None):
+    def _label(ws, row, val, indent=0, bold=False, fill=None, fill_ytd=None):
         c = ws.cell(row, 1, ("  " * indent) + val)
         c.font = _f(bold=bold)
         if fill: c.fill = _fill(fill)
         c.border = _border()
+        # shade YTD columns
+        ytd_fill = fill_ytd or (fill if fill else _BLUE_L)
+        for ci in range(5, 8):
+            ec = ws.cell(row, ci)
+            if not ec.value:
+                ec.fill = _fill(ytd_fill)
+            ec.border = _border()
         ws.row_dimensions[row].height = 13
         return c
 
-    row = 4
+    def _row7(ws, row, line, income=True, bold=False, fill=None):
+        """Write one data row with 6 money columns (monthly + YTD)."""
+        ma, mb = line["m_actual"],   line["m_budget"]
+        ya, yb = line["ytd_actual"], line["ytd_budget"]
+        mv = ma - mb if income else mb - ma
+        yv = ya - yb if income else yb - ya
+        ytd_fill = fill or _BLUE_L
+        _money(ws, row, 2, ma, bold=bold, fill=fill)
+        _money(ws, row, 3, mb, bold=bold, fill=fill)
+        _money(ws, row, 4, mv, bold=bold, fill=fill)
+        _money(ws, row, 5, ya, bold=bold, fill=ytd_fill)
+        _money(ws, row, 6, yb, bold=bold, fill=ytd_fill)
+        _money(ws, row, 7, yv, bold=bold, fill=ytd_fill)
+
+    row = 5
+
+    # ── Section header helper ─────────────────────────────────────────────────
+    def _sec_hdr(ws, row, text):
+        ws.cell(row, 1, text).font = _f(bold=True, size=9, color=_WHITE)
+        ws.cell(row, 1).fill = _fill(_GREEN)
+        ws.cell(row, 1).border = _border()
+        for ci in range(2, 8):
+            ws.cell(row, ci).fill = _fill(_GREEN)
+            ws.cell(row, ci).border = _border()
+        ws.row_dimensions[row].height = 14
 
     # ── INCOME ────────────────────────────────────────────────────────────────
-    ws.cell(row, 1, "INCOME").font = _f(bold=True, size=9, color=_WHITE)
-    ws.cell(row, 1).fill = _fill(_GREEN)
-    ws.cell(row, 1).border = _border()
-    for ci in range(2, 5):
-        ws.cell(row, ci).fill = _fill(_GREEN); ws.cell(row, ci).border = _border()
-    ws.row_dimensions[row].height = 14
-    row += 1
+    _sec_hdr(ws, row, "INCOME"); row += 1
 
     for line in income_lines:
-        act, bud = line["actual"], line["budget"]
         _label(ws, row, line["name"], indent=1)
-        _money(ws, row, 2, act); _money(ws, row, 3, bud)
-        _money(ws, row, 4, act - bud)
+        _row7(ws, row, line, income=True)
         row += 1
 
     _label(ws, row, "Total Income", bold=True, fill=_GREEN_L)
-    _money(ws, row, 2, total_income_actual, bold=True, fill=_GREEN_L)
-    _money(ws, row, 3, total_income_budget, bold=True, fill=_GREEN_L)
-    _money(ws, row, 4, total_income_actual - total_income_budget, bold=True, fill=_GREEN_L)
-    row += 2  # blank spacer
+    _row7(ws, row, total_income, income=True, bold=True, fill=_GREEN_L)
+    row += 2
 
     # ── EXPENSES ─────────────────────────────────────────────────────────────
-    ws.cell(row, 1, "EXPENSES").font = _f(bold=True, size=9, color=_WHITE)
-    ws.cell(row, 1).fill = _fill(_GREEN)
-    ws.cell(row, 1).border = _border()
-    for ci in range(2, 5):
-        ws.cell(row, ci).fill = _fill(_GREEN); ws.cell(row, ci).border = _border()
-    ws.row_dimensions[row].height = 14
-    row += 1
+    _sec_hdr(ws, row, "EXPENSES"); row += 1
 
     for sec in expense_sections:
-        # section header
         _label(ws, row, sec["label"].upper(), bold=True, fill=_GREY)
-        for ci in range(2, 5):
+        for ci in range(2, 8):
             ws.cell(row, ci).fill = _fill(_GREY); ws.cell(row, ci).border = _border()
-        ws.row_dimensions[row].height = 13
-        row += 1
+        ws.row_dimensions[row].height = 13; row += 1
 
         for line in sec["lines"]:
-            act, bud = line["actual"], line["budget"]
             _label(ws, row, line["name"], indent=1)
-            _money(ws, row, 2, act); _money(ws, row, 3, bud)
-            _money(ws, row, 4, bud - act)
+            _row7(ws, row, line, income=False)
             row += 1
 
-        # section total
-        sa, sb = sec["total_actual"], sec["total_budget"]
+        sec_tot = {
+            "m_actual": sec["m_total_actual"], "m_budget": sec["m_total_budget"],
+            "ytd_actual": sec["ytd_total_actual"], "ytd_budget": sec["ytd_total_budget"],
+        }
         _label(ws, row, f"Total {sec['label']}", bold=True, fill=_GREEN_L)
-        _money(ws, row, 2, sa, bold=True, fill=_GREEN_L)
-        _money(ws, row, 3, sb, bold=True, fill=_GREEN_L)
-        _money(ws, row, 4, sb - sa, bold=True, fill=_GREEN_L)
-        row += 2  # spacer after section
+        _row7(ws, row, sec_tot, income=False, bold=True, fill=_GREEN_L)
+        row += 2
 
     # Total Expenses
     _label(ws, row, "TOTAL EXPENSES", bold=True, fill="FFF9C4")
-    _money(ws, row, 2, total_expenses_actual, bold=True, fill="FFF9C4")
-    _money(ws, row, 3, total_expenses_budget, bold=True, fill="FFF9C4")
-    _money(ws, row, 4, total_expenses_budget - total_expenses_actual, bold=True, fill="FFF9C4")
+    _row7(ws, row, total_expenses, income=False, bold=True, fill="FFF9C4")
     row += 2
 
     # Net Income
     _label(ws, row, "NET INCOME (Income − Expenses)", bold=True, fill=_GREEN_L)
-    _money(ws, row, 2, net_actual, bold=True, fill=_GREEN_L)
-    _money(ws, row, 3, net_budget, bold=True, fill=_GREEN_L)
-    _money(ws, row, 4, net_actual - net_budget, bold=True, fill=_GREEN_L)
+    _row7(ws, row, net, income=True, bold=True, fill=_GREEN_L)
 
-    ws.freeze_panes = "B4"
+    ws.freeze_panes = "B5"
     fname = f"GBInc-PnL-FY{fiscal_year}.xlsx"
     buf = BytesIO(); wb.save(buf)
     return buf.getvalue(), fname

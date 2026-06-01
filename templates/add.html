@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_quantity_fields.html" import quantity_fields %}
 {% from "_deal_shipping_fields.html" import shipping_inputs %}
+{% from "_deal_commercial_extra.html" import commercial_extra_fields %}
 {% block title %}Add / Update{% endblock %}
 {% block content %}
 <div class="page-header">
@@ -101,6 +102,7 @@
                 {% endfor %}
               </select>
             </div>
+            {{ commercial_extra_fields({}) }}
             <div>
               <label>Incoterms</label>
               <input name="incoterms" placeholder="e.g. CFR Antwerp" />
@@ -200,6 +202,7 @@
   </form>
 </div>
 <script src="/static/log.js"></script>
+<script src="/static/deal_commercial.js"></script>
 
 {# ══════════════════════════════════════════════════════════
    COMPANIES  (tab=lead)

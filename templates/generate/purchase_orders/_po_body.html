@@ -1,4 +1,5 @@
 {% macro po_body(po, readonly=false) %}
+{% from "generate/_document_signature.html" import document_signature with context %}
 {% set CURRENCIES = ['Euro','USD','GBP','JPY','CHF','CAD','AUD','CNY','INR','SGD'] %}
 <div class="po-page po-excel-layout">
   <div class="po-brand-row">
@@ -304,11 +305,7 @@
 
   {# ── Signature + Footer ── #}
   <div class="po-footer">
-    <div class="po-sig-block">
-      <p class="po-sig-for">For Godavari Biorefineries Inc</p>
-      <div class="po-sig-line"></div>
-      <p class="po-sig-label">Authorised Signatory</p>
-    </div>
+    {{ document_signature('Authorised Signatory', for_line='For Godavari Biorefineries Inc', css_class='po-sig-block') }}
     <div class="po-footer-company">
       <img src="/static/footer logo.png" alt="Footer logo" class="po-footer-logo" />
       <div class="po-footer-details">

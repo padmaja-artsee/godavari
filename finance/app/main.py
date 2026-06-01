@@ -370,11 +370,12 @@ async def analysis_page(request: Request, fy: int = Query(0)):
     a_grid = _combined_actuals(fy, items)
 
     SUMMARY_LINES = [
-        ("income",   "Income"),
-        ("employee", "Employee Costs"),
-        ("office",   "Office Costs"),
-        ("admin",    "Bank/Legal/Admin"),
-        ("travel",   "Conference/Travel"),
+        ("income",     "Income"),
+        ("employee",   "Employee Costs"),
+        ("office",     "Office Costs"),
+        ("admin",      "Bank/Legal/Admin"),
+        ("travel",     "Conference/Travel"),
+        ("investment", "Investment"),
     ]
     summary = []
     for sec, label in SUMMARY_LINES:
@@ -401,6 +402,101 @@ async def analysis_page(request: Request, fy: int = Query(0)):
 
 
 # ---------------------------------------------------------------------------
+# Commission report (deals → Excel template)
+# ---------------------------------------------------------------------------
+
+def _commission_defaults():
+    import datetime
+    today = datetime.date.today()
+    fys = get_fiscal_years()
+    fy = fys[0] if fys else (today.year + 1 if today.month >= 4 else today.year)
+    month = today.month if today.month in FY_MONTHS else FY_MONTHS[0]
+    return fy, month
+
+
+@app.get("/commission", response_class=HTMLResponse)
+async def commission_page(
+    request: Request,
+    fy: int = Query(0),
+    month: int = Query(0),
+    product: str = Query(""),
+    company: str = Query(""),
+    status: str = Query("all"),
+):
+    try:
+        from app.database import (
+            list_commission_companies,
+            list_commission_products,
+            list_deals_for_commission,
+        )
+    except ImportError:
+        return templates.TemplateResponse("commission.html", _ctx(
+            request, page="commission", error="Commission report requires the Leads app.",
+            deals=[], products=[], companies=[], fy=0, month=0,
+            product="", company="", status="all",
+            fiscal_years=get_fiscal_years(), months=FY_MONTHS, month_labels=MONTH_LABELS,
+            period_label="", deal_count=0,
+        ))
+
+    def_fy, def_month = _commission_defaults()
+    if not fy:
+        fy = def_fy
+    if not month or month not in FY_MONTHS:
+        month = def_month
+
+    cal_yr = (fy - 1) if month >= 4 else fy
+    period_label = f"{MONTH_LABELS.get(month, '')} {cal_yr}"
+    deals = list_deals_for_commission(
+        fiscal_year=fy, month=month, product=product, company=company, status=status,
+    )
+    products = list_commission_products()
+    companies = list_commission_companies()
+
+    return templates.TemplateResponse("commission.html", _ctx(
+        request, page="commission", error=None,
+        deals=deals, products=products, companies=companies,
+        fy=fy, month=month, product=product, company=company, status=status,
+        fiscal_years=get_fiscal_years(), months=FY_MONTHS, month_labels=MONTH_LABELS,
+        period_label=period_label, deal_count=len(deals),
+    ))
+
+
+@app.get("/export/commission.xlsx")
+async def export_commission(
+    fy: int = Query(0),
+    month: int = Query(0),
+    product: str = Query(""),
+    company: str = Query(""),
+    status: str = Query("all"),
+):
+    from finance.app.commission_exports import export_commission_xlsx
+    try:
+        from app.database import list_deals_for_commission
+    except ImportError as exc:
+        return Response(content=str(exc), status_code=503)
+
+    def_fy, def_month = _commission_defaults()
+    if not fy:
+        fy = def_fy
+    if not month or month not in FY_MONTHS:
+        month = def_month
+
+    cal_yr = (fy - 1) if month >= 4 else fy
+    period_label = f"{MONTH_LABELS.get(month, '')}_{cal_yr}"
+    deals = list_deals_for_commission(
+        fiscal_year=fy, month=month, product=product, company=company, status=status,
+    )
+    prod_label = product.strip().upper() if product else "ALL PRODUCTS"
+    content, fname = export_commission_xlsx(
+        deals,
+        product_label=prod_label,
+        period_label=period_label,
+        month=month,
+    )
+    return _excel_response(content, fname)
+
+
+# ---------------------------------------------------------------------------
 # P&L Report
 # ---------------------------------------------------------------------------
 
@@ -408,86 +504,93 @@ async def analysis_page(request: Request, fy: int = Query(0)):
 async def report_page(
     request: Request,
     fy: int = Query(0),
-    view: str = Query("ytd"),  # ytd | monthly
     month: int = Query(0),
 ):
+    import datetime
     fys = get_fiscal_years()
     if not fy: fy = fys[0]
     items  = list_line_items()
     b_grid = compute_grid(get_budget_grid(fy), items)
     a_grid = _combined_actuals(fy, items)
-
     by_name = {i["name"]: i["id"] for i in items}
 
-    if view == "monthly" and month:
-        selected_months = [month]
-        period_label = f"{MONTH_LABELS.get(month, '')} FY{fy}"
-    else:
-        selected_months = FY_MONTHS
-        period_label = f"FY{fy} Year to Date (Apr {fy-1} – Mar {fy})"
+    # Default month to current calendar month, clamped to this FY
+    if not month:
+        month = datetime.date.today().month
+    if month not in FY_MONTHS:
+        month = FY_MONTHS[0]
 
-    def _sum(grid, name):
+    # YTD = April through selected month (in FY order)
+    idx = FY_MONTHS.index(month)
+    ytd_months = FY_MONTHS[: idx + 1]
+
+    # Calendar year for the selected month label
+    cal_yr = (fy - 1) if month >= 4 else fy
+    period_label = (
+        f"{MONTH_LABELS.get(month, '')} {cal_yr} vs Budget  |  "
+        f"YTD Apr {fy - 1} – {MONTH_LABELS.get(month, '')} {cal_yr}"
+    )
+
+    def _sum(grid, name, months_list):
         lid = by_name.get(name)
         if not lid: return 0.0
-        return sum(grid.get((lid, m), 0.0) for m in selected_months)
+        return sum(grid.get((lid, m), 0.0) for m in months_list)
 
-    # Build structured report sections
     EXPENSE_SECTIONS = [
-        ("employee", "Employee Costs"),
-        ("office",   "Office Costs"),
-        ("admin",    "Bank / Legal / Admin"),
-        ("travel",   "Conference / Travel"),
+        ("employee",   "Employee Costs",       "Total Employee Costs"),
+        ("office",     "Office Costs",         "Total Office Costs"),
+        ("admin",      "Bank / Legal / Admin", "Total Admin"),
+        ("travel",     "Conference / Travel",  "Total Travel"),
+        ("investment", "Investment",           "Total Investment"),
     ]
-    SECTION_TOTALS = {
-        "employee": "Total Employee Costs",
-        "office":   "Total Office Costs",
-        "admin":    "Total Admin",
-        "travel":   "Total Travel",
-    }
+
+    def _line(name, m_list, ytd_list):
+        return {
+            "name":       name,
+            "m_actual":   _sum(a_grid, name, m_list),
+            "m_budget":   _sum(b_grid, name, m_list),
+            "ytd_actual": _sum(a_grid, name, ytd_list),
+            "ytd_budget": _sum(b_grid, name, ytd_list),
+        }
 
     income_lines = [
-        {"name": i["name"],
-         "actual": _sum(a_grid, i["name"]),
-         "budget": _sum(b_grid, i["name"])}
+        _line(i["name"], [month], ytd_months)
         for i in items if i["section"] == "income" and not i["is_calculated"]
     ]
-    total_income_actual = _sum(a_grid, "Total Income")
-    total_income_budget = _sum(b_grid, "Total Income")
 
     expense_sections = []
-    for sec, label in EXPENSE_SECTIONS:
+    for sec, label, tot_name in EXPENSE_SECTIONS:
         sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
         lines = [
-            {"name": i["name"],
-             "actual": _sum(a_grid, i["name"]),
-             "budget": _sum(b_grid, i["name"])}
+            _line(i["name"], [month], ytd_months)
             for i in sec_items
-            if _sum(a_grid, i["name"]) or _sum(b_grid, i["name"])  # only show rows with data
+            if (_sum(a_grid, i["name"], [month]) or _sum(b_grid, i["name"], [month])
+                or _sum(a_grid, i["name"], ytd_months) or _sum(b_grid, i["name"], ytd_months))
         ]
-        tot_name = SECTION_TOTALS[sec]
+        tot = _line(tot_name, [month], ytd_months)
         expense_sections.append({
-            "label": label, "section": sec,
-            "lines": lines,
-            "total_actual": _sum(a_grid, tot_name),
-            "total_budget": _sum(b_grid, tot_name),
+            "label": label, "section": sec, "lines": lines,
+            "m_total_actual":   tot["m_actual"],
+            "m_total_budget":   tot["m_budget"],
+            "ytd_total_actual": tot["ytd_actual"],
+            "ytd_total_budget": tot["ytd_budget"],
         })
 
-    total_expenses_actual = _sum(a_grid, "Total Expenses")
-    total_expenses_budget = _sum(b_grid, "Total Expenses")
-    net_actual = _sum(a_grid, "Net (Income - Expenses)")
-    net_budget = _sum(b_grid, "Net (Income - Expenses)")
+    inc_tot  = _line("Total Income",              [month], ytd_months)
+    exp_tot  = _line("Total Expenses",            [month], ytd_months)
+    net_tot  = _line("Net (Income - Expenses)",   [month], ytd_months)
 
     return templates.TemplateResponse("report.html", _ctx(
-        request, fy=fy, fiscal_years=fys, view=view, month=month,
+        request, fy=fy, fiscal_years=fys, month=month,
         period_label=period_label, archived=is_archived(fy),
+        month_label=MONTH_LABELS.get(month, ""),
+        cal_yr=cal_yr,
+        fy_start=fy - 1,
         income_lines=income_lines,
-        total_income_actual=total_income_actual,
-        total_income_budget=total_income_budget,
+        total_income=inc_tot,
         expense_sections=expense_sections,
-        total_expenses_actual=total_expenses_actual,
-        total_expenses_budget=total_expenses_budget,
-        net_actual=net_actual,
-        net_budget=net_budget,
+        total_expenses=exp_tot,
+        net=net_tot,
         months=FY_MONTHS,
         month_labels=MONTH_LABELS,
         page="report",
@@ -667,9 +770,9 @@ def _excel_response(content: bytes, filename: str):
 @app.get("/export/report.xlsx")
 async def export_report(
     fy: int = Query(0),
-    view: str = Query("ytd"),
     month: int = Query(0),
 ):
+    import datetime
     from finance.app.exports import export_report_xlsx
     fys = get_fiscal_years()
     if not fy: fy = fys[0] if fys else 2027
@@ -678,53 +781,81 @@ async def export_report(
     a_grid = _combined_actuals(fy, items)
     by_name = {i["name"]: i["id"] for i in items}
 
-    if view == "monthly" and month:
-        sel = [month]
-        period_label = f"{MONTH_LABELS.get(month, '')} FY{fy}"
-    else:
-        sel = FY_MONTHS
-        period_label = f"FY{fy} Year to Date (Apr {fy-1} – Mar {fy})"
+    if not month:
+        month = datetime.date.today().month
+    if month not in FY_MONTHS:
+        month = FY_MONTHS[0]
 
-    def _sum(name):
-        lid = by_name.get(name)
-        return sum(a_grid.get((lid, m), 0.0) if a_grid else 0 for m in sel) if lid else 0.0
+    idx = FY_MONTHS.index(month)
+    ytd_months = FY_MONTHS[: idx + 1]
+    cal_yr = (fy - 1) if month >= 4 else fy
+    period_label = (
+        f"{MONTH_LABELS.get(month, '')} {cal_yr} vs Budget  |  "
+        f"YTD Apr {fy - 1} – {MONTH_LABELS.get(month, '')} {cal_yr}"
+    )
 
-    def _bsum(name):
+    def _sum(name, months_list):
         lid = by_name.get(name)
-        return sum(b_grid.get((lid, m), 0.0) if b_grid else 0 for m in sel) if lid else 0.0
+        if not lid: return 0.0
+        return sum(a_grid.get((lid, m), 0.0) for m in months_list)
+
+    def _bsum(name, months_list):
+        lid = by_name.get(name)
+        if not lid: return 0.0
+        return sum(b_grid.get((lid, m), 0.0) for m in months_list)
+
+    def _line(name):
+        return {
+            "name":       name,
+            "m_actual":   _sum(name,  [month]),
+            "m_budget":   _bsum(name, [month]),
+            "ytd_actual": _sum(name,  ytd_months),
+            "ytd_budget": _bsum(name, ytd_months),
+        }
 
     EXPENSE_SECTIONS = [
-        ("employee", "Employee Costs",    "Total Employee Costs"),
-        ("office",   "Office Costs",      "Total Office Costs"),
-        ("admin",    "Bank / Legal / Admin", "Total Admin"),
-        ("travel",   "Conference / Travel",  "Total Travel"),
+        ("employee",   "Employee Costs",       "Total Employee Costs"),
+        ("office",     "Office Costs",         "Total Office Costs"),
+        ("admin",      "Bank / Legal / Admin", "Total Admin"),
+        ("travel",     "Conference / Travel",  "Total Travel"),
+        ("investment", "Investment",           "Total Investment"),
     ]
     income_lines = [
-        {"name": i["name"], "actual": _sum(i["name"]), "budget": _bsum(i["name"])}
+        _line(i["name"])
         for i in items if i["section"] == "income" and not i["is_calculated"]
     ]
     expense_sections = []
     for sec, label, tot_name in EXPENSE_SECTIONS:
         sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
         lines = [
-            {"name": i["name"], "actual": _sum(i["name"]), "budget": _bsum(i["name"])}
-            for i in sec_items if _sum(i["name"]) or _bsum(i["name"])
+            _line(i["name"])
+            for i in sec_items
+            if (_sum(i["name"], [month]) or _bsum(i["name"], [month])
+                or _sum(i["name"], ytd_months) or _bsum(i["name"], ytd_months))
         ]
+        tot = _line(tot_name)
         expense_sections.append({
             "label": label, "lines": lines,
-            "total_actual": _sum(tot_name), "total_budget": _bsum(tot_name),
+            "m_total_actual":   tot["m_actual"],
+            "m_total_budget":   tot["m_budget"],
+            "ytd_total_actual": tot["ytd_actual"],
+            "ytd_total_budget": tot["ytd_budget"],
         })
+
+    inc  = _line("Total Income")
+    exp  = _line("Total Expenses")
+    net  = _line("Net (Income - Expenses)")
 
     content, fname = export_report_xlsx(
         period_label=period_label,
+        month_label=MONTH_LABELS.get(month, ""),
+        cal_yr=cal_yr,
+        fy_start=fy - 1,
         income_lines=income_lines,
-        total_income_actual=_sum("Total Income"),
-        total_income_budget=_bsum("Total Income"),
+        total_income=inc,
         expense_sections=expense_sections,
-        total_expenses_actual=_sum("Total Expenses"),
-        total_expenses_budget=_bsum("Total Expenses"),
-        net_actual=_sum("Net (Income - Expenses)"),
-        net_budget=_bsum("Net (Income - Expenses)"),
+        total_expenses=exp,
+        net=net,
         fiscal_year=fy,
     )
     return _excel_response(content, fname)
@@ -740,11 +871,12 @@ async def export_analysis(fy: int = Query(0)):
     a_grid = _combined_actuals(fy, items)
 
     SUMMARY_LINES = [
-        ("income",   "Income"),
-        ("employee", "Employee Costs"),
-        ("office",   "Office Costs"),
-        ("admin",    "Bank/Legal/Admin"),
-        ("travel",   "Conference/Travel"),
+        ("income",     "Income"),
+        ("employee",   "Employee Costs"),
+        ("office",     "Office Costs"),
+        ("admin",      "Bank/Legal/Admin"),
+        ("travel",     "Conference/Travel"),
+        ("investment", "Investment"),
     ]
     summary = []
     for sec, label in SUMMARY_LINES:

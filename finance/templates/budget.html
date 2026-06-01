@@ -51,11 +51,9 @@
       <td class="f-row-name {% if row.item.is_system==0 %}f-row-custom{% endif %}">
         {{ row.item.name }}
         {% if row.item.is_system==0 and not archived %}
-        <form method="post" action="{{ _base }}/budget/delete-line" style="display:inline;margin-left:.25rem">
-          <input type="hidden" name="fy" value="{{ fy }}"/>
-          <input type="hidden" name="lid" value="{{ row.item.id }}"/>
-          <button class="f-row-del-btn" title="Remove line" onclick="return confirm('Remove this line?')">×</button>
-        </form>
+        <button class="f-row-del-btn" title="Remove line"
+                type="button"
+                onclick="deleteLine({{ row.item.id }}, {{ fy }})">×</button>
         {% endif %}
       </td>
       {% for m in months %}
@@ -63,7 +61,7 @@
         {% if row.item.is_calculated %}
           <span class="f-calc" id="calc_{{ row.item.id }}_{{ m }}">—</span>
         {% elif archived %}
-          <span class="f-ro-val">${{ "{:,.0f}".format(row.monthly[m]) }}</span>
+          <span class="f-ro-val">${{ "{:,.2f}".format(row.monthly[m]) }}</span>
         {% else %}
           <input type="number" step="0.01" min="0"
                  name="{{ row.item.id }}_{{ m }}"
@@ -77,32 +75,29 @@
         {% if row.item.is_calculated %}
           <span class="f-calc-total" id="ctot_{{ row.item.id }}">—</span>
         {% else %}
-          <span class="f-row-total" id="rtot_{{ row.item.id }}">${{ "{:,.0f}".format(row.total) }}</span>
+          <span class="f-row-total" id="rtot_{{ row.item.id }}">${{ "{:,.2f}".format(row.total) }}</span>
         {% endif %}
       </td>
     </tr>
     {% endfor %}
     {# Add-line buttons for expense sections #}
-    {% if sec.section in ('employee','office','admin','travel') and not archived %}
+    {% if sec.section in ('employee','office','admin','travel','investment') and not archived %}
     <tr class="f-add-row">
       <td colspan="{{ months|length + 2 }}">
-        <form method="post" action="{{ _base }}/budget/add-line" class="f-add-line-form">
-          <input type="hidden" name="fy" value="{{ fy }}"/>
-          <input type="hidden" name="section" value="{{ sec.section }}"/>
-          {% if sec.section == 'employee' %}
-          <input type="text" name="name" placeholder="New comp line (e.g. Comp — PG)" class="f-input-sm" required/>
-          <button class="f-btn-xs f-btn-primary" type="submit">+ Add Comp Line</button>
-          {% elif sec.section == 'office' %}
-          <input type="text" name="name" placeholder="New office cost line" class="f-input-sm" required/>
-          <button class="f-btn-xs f-btn-primary" type="submit">+ Add Office Line</button>
-          {% elif sec.section == 'admin' %}
-          <input type="text" name="name" placeholder="New admin/legal line" class="f-input-sm" required/>
-          <button class="f-btn-xs f-btn-primary" type="submit">+ Add Admin Line</button>
-          {% elif sec.section == 'travel' %}
-          <input type="text" name="name" placeholder="New travel/conference line" class="f-input-sm" required/>
-          <button class="f-btn-xs f-btn-primary" type="submit">+ Add Travel Line</button>
-          {% endif %}
-        </form>
+        {% set placeholders = {
+          'employee':   ('New comp line (e.g. Comp — PG)', '+ Add Comp Line'),
+          'office':     ('New office cost line',            '+ Add Office Line'),
+          'admin':      ('New admin/legal line',            '+ Add Admin Line'),
+          'travel':     ('New travel/conference line',      '+ Add Travel Line'),
+          'investment': ('New investment line',             '+ Add Investment Line')
+        } %}
+        <input type="text" id="add-name-{{ sec.section }}"
+               placeholder="{{ placeholders[sec.section][0] }}"
+               class="f-input-sm"/>
+        <button class="f-btn-xs f-btn-primary" type="button"
+                onclick="addLine('{{ sec.section }}', {{ fy }})">
+          {{ placeholders[sec.section][1] }}
+        </button>
       </td>
     </tr>
     {% endif %}
@@ -140,14 +135,15 @@
 <script>
 // Section → calc row names
 const SECTIONS = {
-  income:   ['Total Income'],
-  employee: ['Total Employee Costs'],
-  office:   ['Total Office Costs'],
-  admin:    ['Total Admin'],
-  travel:   ['Total Travel'],
+  income:     ['Total Income'],
+  employee:   ['Total Employee Costs'],
+  office:     ['Total Office Costs'],
+  admin:      ['Total Admin'],
+  travel:     ['Total Travel'],
+  investment: ['Total Investment'],
 };
 const CALC_NAMES = ['Total Income','Total Employee Costs','Total Office Costs',
-                    'Total Admin','Total Travel','Total Expenses','Net (Income - Expenses)'];
+                    'Total Admin','Total Travel','Total Investment','Total Expenses','Net (Income - Expenses)'];
 // Build lid maps
 const items = {{ items | tojson }};
 const nameToLid = {};
@@ -161,19 +157,21 @@ function getVal(lid, m) {
   return inp ? (parseFloat(inp.value)||0) : 0;
 }
 function secItems(sec) { return items.filter(i=>i.section===sec && !i.is_calculated); }
-function fmt(v) { return v===0?'—':'$'+Math.round(v).toLocaleString(); }
+function fmt(v) { return v===0?'—':'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
 function recalc() {
   months.forEach(m => {
-    let ti=0,tec=0,toc=0,tad=0,ttr=0;
+    let ti=0,tec=0,toc=0,tad=0,ttr=0,tin=0;
     secItems('income').forEach(i=>ti+=getVal(i.id,m));
     secItems('employee').forEach(i=>tec+=getVal(i.id,m));
     secItems('office').forEach(i=>toc+=getVal(i.id,m));
     secItems('admin').forEach(i=>tad+=getVal(i.id,m));
     secItems('travel').forEach(i=>ttr+=getVal(i.id,m));
-    const tex=tec+toc+tad+ttr, net=ti-tex;
+    secItems('investment').forEach(i=>tin+=getVal(i.id,m));
+    const tex=tec+toc+tad+ttr+tin, net=ti-tex;
     const map={'Total Income':ti,'Total Employee Costs':tec,'Total Office Costs':toc,
-               'Total Admin':tad,'Total Travel':ttr,'Total Expenses':tex,'Net (Income - Expenses)':net};
+               'Total Admin':tad,'Total Travel':ttr,'Total Investment':tin,
+               'Total Expenses':tex,'Net (Income - Expenses)':net};
     Object.entries(map).forEach(([name,val])=>{
       const lid=nameToLid[name];
       if(!lid) return;
@@ -185,7 +183,7 @@ function recalc() {
   items.filter(i=>!i.is_calculated).forEach(i=>{
     const tot = months.reduce((s,m)=>s+getVal(i.id,m),0);
     const el=document.getElementById(`rtot_${i.id}`);
-    if(el) el.textContent='$'+Math.round(tot).toLocaleString();
+    if(el) el.textContent='$'+tot.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
   });
   // Calc totals
   CALC_NAMES.forEach(name=>{
@@ -253,6 +251,27 @@ function doUpload(inp) {
   fd.append('file', inp.files[0]);
   fetch(BASE + '/budget/upload', {method:'POST', body:fd})
     .then(r => { if(r.ok) window.location = r.url; else alert('Upload failed.'); });
+}
+
+function addLine(section, fy) {
+  const inp = document.getElementById('add-name-' + section);
+  const name = inp ? inp.value.trim() : '';
+  if (!name) { if (inp) inp.focus(); return; }
+  const fd = new FormData();
+  fd.append('fy', fy);
+  fd.append('section', section);
+  fd.append('name', name);
+  fetch(BASE + '/budget/add-line', {method:'POST', body:fd})
+    .then(r => { window.location.href = BASE + '/budget?fy=' + fy; });
+}
+
+function deleteLine(lid, fy) {
+  if (!confirm('Remove this line?')) return;
+  const fd = new FormData();
+  fd.append('fy', fy);
+  fd.append('lid', lid);
+  fetch(BASE + '/budget/delete-line', {method:'POST', body:fd})
+    .then(r => { window.location.href = BASE + '/budget?fy=' + fy; });
 }
 </script>
 {% endblock %}

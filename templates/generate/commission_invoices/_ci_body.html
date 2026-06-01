@@ -1,176 +1,158 @@
-{% macro ci_body(ci, readonly=false) %}
-<div class="po-page po-excel-layout ci-page">
+{% from "generate/_document_signature.html" import document_signature with context %}
 
-  {# ── Header: logo + company name only (no border here) ── #}
-  <div class="ci-header-row">
-    <img src="/static/logo.png" alt="GBBV logo" class="po-logo" />
-    <div class="ci-company-name">
-      {% if readonly %}{{ ci.company_name or '' }}
-      {% else %}<input class="po-input po-company-title ci-company-input" name="company_name" value="{{ ci.company_name or '' }}" />{% endif %}
-    </div>
-  </div>
-  {# ── Document title in its own full-width row with single underline ── #}
-  <div class="ci-title-row">
-    {% if readonly %}
-    <span class="ci-doc-title-text">{{ ci.document_title or 'COMMISSION INVOICE' }}</span>
-    {% else %}
-    <input class="po-input ci-doc-title-input" name="document_title" value="{{ ci.document_title or 'COMMISSION INVOICE' }}" />
-    {% endif %}
-  </div>
+{% macro ci_hint(ci, name, editing) -%}
+  {% if editing %}
+  {% set hints = ci.get('_field_hints') or {} %}
+  {% if hints.get(name) == 'deal' %}<span class="ci-src ci-src-ok no-print" title="From deal">✓</span>
+  {% elif hints.get(name) == 'missing' %}<span class="ci-src ci-src-warn no-print" title="Not in system">⚠</span>
+  {% endif %}
+  {% endif %}
+{%- endmacro %}
 
-  {# ── Bill-to + Invoice meta ── #}
-  <div class="ci-meta-grid">
-    <div class="ci-meta-left">
-      <p class="ci-to-label">TO</p>
+{% macro ci_date_input(name, value, extra_class='', form_id='') -%}
+<div class="ci-date-wrap">
+  <input type="text" class="ci-date-show ci-inline {{ extra_class }}" readonly tabindex="-1"
+         placeholder="22-May-2026" aria-hidden="true" />
+  <input type="date" class="ci-date-native" name="{{ name }}" value="{{ value or '' }}"
+         {% if form_id %}form="{{ form_id }}"{% endif %} />
+</div>
+{%- endmacro %}
+
+{% macro ci_body(ci, readonly=false, editable_dates=false, dates_form_id='') %}
+{% set notice_date_val = ci.notice_date or ci.invoice_date %}
+<div class="ci-document ci-template-us">
+
+  <div class="po-page ci-sheet ci-invoice-page ci-template-us">
+
+  {# Row 1 — title (merged A:F, centered italic) #}
+  <h1 class="ci-main-title">{{ ci.document_title or 'Commercial Invoice' }}</h1>
+
+  {# Rows 3–5 — seller (A) + date / invoice # (E:F) #}
+  <div class="ci-seller-meta">
+    <div class="ci-seller-col">
       {% if readonly %}
-      <p><strong>{{ ci.bill_to_name }}</strong></p>
-      <p>{{ ci.bill_to_address_1 }}</p>
-      <p>{{ ci.bill_to_address_2 }}</p>
-      {% if ci.bill_to_address_3 %}<p>{{ ci.bill_to_address_3 }}</p>{% endif %}
-      <p><strong>Customer Order no :</strong> {{ ci.customer_order_no or '—' }}</p>
+      <p class="ci-seller-name">{{ ci.company_name or 'Godavari Biorefineries Inc' }}</p>
       {% else %}
-      <input class="po-input" name="bill_to_name" value="{{ ci.bill_to_name or '' }}" placeholder="e.g. Godavari Biorefineries Ltd" />
-      <input class="po-input" name="bill_to_address_1" value="{{ ci.bill_to_address_1 or '' }}" placeholder="Address line 1" />
-      <input class="po-input" name="bill_to_address_2" value="{{ ci.bill_to_address_2 or '' }}" placeholder="Address line 2" />
-      <input class="po-input" name="bill_to_address_3" value="{{ ci.bill_to_address_3 or '' }}" placeholder="Address line 3 (optional)" />
-      <div class="ci-order-row">
-        <span class="ci-kv-label">Customer Order no</span>
-        <input class="po-mkinput" name="customer_order_no" value="{{ ci.customer_order_no or '' }}" placeholder="e.g. PO-12345" />
-      </div>
+      <input class="ci-inline ci-seller-name" name="company_name" value="{{ ci.company_name or 'Godavari Biorefineries Inc' }}" />
       {% endif %}
+      <p class="ci-seller-addr">103 Carnegie Center Dr, Suite 300</p>
+      <p class="ci-seller-addr">Princeton, NJ 08540, USA</p>
     </div>
-
-    {# Right column — Invoice No + Date, neatly aligned ── #}
-    <div class="ci-meta-right">
-      <div class="ci-kv-row">
-        <span class="ci-kv-label">Invoice No</span>
-        {% if readonly %}<span class="ci-kv-val">{{ ci.invoice_number or '—' }}</span>
-        {% else %}<input class="po-mkinput ci-kv-input" name="invoice_number" value="{{ ci.invoice_number or '' }}" required placeholder="e.g. 202627 ABC" />{% endif %}
+    <div class="ci-meta-col">
+      <div class="ci-meta-line">
+        <span class="ci-meta-label">Date:</span>
+        {% if readonly and not editable_dates %}
+        <span class="ci-meta-val">{{ ci.invoice_date|ci_date }}</span>
+        {% else %}
+        {{ ci_date_input('invoice_date', ci.invoice_date, 'ci-field-yellow', dates_form_id) }}
+        {% endif %}
       </div>
-      <div class="ci-kv-row">
-        <span class="ci-kv-label">Date</span>
-        {% if readonly %}<span class="ci-kv-val">{{ ci.invoice_date or '—' }}</span>
-        {% else %}<input class="po-mkinput ci-kv-input" name="invoice_date" value="{{ ci.invoice_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
-      </div>
-    </div>
-  </div>
-
-  {# ── Transaction description ── #}
-  <div class="ci-section-head">TRANSACTION DESCRIPTION</div>
-  <div class="ci-txn-row">
-    {% if readonly %}
-    {{ ci.transaction_description or '' }}
-    {% else %}
-    <input class="po-mkinput ci-txn-input" name="transaction_description"
-           value="{{ ci.transaction_description or '' }}"
-           placeholder="Commission For Sales of [Product] to [Customer], [Country]" />
-    {% endif %}
-  </div>
-
-  {# ── Shipment details ── #}
-  <div class="ci-shipment-grid">
-    <div class="ci-ship-left">
-      <div class="ci-ship-row">
-        <span class="ci-ship-label">Shipment Direct from GBL on</span>
-        {% if readonly %}{{ ci.shipment_date or '—' }}{% else %}
-        <input class="po-mkinput ci-ship-val-input" name="shipment_date" value="{{ ci.shipment_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
-      </div>
-      <div class="ci-ship-row">
-        <span class="ci-ship-label">Port of Loading</span>
-        {% if readonly %}{{ ci.port_of_loading or '—' }}{% else %}
-        <input class="po-mkinput ci-ship-val-input" name="port_of_loading" value="{{ ci.port_of_loading or '' }}" placeholder="e.g. Mundra" />{% endif %}
-      </div>
-      <div class="ci-ship-row">
-        <span class="ci-ship-label">Container No</span>
-        {% if readonly %}{{ ci.container_numbers or '—' }}{% else %}
-        <input class="po-mkinput ci-ship-val-input" name="container_numbers" value="{{ ci.container_numbers or '' }}" placeholder="e.g. TCKU123456" />{% endif %}
-      </div>
-    </div>
-    <div class="ci-ship-right">
-      <div class="ci-ship-row">
-        <span class="ci-ship-label">BL No</span>
-        {% if readonly %}{{ ci.bl_number or '—' }}{% else %}
-        <input class="po-mkinput ci-ship-val-input" name="bl_number" value="{{ ci.bl_number or '' }}" placeholder="e.g. ONED123456" />{% endif %}
-      </div>
-      <div class="ci-ship-row">
-        <span class="ci-ship-label">BL Date</span>
-        {% if readonly %}{{ ci.bl_date or '—' }}{% else %}
-        <input class="po-mkinput ci-ship-val-input" name="bl_date" value="{{ ci.bl_date or '' }}" placeholder="DD MMM YYYY" />{% endif %}
+      <div class="ci-meta-line">
+        <span class="ci-meta-label">Invoice #:</span>
+        {% if readonly %}
+        <span class="ci-meta-val">{{ ci.invoice_number or '—' }}</span>
+        {% else %}
+        <input class="ci-inline ci-field-yellow" name="invoice_number" value="{{ ci.invoice_number or '' }}" required placeholder="GBL/MPO/001/2025-26" />
+        {% endif %}
+        {{ ci_hint(ci, 'invoice_number', not readonly) }}
       </div>
     </div>
   </div>
 
-  {# ── Commission table ── #}
+  <div class="ci-spacer"></div>
+
+  {# Rows 9–12 — Customer (left) + logo (right) #}
+  <div class="ci-customer-row">
+    <div class="ci-customer-col">
+      <div class="ci-customer-label-row">
+        <span class="ci-customer-label">Customer:</span>
+        <div class="ci-customer-addr">
+          {% if readonly %}
+          <p>{{ ci.bill_to_name }}</p>
+          <p>{{ ci.bill_to_address_1 }}</p>
+          <p>{{ ci.bill_to_address_2 }}</p>
+          {% if ci.bill_to_address_3 %}<p>{{ ci.bill_to_address_3 }}</p>{% endif %}
+          {% else %}
+          <input class="ci-inline" name="bill_to_name" value="{{ ci.bill_to_name or '' }}" />
+          <input class="ci-inline" name="bill_to_address_1" value="{{ ci.bill_to_address_1 or '' }}" />
+          <input class="ci-inline" name="bill_to_address_2" value="{{ ci.bill_to_address_2 or '' }}" />
+          <input class="ci-inline" name="bill_to_address_3" value="{{ ci.bill_to_address_3 or '' }}" />
+          {% endif %}
+        </div>
+      </div>
+    </div>
+    <div class="ci-logo-col">
+      <img src="/static/logo.png" alt="Godavari Biorefineries" class="ci-logo-img" />
+    </div>
+  </div>
+
+  <div class="ci-spacer-sm"></div>
+
+  {# Rows 15–16 — Contact Person / Due Date bar #}
+  <table class="ci-contact-bar">
+    <tr class="ci-bar-green">
+      <th class="ci-bar-left">Contact Person</th>
+      <th class="ci-bar-right">Due Date</th>
+    </tr>
+    <tr class="ci-bar-data">
+      <td class="ci-bar-left">
+        {% if readonly %}{{ ci.contact_person or 'Padmaja Ganapathy' }}
+        {% else %}<input class="ci-inline" name="contact_person" value="{{ ci.contact_person or 'Padmaja Ganapathy' }}" />{% endif %}
+      </td>
+      <td class="ci-bar-right">
+        {% if readonly %}{{ ci.payment_terms or 'PROMPT' }}
+        {% else %}<input class="ci-inline" name="payment_terms" value="{{ ci.payment_terms or 'PROMPT' }}" />{% endif %}
+      </td>
+    </tr>
+  </table>
+
+  {# Rows 18–19+ — main commission table (7 columns) #}
   <table class="ci-table" id="ci-lines-table">
     <thead>
       <tr>
-        <th class="ci-col-product">PRODUCT AND OTHER DESCRIPTION</th>
-        <th class="ci-col-gblinv">GBL Invoice #</th>
-        <th class="ci-col-qty">QUANTITY<br>
-          <span class="ci-subunit">
-            {% if readonly %}{{ ci.qty_unit or 'MT' }}
-            {% else %}<input class="ci-subunit-input" name="qty_unit" value="{{ ci.qty_unit or 'MT' }}" />{% endif %}
-          </span>
-        </th>
-        <th class="ci-col-uprice">PRICE / UNIT<br>
-          <span class="ci-subunit">
-            {% if readonly %}{{ ci.fob_currency or 'Euro' }} / {{ ci.qty_unit or 'MT' }}
-            {% else %}<input class="ci-subunit-input" name="fob_currency" value="{{ ci.fob_currency or 'Euro' }}" style="width:3rem" /> / {{ ci.qty_unit or 'MT' }}{% endif %}
-          </span>
-        </th>
-        <th class="ci-col-fob">TOTAL VALUE<br>
-          <span class="ci-subunit">FOB&nbsp;
-            {% if readonly %}{{ ci.fob_currency or 'Euro' }}
-            {% else %}{{ ci.fob_currency or 'Euro' }}{% endif %}
-          </span>
-        </th>
-        <th class="ci-col-rate">Commission<br><span class="ci-subunit">Rate %</span></th>
-        <th class="ci-col-val">VALUE<br>
-          <span class="ci-subunit">
-            {% if readonly %}{{ ci.value_currency or 'Euro' }}
-            {% else %}<input class="ci-subunit-input" name="value_currency" value="{{ ci.value_currency or 'Euro' }}" />{% endif %}
-          </span>
-        </th>
+        <th class="ci-col-company">Company</th>
+        <th class="ci-col-inv">Invoice</th>
+        <th class="ci-col-qty">Quantity</th>
+        <th class="ci-col-fob">FOB Value</th>
+        <th class="ci-col-rate">Commission</th>
+        <th class="ci-col-val">Value (USD)</th>
+        <th class="ci-col-prod">Product</th>
+        {% if not readonly %}<th class="ci-col-act no-print"></th>{% endif %}
       </tr>
     </thead>
     <tbody id="ci-lines-body">
       {% for line in ci.line_items %}
       <tr class="ci-line-row">
-        <td>{% if readonly %}{{ line.product_description }}{% else %}<input class="po-input" name="product_description" value="{{ line.product_description or '' }}" required />{% endif %}</td>
-        <td>{% if readonly %}{{ line.gbl_invoice_number or '—' }}{% else %}<input class="po-input" name="gbl_invoice_number" value="{{ line.gbl_invoice_number or '' }}" />{% endif %}</td>
-        <td class="ci-num">{% if readonly %}{{ line.quantity|num }}{% else %}<input class="po-number-input ci-qty" name="quantity" value="{{ line.quantity or '' }}" />{% endif %}</td>
-        <td class="ci-num">{% if readonly %}{{ line.unit_price|num }}{% else %}<input class="po-number-input ci-uprice" name="unit_price" value="{{ line.unit_price or '' }}" />{% endif %}</td>
-        <td class="ci-num ci-fob-cell">
-          {% if readonly %}{{ line.fob_value|num }}
-          {% else %}
-          <output class="ci-fob-out">{{ line.fob_value|num }}</output>
-          <input type="hidden" class="ci-fob" name="fob_value" value="{{ line.fob_value or 0 }}" />
-          {% endif %}
-        </td>
-        <td class="ci-num">
-          {% if readonly %}{{ line.commission_rate|num }}%{% else %}
-          <input class="po-number-input ci-rate" name="commission_rate" value="{{ line.commission_rate or 3 }}" />
-          {% endif %}
-        </td>
-        <td class="ci-num ci-val-cell">
-          {% if readonly %}{{ line.commission_value|money }}{% else %}
-          <output class="ci-line-value">{{ line.commission_value|money }}</output>
-          {% endif %}
-        </td>
+        <td>{% if readonly %}{{ line.end_customer or '—' }}{% else %}
+          <input class="ci-cell-input ci-field-yellow" name="end_customer" value="{{ line.end_customer or '' }}" />{% endif %}</td>
+        <td>{% if readonly %}{{ line.gbl_invoice_number or ci.invoice_number or '—' }}{% else %}
+          <input class="ci-cell-input ci-field-yellow" name="gbl_invoice_number" value="{{ line.gbl_invoice_number or ci.invoice_number or '' }}" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}{{ line.quantity|num }}{% else %}
+          <input class="ci-cell-num ci-qty ci-field-yellow" name="quantity" value="{{ line.quantity or '' }}" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}${{ line.fob_value|money }}{% else %}
+          <output class="ci-fob-out">${{ line.fob_value|money }}</output>
+          <input type="hidden" class="ci-fob" name="fob_value" value="{{ line.fob_value or 0 }}" />{% endif %}</td>
+        <td class="ci-num">{% if readonly %}{{ line.commission_rate|num }}%{% else %}
+          <input class="ci-cell-num ci-rate ci-field-yellow" name="commission_rate" value="{{ line.commission_rate or 3 }}" />{% endif %}</td>
+        <td class="ci-num ci-val-cell">{% if readonly %}$ {{ line.commission_value|money }}{% else %}
+          <output class="ci-line-value">$ {{ line.commission_value|money }}</output>{% endif %}</td>
+        <td>{% if readonly %}{{ line.product_description }}{% else %}
+          <input class="ci-cell-input ci-field-yellow" name="product_description" value="{{ line.product_description or '' }}" required />{% endif %}</td>
+        {% if not readonly %}
+        <td class="no-print"><button type="button" class="btn btn-ghost btn-sm ci-rm">×</button></td>
+        {% endif %}
       </tr>
       {% endfor %}
       {% if not ci.line_items %}
       <tr class="ci-line-row">
-        <td><input class="po-input" name="product_description" value="" required placeholder="e.g. Crotonaldehyde to BASF SE" /></td>
-        <td><input class="po-input" name="gbl_invoice_number" value="" /></td>
-        <td class="ci-num"><input class="po-number-input ci-qty" name="quantity" value="" /></td>
-        <td class="ci-num"><input class="po-number-input ci-uprice" name="unit_price" value="" /></td>
-        <td class="ci-num ci-fob-cell">
-          <output class="ci-fob-out">0.00</output>
-          <input type="hidden" class="ci-fob" name="fob_value" value="0" />
-        </td>
-        <td class="ci-num"><input class="po-number-input ci-rate" name="commission_rate" value="3" /></td>
-        <td class="ci-num ci-val-cell"><output class="ci-line-value">0.00</output></td>
+        <td><input class="ci-cell-input" name="end_customer" value="" /></td>
+        <td><input class="ci-cell-input" name="gbl_invoice_number" value="" /></td>
+        <td class="ci-num"><input class="ci-cell-num ci-qty" name="quantity" value="" /></td>
+        <td class="ci-num"><output class="ci-fob-out">$0.00</output><input type="hidden" class="ci-fob" name="fob_value" value="0" /></td>
+        <td class="ci-num"><input class="ci-cell-num ci-rate" name="commission_rate" value="3" /></td>
+        <td class="ci-num"><output class="ci-line-value">$ 0.00</output></td>
+        <td><input class="ci-cell-input" name="product_description" value="" required /></td>
+        {% if not readonly %}<td class="no-print"></td>{% endif %}
       </tr>
       {% endif %}
     </tbody>
@@ -182,92 +164,160 @@
   </div>
   {% endif %}
 
-  {# ── Totals ── #}
-  <div class="ci-totals-block">
-    <div class="ci-total-row ci-total-grand">
-      <span>TOTAL</span>
-      <span id="ci-total-commission">{{ ci.total_commission|money if ci.total_commission else '0.00' }}</span>
-    </div>
-    <div class="ci-total-row">
-      <span>Net VALUE</span>
-      <span id="ci-net-value">{{ ci.net_value|money if ci.net_value else '0.00' }}</span>
-    </div>
-    <div class="ci-total-row">
-      <span>VAT
-        {% if readonly %}({{ ci.vat_percent|int }} %){% else %}
-        (<input class="po-number-input ci-vat-pct" name="vat_percent" value="{{ ci.vat_percent|int }}" style="width:2.5rem;text-align:center" /> %)
-        {% endif %}
-      </span>
-      <span id="ci-vat-amount">{{ ci.vat_amount|money if ci.vat_amount else '0.00' }}</span>
-    </div>
-    <div class="ci-total-row ci-total-pay">
-      <span>TOTAL TO PAY</span>
-      <span id="ci-total-pay">{{ ci.total_to_pay|money if ci.total_to_pay else '0.00' }}</span>
-    </div>
-    <div class="ci-total-row ci-inwords-row">
-      <span>In Words</span>
-      {% if readonly %}
-      <span>{{ ci.amount_in_words or '' }}</span>
-      {% else %}
-      <input class="po-mkinput ci-inwords-input" name="amount_in_words" value="{{ ci.amount_in_words or '' }}" placeholder="e.g. Euro Three Thousand Only" />
-      {% endif %}
-    </div>
+  {# Row 27 — amount in words #}
+  <div class="ci-words-row">
+    {% if readonly %}{{ ci.amount_in_words or '' }}
+    {% else %}<input class="ci-inline ci-words-input ci-field-yellow" name="amount_in_words" value="{{ ci.amount_in_words or '' }}" placeholder="Amount in words (auto on export)" />{% endif %}
   </div>
 
-  {# ── Payment Terms + Enclosures ── #}
-  <div class="ci-pay-enc-grid">
-    <div>
-      <span class="ci-ship-label">Payment Terms</span>
-      {% if readonly %}{{ ci.payment_terms or '—' }}{% else %}
-      <input class="po-mkinput" name="payment_terms" value="{{ ci.payment_terms or 'Prompt' }}" />{% endif %}
-    </div>
-    <div>
-      <span class="ci-ship-label">Enclosures</span>
-      {% if readonly %}{{ ci.enclosures or '—' }}{% else %}
-      <textarea class="po-mkinput ci-enc-textarea" name="enclosures" rows="2">{{ ci.enclosures or '' }}</textarea>{% endif %}
-    </div>
+  {# Row 30 — Total #}
+  <div class="ci-total-row-excel">
+    <span class="ci-total-label">Total</span>
+    <span class="ci-total-amt" id="ci-total-commission">$ {{ ci.total_commission|money if ci.total_commission else '0.00' }}</span>
   </div>
 
-  {# ── Bank Details ── #}
-  <div class="ci-bank-block">
-    <p class="ci-bank-title">BANK DETAILS</p>
-    <div class="ci-bank-grid">
-      <span class="ci-ship-label">Bank</span>
-      {% if readonly %}{{ ci.bank_name or '' }}{% else %}
-      <input class="po-mkinput" name="bank_name" value="{{ ci.bank_name or '' }}" />{% endif %}
-
-      <span class="ci-ship-label">Account No</span>
-      {% if readonly %}{{ ci.bank_account_no or '' }}{% else %}
-      <input class="po-mkinput" name="bank_account_no" value="{{ ci.bank_account_no or '' }}" />{% endif %}
-
-      <span class="ci-ship-label">IBAN</span>
-      {% if readonly %}{{ ci.bank_iban or '' }}{% else %}
-      <input class="po-mkinput" name="bank_iban" value="{{ ci.bank_iban or '' }}" />{% endif %}
-
-      <span class="ci-ship-label">BIC</span>
-      {% if readonly %}{{ ci.bank_bic or '' }}{% else %}
-      <input class="po-mkinput" name="bank_bic" value="{{ ci.bank_bic or '' }}" />{% endif %}
+  {# Bank block (rows 29–36) #}
+  <div class="ci-bank-section">
+    <p class="ci-bank-hdr">Remit Electronic Payment To:</p>
+    <p>Our Bank: {% if readonly %}{{ ci.bank_name or 'Chemung Canal Trust Company' }}{% else %}<input class="ci-inline" name="bank_name" value="{{ ci.bank_name or 'Chemung Canal Trust Company' }}" />{% endif %}</p>
+    <p>Name on Account: Godavari Biorefineries Inc</p>
+    <p>Acct#: {% if readonly %}{{ ci.bank_account_no or '204082566' }}{% else %}<input class="ci-inline" name="bank_account_no" value="{{ ci.bank_account_no or '204082566' }}" />{% endif %}</p>
+    <p>Routing #: {% if readonly %}021301115{% else %}<input class="ci-inline" name="bank_iban" value="{{ ci.bank_iban or '021301115' }}" />{% endif %}</p>
+    <p>Swift Code: {% if readonly %}{{ ci.bank_bic or 'CCTRUS31' }}{% else %}<input class="ci-inline" name="bank_bic" value="{{ ci.bank_bic or 'CCTRUS31' }}" />{% endif %}</p>
+    <p>Bank Address:&nbsp; 909 Hanshaw Road, Ithaca, NY 14850</p>
+    <div class="ci-bank-sig-row">
+      <p class="ci-bank-phone">Bank Phone: (607) 257-2194</p>
+      {{ document_signature('Authorized Signatory', css_class='ci-sig-block') }}
+    </div>
+    <p class="ci-mail-checks">Please mail checks to our address listed at the top of the invoice</p>
+    <p class="ci-emergency">In Case of Emergency Contact: 1-800-424-9300 (Chemtrec)</p>
+    <p class="ci-imdg">IMDG: 3220, UN #:1173 Haz Class: 3, PG: II</p>
+    <div class="ci-cert-block">
+      <p>We Certify that this Invoice shows the actual prices of the goods described and that all particulars are true and correct.</p>
+      <p>The 'customer'will pay the entire outstanding balance of each invoice within Thirty (30) days of the date of receipt of the goods mentioned above.  All payments shall reference the applicable invoice number and shall be delivered to the account referenced above.  In the event that the 'customer' fails to pay any invoice when it becomes due, Godavari shall charge a monthly late fee in an amount equal to the lesser of (i) 1.5% of the total amount of the past due payment, or (ii) the maximum amount permitted by law.  The  'customer' shall pay any and all expenses incurred by Godavari (including without limitation court costs and reasonable attorney fees, whether or not legal action is commenced against 'customer' in connection with the collection of any amounts due and owing hereunder.  Godavari reserves the right, at any time and from time to time, to require payment either in advance of delivery or concurrently with delivery, provided that reasonable notice thereof is provided to 'customer'.  Godavari’s delivery of goods to Client is expressly conditioned upon Client’s acceptance of these terms and conditions, and 'customer' acceptance of this delivery of goods constitutes 'customers' agreement with the terms and conditions described above.</p>
     </div>
   </div>
+  </div>
 
-  {# ── Signature + Footer ── #}
-  <div class="po-footer">
-    <div class="po-sig-block">
-      <p class="po-sig-for">For Godavari Biorefineries Inc</p>
-      <div class="po-sig-line"></div>
-      <p class="po-sig-label">Authorised Signatory</p>
-    </div>
-    <div class="po-footer-company">
-      <img src="/static/footer logo.png" alt="Footer logo" class="po-footer-logo" />
-      <div class="po-footer-details">
-        <p>Commercial Register Number 34325188</p>
-        <p>VAT : NL8203.86.157.B.01</p>
-        <p>Bank : Rabobank – Haarlem / IBAN NL83RABO 0311323650 / BIC : RABONL2U</p>
-        <p>Address : Opaallaan 1180, &nbsp; 2132 LN &nbsp; Hoofddorp. &nbsp; The Netherlands.</p>
-        <p>Tel : +31 6 11 12 61 66</p>
+  {# Notice of Order — separate print page #}
+  <div class="po-page ci-sheet ci-notice-page ci-template-us">
+    <h1 class="ci-main-title ci-notice-title">Notice of Order</h1>
+
+    <div class="ci-seller-meta">
+      <div class="ci-seller-col">
+        <p class="ci-seller-name">Godavari Biorefineries Inc</p>
+        <p class="ci-seller-addr">103 Carnegie Center Dr, Suite 300</p>
+        <p class="ci-seller-addr">Princeton, NJ 08540, USA</p>
+      </div>
+      <div class="ci-meta-col">
+        <div class="ci-meta-line">
+          <span class="ci-meta-label">Date:</span>
+          {% if readonly and not editable_dates %}
+          <span class="ci-meta-val">{{ notice_date_val|ci_date }}</span>
+          {% else %}
+          {{ ci_date_input('notice_date', notice_date_val, 'ci-field-yellow', dates_form_id) }}
+          {% endif %}
+        </div>
       </div>
     </div>
+
+    <div class="ci-spacer"></div>
+
+    <div class="ci-customer-row ci-notice-customer-row">
+      <div class="ci-customer-col">
+        <p class="ci-notice-customer-label">Customer:</p>
+        <p class="ci-notice-customer-name">{% if ci.line_items %}{{ ci.line_items[0].end_customer or '—' }}{% else %}—{% endif %}</p>
+      </div>
+      <div class="ci-logo-col">
+        <img src="/static/logo.png" alt="Godavari Biorefineries" class="ci-logo-img" />
+      </div>
+    </div>
+
+    <div class="ci-spacer"></div>
+
+    <table class="ci-contact-bar ci-notice-contact-bar">
+      <tr class="ci-bar-green">
+        <th class="ci-bar-left">Contact Person</th>
+        <th class="ci-bar-mid">Delivery Port {{ ci_hint(ci, 'delivery_port', not readonly) }}</th>
+      </tr>
+      <tr class="ci-bar-data">
+        <td class="ci-bar-left">
+          {% if readonly %}{{ ci.contact_person or '—' }}
+          {% else %}(same as invoice contact){% endif %}
+        </td>
+        <td class="ci-bar-mid">
+          {% if readonly %}{{ ci.delivery_port or '—' }}{% else %}
+          <input class="ci-inline ci-field-yellow" name="delivery_port" value="{{ ci.delivery_port or '' }}" placeholder="Savannah, USA" />{% endif %}
+        </td>
+      </tr>
+    </table>
+
+    {% if not readonly %}
+    <div class="ci-notice-ship-edit no-print">
+      <span class="ci-notice-ship-label">Shipment Date {{ ci_hint(ci, 'shipment_date', not readonly) }}</span>
+      {{ ci_date_input('shipment_date', ci.shipment_date, 'ci-field-yellow') }}
+    </div>
+    {% endif %}
+
+    <table class="ci-table ci-notice-table">
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Description</th>
+          <th>CIF Price ($/MT) {{ ci_hint(ci, 'cif_price', not readonly) }}</th>
+          <th>Quantity (MT) ±5%</th>
+          <th>Commission</th>
+          <th>Shipment Date {{ ci_hint(ci, 'shipment_date', not readonly) }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in ci.line_items %}
+        <tr>
+          <td>{{ line.end_customer or '—' }}</td>
+          <td>{{ line.product_description or '—' }}</td>
+          <td class="ci-num">{% if readonly %}{% if line.cif_price %}${{ line.cif_price|money }}{% else %}—{% endif %}{% else %}
+            <input class="ci-cell-num ci-cif ci-field-yellow" name="cif_price" value="{{ line.cif_price or '' }}" />{% endif %}</td>
+          <td class="ci-num">{{ line.quantity|num }}</td>
+          <td class="ci-num">{{ line.commission_rate|num }}%</td>
+          <td class="ci-num">{% if readonly %}{{ ci.shipment_date|ci_date }}{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+        {% set notice_pad = 7 - (ci.line_items|length) %}
+        {% if notice_pad > 0 %}
+        {% for _ in range(notice_pad) %}
+        <tr class="ci-notice-empty-row">
+          <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+        </tr>
+        {% endfor %}
+        {% endif %}
+      </tbody>
+    </table>
+
+    <div class="ci-notice-bank-section">
+      <p class="ci-notice-bank-hdr">Remit Electronic Payment To:</p>
+      <p>Our Bank: {{ ci.bank_name or 'Chemung Canal Trust Company' }}</p>
+      <p>Name on Account: Godavari Biorefineries Inc</p>
+      <p>Acct#: {{ ci.bank_account_no or '204082566' }}</p>
+      <p>Routing #: {{ ci.bank_iban or '021301115' }}</p>
+      <p>Swift Code: {{ ci.bank_bic or 'CCTRUS31' }}</p>
+      <p>Bank Address:&nbsp; 909 Hanshaw Road, Ithaca, NY 14850</p>
+      <p>Bank Phone: (607) 257-2194</p>
+      <p class="ci-notice-mail-checks">Please mail checks to our address listed at the top of the invoice</p>
+    </div>
+
+    <div class="ci-notice-sig-bar"></div>
+
+    <div class="ci-notice-footer">
+      <p class="ci-notice-footer-name">Godavari Biorefineries Inc</p>
+      <p class="ci-notice-footer-addr">103 Carnegie Center Dr, Suite 300, Princeton, NJ 08540, USA</p>
+    </div>
   </div>
+
+  <input type="hidden" name="document_title" value="{{ ci.document_title or 'Commercial Invoice' }}" />
+  <input type="hidden" name="vat_percent" value="0" />
+  <input type="hidden" name="qty_unit" value="{{ ci.qty_unit or 'MT' }}" />
+  <input type="hidden" name="fob_currency" value="{{ ci.fob_currency or 'USD' }}" />
+  <input type="hidden" name="value_currency" value="{{ ci.value_currency or 'USD' }}" />
 
 </div>
 {% endmacro %}

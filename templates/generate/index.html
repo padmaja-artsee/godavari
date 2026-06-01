@@ -11,6 +11,25 @@
 
 <p class="generate-note">All generated documents are stored locally in your SQLite database. Exported files are saved under <code>data/exports/</code>.</p>
 
+<section class="generate-signature-panel card">
+  <h2 class="generate-card-title">Authorized signature</h2>
+  <p class="generate-card-description">
+    Upload a signature image once. It appears on commission invoices, purchase orders, sales invoices, and delivery notes when you print or export.
+  </p>
+  {% if authorized_signature_url %}
+  <div class="generate-signature-preview">
+    <img src="{{ authorized_signature_url }}" alt="Current authorized signature" class="generate-signature-img" />
+  </div>
+  {% endif %}
+  <form method="post" action="/generate/document-assets/authorized-signature" enctype="multipart/form-data" class="generate-signature-form">
+    <input type="file" name="signature_file" accept="image/png,image/jpeg,image/webp" required />
+    <button type="submit" class="btn btn-primary">{% if authorized_signature_url %}Replace signature{% else %}Upload signature{% endif %}</button>
+  </form>
+  {% if request.query_params.get('signature') == 'uploaded' %}
+  <p class="generate-signature-ok">Signature saved.</p>
+  {% endif %}
+</section>
+
 <div class="generate-grid">
   {% for doc in documents %}
   <article class="generate-card">

@@ -50,6 +50,11 @@
     "incoterms":         "incoterms",
     "payment_terms":     "payment_terms",
     "shipment_timing":   "shipment_timing",
+    "insurance_amount":  "insurance_amount",
+    "insurance_currency":"insurance_currency",
+    "ocean_freight_amount": "ocean_freight_amount",
+    "ocean_freight_currency": "ocean_freight_currency",
+    "commission_rate":   "commission_rate",
     // shipping
     "po_date":           "po_date",
     "packing":           "packing",
@@ -78,8 +83,17 @@
     if (qtyEl)  qtyEl.value  = deal.quantity  || "";
     if (unitEl) unitEl.value = deal.quantity_unit || "MT";
 
+    const valEl = document.querySelector(".deal-commercial-value");
+    const fobEl = document.querySelector(".deal-commercial-fob");
+    const commEl = document.querySelector(".deal-commercial-commission");
+    if (valEl) valEl.value = deal.commercial_total || "";
+    if (fobEl) fobEl.value = deal.fob_value || "";
+    if (commEl) commEl.value = deal.commission_amount || "";
+
     // update summary line
     updateSummary(deal);
+
+    if (window.syncCommercialValues) window.syncCommercialValues();
 
     // auto-open accordion if deal has any non-empty data
     const hasData = deal.po_number || deal.price || deal.quantity ||
@@ -106,7 +120,14 @@
     const unitEl = document.querySelector('[name="deal_quantity_unit"]');
     if (qtyEl)  qtyEl.value  = "";
     if (unitEl) unitEl.value = "MT";
+    const valEl = document.querySelector(".deal-commercial-value");
+    const fobEl = document.querySelector(".deal-commercial-fob");
+    const commEl = document.querySelector(".deal-commercial-commission");
+    if (valEl) valEl.value = "";
+    if (fobEl) fobEl.value = "";
+    if (commEl) commEl.value = "";
     if (summarySpan) summarySpan.textContent = "";
+    if (window.syncCommercialValues) window.syncCommercialValues();
   }
 
   // ── Deal select change ────────────────────────────────

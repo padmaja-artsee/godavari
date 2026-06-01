@@ -1,29 +1,58 @@
 {% extends "base.html" %}
-{% from "generate/commission_invoices/_ci_body.html" import ci_body %}
+{% from "generate/commission_invoices/_ci_body.html" import ci_body with context %}
 {% block title %}Print CI {{ ci.invoice_number }}{% endblock %}
 {% set hide_nav = true %}
 {% block extra_css %}
 <link rel="stylesheet" href="/static/po_wysiwyg.css" />
-<link rel="stylesheet" href="/static/ci_wysiwyg.css" />
+<link rel="stylesheet" href="/static/ci_wysiwyg.css?v=2.5" />
+<link rel="stylesheet" href="/static/ci_template_us.css?v=2.9" />
 <style>
   body { margin: 0; }
   .main { padding: 0 !important; margin: 0 !important; }
   .po-shell { background: white; padding: 0; }
-  .po-action-bar { max-width: 960px; margin: 0.75rem auto; display: flex; gap: 0.75rem; align-items: center; }
+  .po-action-bar {
+    max-width: 960px;
+    margin: 0.75rem auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+  .ci-print-date-hint {
+    font-size: 0.85rem;
+    color: #64748b;
+    margin: 0;
+  }
+  @media print {
+    .ci-invoice-page { page-break-after: always !important; break-after: page !important; }
+    .ci-notice-page { page-break-before: always !important; break-before: page !important; }
+  }
 </style>
 {% endblock %}
 {% block content %}
+<form method="post" action="/generate/commission-invoices/{{ ci.id }}/dates" id="ci-print-dates-form"></form>
 <div class="po-action-bar no-print">
-  <button onclick="history.back()" class="btn btn-ghost">← Back</button>
-  <button onclick="fetch('/open-print?url='+encodeURIComponent(window.location.pathname))" class="btn btn-primary">Print / Save PDF</button>
+  <button type="button" onclick="history.back()" class="btn btn-ghost">← Back</button>
+  <p class="ci-print-date-hint">Set both dates on the invoice (yellow fields), then save and print.</p>
+  <button type="submit" form="ci-print-dates-form" class="btn btn-ghost">Save dates</button>
+  <button type="button" id="ci-do-print" class="btn btn-primary">Print / Save PDF</button>
+  {% if request.query_params.get('dates') == 'saved' %}
+  <span class="ci-print-date-hint" style="color:#15803d">Dates saved.</span>
+  {% endif %}
 </div>
 <div class="po-shell">
-  {{ ci_body(ci, readonly=true) }}
+  {{ ci_body(ci, readonly=true, editable_dates=true, dates_form_id='ci-print-dates-form') }}
 </div>
+<script src="/static/ci_wysiwyg.js?v=2.5"></script>
 <script>
-// Delay gives Tauri's WKWebView time to fully render before opening the print dialog.
-window.addEventListener("load", function(){
-  setTimeout(function(){ window.print(); }, 600);
+document.getElementById("ci-do-print").addEventListener("click", function(){
+  document.querySelectorAll(".ci-date-native").forEach(function(el){
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  if (typeof fetch === "function") {
+    fetch("/open-print?url=" + encodeURIComponent(window.location.pathname));
+  }
+  window.print();
 });
 </script>
 {% endblock %}
