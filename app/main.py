@@ -106,6 +106,7 @@ from app.commission_invoices import (
     update_commission_invoice_dates,
     upgrade_commission_invoices_schema,
 )
+from app.ci_consolidated import read_consolidated_commission_workbook
 from app.ci_exports import export_ci_pdf, export_ci_xlsx
 from app.ci_data_template import generate_data_request_template, generate_prefilled_data_request
 from app.ci_data_fill import period_label_from_filters
@@ -1923,6 +1924,17 @@ async def ci_data_request_template_route():
     content, fname = generate_data_request_template()
     return _download_response(
         content, fname,
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.get("/generate/commission-invoices/consolidated.xlsx")
+async def ci_consolidated_export_route():
+    """All saved commission invoices — one workbook for Finance income."""
+    content, fname = read_consolidated_commission_workbook()
+    return _download_response(
+        content,
+        fname,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

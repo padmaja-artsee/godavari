@@ -431,7 +431,10 @@ def create_commission_invoice(
         )
         ci_id = int(cur.lastrowid)
         _save_ci_lines(conn, ci_id, line_items)
-        return ci_id
+    from app.ci_consolidated import refresh_consolidated_commission_workbook
+
+    refresh_consolidated_commission_workbook()
+    return ci_id
 
 
 def update_commission_invoice(
@@ -454,6 +457,10 @@ def update_commission_invoice(
             [data.get(f, "") for f in CI_SCALAR_FIELDS] + [data.get("vat_percent", 0), now, ci_id],
         )
         _save_ci_lines(conn, ci_id, line_items)
+
+        from app.ci_consolidated import refresh_consolidated_commission_workbook
+
+        refresh_consolidated_commission_workbook()
 
         gen_id = row["generated_document_id"]
         if gen_id:
@@ -494,6 +501,9 @@ def update_commission_invoice_dates(
             """,
             (inv, notice, now, ci_id),
         )
+    from app.ci_consolidated import refresh_consolidated_commission_workbook
+
+    refresh_consolidated_commission_workbook()
     return True
 
 
@@ -509,7 +519,10 @@ def delete_commission_invoice(ci_id: int) -> bool:
             conn.execute(
                 "DELETE FROM generated_documents WHERE id = ?", (row["generated_document_id"],)
             )
-        return True
+    from app.ci_consolidated import refresh_consolidated_commission_workbook
+
+    refresh_consolidated_commission_workbook()
+    return True
 
 
 def duplicate_commission_invoice(ci_id: int) -> int | None:

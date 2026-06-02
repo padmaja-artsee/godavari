@@ -496,6 +496,17 @@ async def export_commission(
     return _excel_response(content, fname)
 
 
+@app.get("/export/commission-invoices-consolidated.xlsx")
+async def export_ci_consolidated_finance():
+    """All saved Generate commission invoices — consolidated for Commission Income."""
+    try:
+        from app.ci_consolidated import read_consolidated_commission_workbook
+    except ImportError as exc:
+        return Response(content=str(exc), status_code=503)
+    content, fname = read_consolidated_commission_workbook()
+    return _excel_response(content, fname)
+
+
 # ---------------------------------------------------------------------------
 # P&L Report
 # ---------------------------------------------------------------------------

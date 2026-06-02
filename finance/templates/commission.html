@@ -40,7 +40,9 @@
       </select>
     </form>
     <a href="{{ _base }}/export/commission.xlsx?fy={{ fy }}&month={{ month }}&product={{ product | urlencode }}&company={{ company | urlencode }}&status={{ status }}"
-       class="f-btn-sm f-btn-primary">↓ Download Excel</a>
+       class="f-btn-sm f-btn-primary">↓ Deal schedule</a>
+    <a href="{{ _base }}/export/commission-invoices-consolidated.xlsx"
+       class="f-btn-sm f-btn-ghost">↓ All saved CIs</a>
   </div>
 </div>
 
@@ -56,7 +58,10 @@
     <li><strong>Ship to / port</strong> — customer name and destination from deal shipping fields</li>
     <li><strong>Qty / rate / value</strong> — quantity and price on the deal; Excel uses <code>=QTY×RATE</code></li>
   </ul>
-  <p style="margin-top:.75rem">Fill in <strong>GBL Invoice</strong>, <strong>Destination</strong>, and <strong>Shipped date</strong> on each deal for best accuracy. Commission income in Finance Actuals stays separate from this export.</p>
+  <p style="margin-top:.75rem">Fill in <strong>GBL Invoice</strong>, <strong>Destination</strong>, and <strong>ETD India</strong> on each deal for best accuracy.</p>
+  <p style="margin-top:.5rem"><strong>Saved commission invoices</strong> (Generate tab) are merged automatically into
+    <a href="{{ _base }}/export/commission-invoices-consolidated.xlsx">GBINC_Commission_Invoices_Consolidated.xlsx</a>
+    — use that file to post <strong>Commission Income</strong> in Finance → Income entries.</p>
 </div>
 
 <p class="f-subtitle" style="margin-bottom:.75rem">{{ period_label }} — {{ deal_count }} deal(s)</p>

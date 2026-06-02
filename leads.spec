@@ -59,6 +59,7 @@ a = Analysis(
         "app.purchase_orders",
         "app.po_exports",
         "app.commission_invoices",
+        "app.ci_consolidated",
         "app.ci_exports",
         "app.sales_invoices",
         "app.si_exports",
