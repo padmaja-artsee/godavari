@@ -101,6 +101,8 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-kpi-green .f-kpi-val { color: var(--green); }
 .f-kpi-red   .f-kpi-val { color: var(--red); }
 .f-kpi-blue  .f-kpi-val { color: var(--blue); }
+.f-kpi-sub { display: block; font-size: .7rem; color: var(--muted); margin-top: .25rem; }
+.f-kpi-row { grid-template-columns: repeat(5, 1fr); }
 
 /* ─── Cards ─── */
 .f-card { background: #fff; border: 1px solid var(--grey-b); border-radius: 8px; overflow: hidden; }
@@ -270,8 +272,37 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-section-title { padding: .6rem 1rem; font-weight: 600; font-size: .82rem; cursor: pointer; background: var(--grey); list-style: none; }
 .f-section-title:hover { background: var(--grey-b); }
 
+/* ─── Analysis filter bar ─── */
+.f-filter-bar { display:flex; gap:1.25rem; align-items:flex-end; flex-wrap:wrap; background:#fff; border:1px solid var(--grey-b); border-radius:8px; padding:.75rem 1rem; }
+.f-filter-group { display:flex; flex-direction:column; gap:.25rem; }
+.f-filter-label { font-size:.72rem; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+.f-chart-type-btns { display:flex; gap:.25rem; }
+.f-type-btn { padding:.28rem .75rem; border:1px solid var(--grey-b); border-radius:5px; background:#fff; font-size:.8rem; cursor:pointer; color:var(--text); transition: background .15s, color .15s; }
+.f-type-btn:hover { background:var(--grey); }
+.f-type-btn.active { background:var(--green); color:#fff; border-color:var(--green); }
+
+.f-opening-balance-card { margin-bottom: 1rem; padding: .75rem 1rem; }
+.f-opening-balance-form {
+  display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+}
+.f-opening-balance-label { font-weight: 600; font-size: .9rem; white-space: nowrap; }
+.f-opening-balance-val { font-size: 1rem; color: #1e6f3e; font-weight: 700; }
+.f-opening-balance-input { max-width: 180px; }
+.f-row-cash td {
+  background: #E8F4FD; font-weight: 700; font-size: .88rem;
+  border-top: 2px solid #2980B9; border-bottom: 2px solid #2980B9; color: #1A5276;
+}
+.f-row-cash td.f-neg { color: #C0392B; }
+
 /* ─── Summary cards (analysis) ─── */
 .f-summary-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: .75rem; }
+.f-summary-grid-6 { grid-template-columns: repeat(6, 1fr); }
+@media (max-width: 1200px) {
+  .f-summary-grid-6 { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 700px) {
+  .f-summary-grid-6 { grid-template-columns: repeat(2, 1fr); }
+}
 .f-summary-card { background: #fff; border: 1px solid var(--grey-b); border-radius: 8px; padding: .85rem 1rem; }
 .f-summary-card.f-card-income { border-left: 3px solid var(--green); }
 .f-summary-label { font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin-bottom: .4rem; }

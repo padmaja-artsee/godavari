@@ -5,7 +5,7 @@
 <div class="f-page-header">
   <div>
     <h1 class="f-title">Analysis — FY{{ fy }}</h1>
-    <p class="f-subtitle">Budget vs actuals by category.</p>
+    <p class="f-subtitle">Budget vs actuals with interactive charts and filters.</p>
   </div>
   <div class="f-header-controls" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
     <form method="get" action="{{ _base }}/analysis">
@@ -18,83 +18,387 @@
 </div>
 
 <!-- Summary cards -->
-<div class="f-summary-grid">
+<div class="f-summary-grid f-summary-grid-6">
 {% for s in summary %}
 <div class="f-summary-card {% if s.section == 'income' %}f-card-income{% endif %}">
   <div class="f-summary-label">{{ s.label }}</div>
   <div class="f-summary-row">
     <span class="f-sum-key">Planned</span>
-    <span class="f-sum-val">${{ "{:,.2f}".format(s.planned) }}</span>
+    <span class="f-sum-val">${{ "{:,.0f}".format(s.planned) }}</span>
   </div>
   <div class="f-summary-row">
     <span class="f-sum-key">Actual</span>
-    <span class="f-sum-val">${{ "{:,.2f}".format(s.actual) }}</span>
+    <span class="f-sum-val">${{ "{:,.0f}".format(s.actual) }}</span>
   </div>
   <div class="f-summary-row">
     <span class="f-sum-key">Variance</span>
     <span class="f-sum-val {% if s.variance >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
-      {% if s.variance >= 0 %}+{% endif %}${{ "{:,.2f}".format(s.variance) }}
-      {% if s.var_pct is not none %}
-      <small>({{ "{:.0f}".format(s.var_pct) }}%)</small>
-      {% endif %}
+      {% if s.variance >= 0 %}+{% endif %}${{ "{:,.0f}".format(s.variance) }}
+      {% if s.var_pct is not none %}<small>({{ "{:.0f}".format(s.var_pct) }}%)</small>{% endif %}
     </span>
   </div>
 </div>
 {% endfor %}
 </div>
 
-<!-- Charts -->
-<div class="f-charts-grid" style="margin-top:1.5rem">
-  <div class="f-card f-card-wide">
-    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
-      <span>Monthly Expenses — Budget vs Actuals</span>
-      <button onclick="saveChart('expChart','GBInc-Expenses-FY{{ fy }}.png')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
-    </div>
-    <canvas id="expChart" height="100"></canvas>
+<!-- Filter bar -->
+<div class="f-filter-bar" style="margin-top:1.5rem">
+  <div class="f-filter-group">
+    <label class="f-filter-label">View</label>
+    <select id="filterCategory" class="f-select-sm" onchange="onCategoryChange()">
+      <option value="net">Balance</option>
+      <option value="income">Income</option>
+      <option value="expenses">Total Expenses</option>
+      <option value="employee">↳ Employee Costs</option>
+      <option value="office">↳ Office Costs</option>
+      <option value="admin">↳ Bank / Legal / Admin</option>
+      <option value="travel">↳ Conference / Travel</option>
+      <option value="investment">↳ Investment</option>
+      <option value="balance">Balance (Cumulative)</option>
+    </select>
   </div>
-  <div class="f-card">
-    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
-      <span>Monthly Income</span>
-      <button onclick="saveChart('incChart','GBInc-Income-FY{{ fy }}.png')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+  <div class="f-filter-group">
+    <label class="f-filter-label">Line Item</label>
+    <select id="filterLineItem" class="f-select-sm" onchange="renderCharts()">
+      <option value="all">All Line Items</option>
+    </select>
+  </div>
+  <div class="f-filter-group">
+    <label class="f-filter-label">Chart Type</label>
+    <div class="f-chart-type-btns">
+      <button type="button" class="f-type-btn active" data-type="bar" onclick="setChartType('bar',this)">Bar</button>
+      <button type="button" class="f-type-btn" data-type="line" onclick="setChartType('line',this)">Line</button>
+      <button type="button" class="f-type-btn" data-type="pie" onclick="setChartType('pie',this)">Breakdown</button>
     </div>
-    <canvas id="incChart" height="100"></canvas>
+  </div>
+</div>
+
+<!-- Charts -->
+<div id="chartsContainer" style="margin-top:1rem;display:grid;gap:1rem">
+
+  <div class="f-card f-card-wide" id="mainChartCard">
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
+      <span id="mainChartTitle">Monthly Budget vs Actuals</span>
+      <button type="button" onclick="downloadChart('mainChart','GBInc-BudgetVsActual-FY{{ fy }}.png', document.getElementById('mainChartTitle').textContent + ' — FY{{ fy }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+    </div>
+    <canvas id="mainChart" height="90"></canvas>
+  </div>
+
+  <div class="f-card" id="breakdownCard" style="display:none;max-width:480px">
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Expense Breakdown by Category</span>
+      <button type="button" onclick="downloadChart('breakdownChart','GBInc-Breakdown-FY{{ fy }}.png','Expense Breakdown — FY{{ fy }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+    </div>
+    <canvas id="breakdownChart" height="200"></canvas>
+  </div>
+
+  <div class="f-card f-card-wide" id="netChartCard">
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
+      <span>Cumulative Balance</span>
+      <button type="button" onclick="downloadChart('netChart','GBInc-NetTrend-FY{{ fy }}.png','Cumulative Balance — FY{{ fy }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+    </div>
+    <canvas id="netChart" height="70"></canvas>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
-const months = {{ chart_months | tojson }};
-new Chart(document.getElementById('expChart'), {
-  type:'bar',
-  data:{labels:months, datasets:[
-    {label:'Budget',  data:{{ exp_budget  | tojson }}, backgroundColor:'rgba(28,86,49,.25)', borderColor:'#1C5631', borderWidth:1},
-    {label:'Actuals', data:{{ exp_actual  | tojson }}, backgroundColor:'rgba(192,57,43,.45)', borderColor:'#C0392B', borderWidth:1}
-  ]},
-  options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
-});
-new Chart(document.getElementById('incChart'), {
-  type:'bar',
-  data:{labels:months, datasets:[
-    {label:'Income Actual',data:{{ income_actual | tojson }},backgroundColor:'rgba(28,86,49,.5)',borderColor:'#1C5631',borderWidth:1}
-  ]},
-  options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
-});
+const MONTHS      = {{ chart_months | tojson }};
+const LINE_DATA   = {{ line_data_json | safe }};
+const SEC_TOTALS  = {{ section_totals_json | safe }};
+const ALL_ITEMS   = {{ items | tojson }};
 
-function saveChart(canvasId, filename) {
-  const canvas = document.getElementById(canvasId);
-  // Draw onto a white-background canvas so PNG isn't transparent
-  const offscreen = document.createElement('canvas');
-  offscreen.width = canvas.width; offscreen.height = canvas.height;
-  const ctx = offscreen.getContext('2d');
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, offscreen.width, offscreen.height);
-  ctx.drawImage(canvas, 0, 0);
-  const link = document.createElement('a');
-  link.download = filename;
-  link.href = offscreen.toDataURL('image/png');
-  link.click();
+const SECTION_LABELS = {
+  income: "Income", employee: "Employee Costs",
+  office: "Office Costs", admin: "Bank/Legal/Admin",
+  travel: "Conference/Travel", investment: "Investment",
+};
+const PIE_COLORS = [
+  "rgba(28,86,49,.75)","rgba(41,128,185,.75)","rgba(142,68,173,.75)",
+  "rgba(211,84,0,.75)","rgba(192,57,43,.75)","rgba(39,174,96,.75)",
+  "rgba(52,152,219,.75)","rgba(155,89,182,.75)","rgba(230,126,34,.75)",
+];
+
+let chartType   = "bar";
+let mainChartObj, netChartObj, breakdownObj;
+
+const EXPENSE_SECTIONS = ["employee","office","admin","travel","investment"];
+
+function onCategoryChange() {
+  const cat = document.getElementById("filterCategory").value;
+  const sel = document.getElementById("filterLineItem");
+  sel.innerHTML = '<option value="all">All Line Items</option>';
+  const singleSection = EXPENSE_SECTIONS.includes(cat) || cat === "income";
+  if (singleSection) {
+    ALL_ITEMS
+      .filter(i => i.section === cat)
+      .forEach(i => {
+        const opt = document.createElement("option");
+        opt.value = i.id; opt.textContent = i.name;
+        sel.appendChild(opt);
+      });
+  }
+  sel.disabled = !singleSection;
+  renderCharts();
 }
+
+function setChartType(type, btn) {
+  chartType = type;
+  document.querySelectorAll(".f-type-btn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  const isPie = type === "pie";
+  document.getElementById("mainChartCard").style.display   = isPie ? "none" : "";
+  document.getElementById("netChartCard").style.display    = isPie ? "none" : "";
+  document.getElementById("breakdownCard").style.display   = isPie ? "" : "none";
+  renderCharts();
+}
+
+function sumMonthly(sections, itemId) {
+  let budget = new Array(12).fill(0);
+  let actual = new Array(12).fill(0);
+  Object.entries(LINE_DATA).forEach(([id, d]) => {
+    if (!sections.includes(d.section)) return;
+    if (itemId !== "all" && String(id) !== String(itemId)) return;
+    d.budget.forEach((v, i) => budget[i] += v);
+    d.actual.forEach((v, i) => actual[i] += v);
+  });
+  return { budget, actual };
+}
+
+function getNetData() {
+  let incActual = new Array(12).fill(0);
+  let expActual = new Array(12).fill(0);
+  Object.values(LINE_DATA).forEach(d => {
+    if (d.section === "income")
+      d.actual.forEach((v, i) => incActual[i] += v);
+    else if (EXPENSE_SECTIONS.includes(d.section))
+      d.actual.forEach((v, i) => expActual[i] += v);
+  });
+  let running = 0;
+  return MONTHS.map((_, i) => {
+    running += incActual[i] - expActual[i];
+    return running;
+  });
+}
+
+function buildDatasets(cat, item) {
+  const ctype = chartType === "line" ? "line" : "bar";
+  const lineOpts = { fill: false, tension: .35 };
+
+  if (cat === "net") {
+    const inc = sumMonthly(["income"], "all");
+    const exp = sumMonthly(EXPENSE_SECTIONS, "all");
+    return [
+      { label:"Income Budget",   data:inc.budget, backgroundColor:"rgba(39,174,96,.4)",   borderColor:"#27AE60", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
+      { label:"Income Actual",   data:inc.actual, backgroundColor:"rgba(39,174,96,.95)",  borderColor:"#1E8449", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
+      { label:"Expense Budget",  data:exp.budget, backgroundColor:"rgba(231,76,60,.35)",  borderColor:"#E74C3C", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
+      { label:"Expense Actual",  data:exp.actual, backgroundColor:"rgba(231,76,60,.95)",  borderColor:"#C0392B", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
+    ];
+  }
+
+  const sections = cat === "expenses" ? EXPENSE_SECTIONS : [cat];
+  const { budget, actual } = sumMonthly(sections, item);
+  const isIncome = cat === "income";
+  return [
+    { label:"Budget",  data:budget, backgroundColor: isIncome ? "rgba(39,174,96,.4)"  : "rgba(52,152,219,.5)",  borderColor: isIncome ? "#27AE60" : "#2980B9", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
+    { label:"Actuals", data:actual, backgroundColor: isIncome ? "rgba(39,174,96,.95)" : "rgba(231,76,60,.95)", borderColor: isIncome ? "#1E8449" : "#C0392B", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
+  ];
+}
+
+function getChartTitle(cat, item) {
+  if (cat === "net")     return "Monthly Income vs Expenses";
+  if (cat === "balance") return "Cumulative Balance (Running Net)";
+  if (item !== "all") {
+    const found = ALL_ITEMS.find(i => String(i.id) === String(item));
+    return `Monthly — ${found ? found.name : ""}`;
+  }
+  const labels = {
+    expenses:"Total Expenses", employee:"Employee Costs",
+    office:"Office Costs", admin:"Bank/Legal/Admin",
+    travel:"Conference/Travel", investment:"Investment",
+  };
+  return `Monthly — ${labels[cat] || SECTION_LABELS[cat] || cat}`;
+}
+
+function renderCharts() {
+  if (chartType === "pie") { renderBreakdown(); return; }
+  const cat  = document.getElementById("filterCategory").value;
+  const item = document.getElementById("filterLineItem").value;
+
+  const net = getNetData();
+
+  if (cat === "balance") {
+    document.getElementById("mainChartTitle").textContent = getChartTitle(cat, item);
+    document.getElementById("netChartCard").style.display = "none";
+
+    if (mainChartObj) mainChartObj.destroy();
+    mainChartObj = new Chart(document.getElementById("mainChart"), {
+      type: chartType,
+      data: {
+        labels: MONTHS,
+        datasets: [{
+          label: "Cumulative Balance",
+          data: net,
+          borderColor: "#1E8449", backgroundColor: "rgba(39,174,96,.15)",
+          borderWidth: 2.5, fill: chartType === "line", tension: .4,
+          pointBackgroundColor: net.map(v => v >= 0 ? "#27AE60" : "#E74C3C"),
+          pointRadius: 4,
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: { legend: { position: "bottom" } },
+        scales: { y: { ticks: { callback: v => "$" + v.toLocaleString() } } },
+        datasets: { bar: { barPercentage: 0.95, categoryPercentage: 0.9 } }
+      }
+    });
+    if (netChartObj) { netChartObj.destroy(); netChartObj = null; }
+    return;
+  }
+
+  document.getElementById("netChartCard").style.display = "";
+  document.getElementById("mainChartTitle").textContent = getChartTitle(cat, item);
+
+  const datasets = buildDatasets(cat, item);
+  if (mainChartObj) mainChartObj.destroy();
+  mainChartObj = new Chart(document.getElementById("mainChart"), {
+    type: chartType,
+    data: { labels: MONTHS, datasets },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "bottom" } },
+      scales: { y: { beginAtZero: true, ticks: { callback: v => "$" + v.toLocaleString() } } },
+      datasets: { bar: { barPercentage: 0.95, categoryPercentage: 0.9 } }
+    }
+  });
+
+  if (netChartObj) netChartObj.destroy();
+  netChartObj = new Chart(document.getElementById("netChart"), {
+    type: "line",
+    data: {
+      labels: MONTHS,
+      datasets: [{
+        label: "Cumulative Balance",
+        data: net,
+        borderColor: "#1E8449", backgroundColor: "rgba(39,174,96,.12)",
+        borderWidth: 2.5, fill: true, tension: .4,
+        pointBackgroundColor: net.map(v => v >= 0 ? "#27AE60" : "#E74C3C"),
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: { legend: { position: "bottom" } },
+      scales: { y: { ticks: { callback: v => "$" + v.toLocaleString() } } }
+    }
+  });
+}
+
+function renderBreakdown() {
+  const cat  = document.getElementById("filterCategory").value;
+  const item = document.getElementById("filterLineItem").value;
+
+  let labels = [], dataA = [], colors = [];
+  let idx = 0;
+
+  const isSingleItem = item !== "all";
+  const isSingleSection = EXPENSE_SECTIONS.includes(cat) || cat === "income";
+
+  if (isSingleItem) {
+    const d = LINE_DATA[item];
+    if (d) {
+      MONTHS.forEach((m, i) => {
+        if (d.actual[i] > 0) {
+          labels.push(m); dataA.push(d.actual[i]);
+          colors.push(PIE_COLORS[i % PIE_COLORS.length]);
+        }
+      });
+    }
+  } else if (isSingleSection) {
+    Object.entries(LINE_DATA)
+      .filter(([, d]) => d.section === cat)
+      .forEach(([, d]) => {
+        const total = d.actual.reduce((a, b) => a + b, 0);
+        if (total > 0) {
+          labels.push(d.name); dataA.push(total);
+          colors.push(PIE_COLORS[idx++ % PIE_COLORS.length]);
+        }
+      });
+  } else {
+    const sectionsToShow = cat === "net" || cat === "expenses"
+      ? EXPENSE_SECTIONS : [cat];
+    Object.entries(SEC_TOTALS)
+      .filter(([sec]) => sectionsToShow.includes(sec))
+      .forEach(([sec, d]) => {
+        const total = d.actual.reduce((a, b) => a + b, 0);
+        if (total > 0) {
+          labels.push(SECTION_LABELS[sec] || d.label); dataA.push(total);
+          colors.push(PIE_COLORS[idx++ % PIE_COLORS.length]);
+        }
+      });
+  }
+
+  if (breakdownObj) breakdownObj.destroy();
+  breakdownObj = new Chart(document.getElementById("breakdownChart"), {
+    type: "doughnut",
+    data: {
+      labels,
+      datasets: [{ data: dataA, backgroundColor: colors, borderWidth: 2 }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: "right" },
+        tooltip: { callbacks: { label: ctx => {
+          const v = ctx.parsed;
+          const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+          return ` $${v.toLocaleString()} (${(v/total*100).toFixed(1)}%)`;
+        }}}
+      }
+    }
+  });
+}
+
+function downloadChart(canvasId, filename, title) {
+  const canvas = document.getElementById(canvasId);
+  const TARGET_W = 1400;
+  const scale    = TARGET_W / canvas.width;
+  const chartH   = Math.round(canvas.height * scale);
+  const PAD    = 28;
+  const TOPBAR = 68;
+  const FOOTER = 28;
+
+  const off = document.createElement("canvas");
+  off.width  = TARGET_W;
+  off.height = TOPBAR + chartH + FOOTER + PAD;
+  const ctx = off.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, off.width, off.height);
+
+  ctx.fillStyle = "#1C5631";
+  ctx.fillRect(0, 0, off.width, TOPBAR - 8);
+
+  ctx.fillStyle = "#ffffff";
+  ctx.font = "bold 18px system-ui, sans-serif";
+  ctx.fillText("GBInc  —  Finance", PAD, 26);
+
+  ctx.font = "15px system-ui, sans-serif";
+  ctx.fillText(title || "", PAD, 50);
+
+  ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height,
+                0, TOPBAR, TARGET_W, chartH);
+
+  ctx.fillStyle = "#aaaaaa";
+  ctx.font = "11px system-ui, sans-serif";
+  ctx.fillText("Generated " + new Date().toLocaleDateString(),
+               PAD, TOPBAR + chartH + FOOTER);
+
+  const a = document.createElement("a");
+  a.download = filename; a.href = off.toDataURL("image/png"); a.click();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  onCategoryChange();
+});
 </script>
 {% endblock %}

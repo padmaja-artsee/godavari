@@ -124,7 +124,8 @@ LINE_ITEMS_SEED = [
     ("investment",   "Total Investment",          1, 1, 99),
     # ── Grand totals ────────────────────────────────────────────────────────
     ("totals",       "Total Expenses",            1, 1, 10),
-    ("totals",       "Net (Income - Expenses)",   1, 1, 20),
+    ("totals",       "Balance",                   1, 1, 20),
+    ("totals",       "Cash Position",             1, 1, 30),
 ]
 
 # Items added after initial release — used by the migration to patch existing DBs
@@ -281,6 +282,7 @@ def init_db() -> None:
                 reference           TEXT    DEFAULT '',
                 notes               TEXT    DEFAULT '',
                 receipt_filename    TEXT    DEFAULT '',
+                image_url           TEXT    DEFAULT '',
                 fiscal_year         INTEGER,
                 month               INTEGER,
                 created_at          TEXT,
@@ -354,6 +356,18 @@ def _seed_payment_accounts(conn) -> None:
 def _run_migrations(conn) -> None:
     """Idempotent — safe to run on every startup.
     Inserts any line items / accounts that were added after initial release."""
+    fy_cols = {r[1] for r in conn.execute("PRAGMA table_info(fy_archive)").fetchall()}
+    if "opening_balance" not in fy_cols:
+        conn.execute("ALTER TABLE fy_archive ADD COLUMN opening_balance REAL DEFAULT 0")
+
+    conn.execute(
+        "UPDATE line_items SET name='Balance' WHERE name='Net (Income - Expenses)' AND section='totals'"
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO line_items (section,name,is_calculated,is_system,sort_order) "
+        "VALUES ('totals','Cash Position',1,1,30)"
+    )
+
     # 1. Add missing line items (INSERT OR IGNORE respects UNIQUE(section,name))
     conn.executemany(
         "INSERT OR IGNORE INTO line_items "
@@ -379,6 +393,9 @@ def _run_migrations(conn) -> None:
                 "UPDATE accounts SET line_item_id=? WHERE name=? AND section=? AND line_item_id IS NULL",
                 (li_id, name, section),
             )
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(transactions)").fetchall()}
+    if "image_url" not in cols:
+        conn.execute("ALTER TABLE transactions ADD COLUMN image_url TEXT DEFAULT ''")
 
 
 # ---------------------------------------------------------------------------
@@ -484,8 +501,9 @@ def save_actuals_manual(fiscal_year: int, values: dict) -> None:
             )
 
 
-def compute_grid(raw: dict, items: list[dict]) -> dict:
-    """Add calculated rows to a raw {(lid,month): amount} grid."""
+def compute_grid(raw: dict, items: list[dict], opening_balance: float = 0.0) -> dict:
+    """Add calculated rows to a raw {(lid,month): amount} grid.
+    Balance = monthly income − expenses. Cash Position = opening + cumulative balance."""
     result = dict(raw)
     by_name = {i["name"]: i["id"] for i in items}
 
@@ -496,6 +514,7 @@ def compute_grid(raw: dict, items: list[dict]) -> dict:
             if i["section"] == section and not i["is_calculated"]
         )
 
+    cash = opening_balance
     for month in FY_MONTHS:
         ti  = sec_sum("income",     month)
         tec = sec_sum("employee",   month)
@@ -505,21 +524,48 @@ def compute_grid(raw: dict, items: list[dict]) -> dict:
         tin = sec_sum("investment", month)
         tex = tec + toc + tad + ttr + tin
         net = ti - tex
+        cash = cash + net
 
         for name, val in [
-            ("Total Income",            ti),
-            ("Total Employee Costs",    tec),
-            ("Total Office Costs",      toc),
-            ("Total Admin",             tad),
-            ("Total Travel",            ttr),
-            ("Total Investment",        tin),
-            ("Total Expenses",          tex),
-            ("Net (Income - Expenses)", net),
+            ("Total Income",         ti),
+            ("Total Employee Costs", tec),
+            ("Total Office Costs",   toc),
+            ("Total Admin",          tad),
+            ("Total Travel",         ttr),
+            ("Total Investment",     tin),
+            ("Total Expenses",       tex),
+            ("Balance",              net),
+            ("Cash Position",        cash),
         ]:
             if name in by_name:
                 result[(by_name[name], month)] = val
 
     return result
+
+
+def get_opening_balance(fiscal_year: int) -> float:
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT opening_balance FROM fy_archive WHERE fiscal_year=?", (fiscal_year,)
+        ).fetchone()
+        return float(row["opening_balance"]) if row and row["opening_balance"] else 0.0
+
+
+def save_opening_balance(fiscal_year: int, amount: float) -> None:
+    with get_db() as conn:
+        existing = conn.execute(
+            "SELECT fiscal_year FROM fy_archive WHERE fiscal_year=?", (fiscal_year,)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE fy_archive SET opening_balance=? WHERE fiscal_year=?",
+                (amount, fiscal_year),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO fy_archive (fiscal_year, opening_balance) VALUES (?, ?)",
+                (fiscal_year, amount),
+            )
 
 
 # ---------------------------------------------------------------------------

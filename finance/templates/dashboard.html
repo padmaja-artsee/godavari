@@ -46,8 +46,13 @@
     <span class="f-kpi-val">${{ "{:,.2f}".format(budget_expenses) }}</span>
   </div>
   <div class="f-kpi {% if net >= 0 %}f-kpi-green{% else %}f-kpi-red{% endif %}">
-    <span class="f-kpi-label">Net (Income − Expenses)</span>
+    <span class="f-kpi-label">FY Balance (Income − Expenses)</span>
     <span class="f-kpi-val">${{ "{:,.2f}".format(net) }}</span>
+  </div>
+  <div class="f-kpi {% if current_balance >= 0 %}f-kpi-green{% else %}f-kpi-red{% endif %}">
+    <span class="f-kpi-label">Cash Position</span>
+    <span class="f-kpi-val">${{ "{:,.2f}".format(current_balance) }}</span>
+    <span class="f-kpi-sub">Running bank balance</span>
   </div>
 </div>
 

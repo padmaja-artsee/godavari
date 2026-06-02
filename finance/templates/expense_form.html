@@ -110,8 +110,20 @@
               placeholder="Optional notes…">{{ transaction.notes if transaction else '' }}</textarea>
   </div>
 
-  <!-- Receipt upload -->
+  <!-- Receipt / image -->
   {% if tx_type != "income" %}
+  <div class="f-field" style="margin-top:.75rem">
+    <label class="f-label">Image URL</label>
+    <input type="url" name="image_url" class="f-input" id="expenseImageUrl"
+           value="{{ transaction.image_url if transaction else '' }}"
+           placeholder="https://… link to receipt image or scan"/>
+    {% if transaction and transaction.image_url %}
+    <p style="margin:.35rem 0 0;font-size:.85rem">
+      <a href="{{ transaction.image_url }}" target="_blank" rel="noopener" class="f-link-small">Open image →</a>
+    </p>
+    {% endif %}
+  </div>
+
   <div class="f-field" style="margin-top:.75rem">
     <label class="f-label">Receipt (PDF/Image)</label>
     {% if transaction and transaction.receipt_filename %}

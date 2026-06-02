@@ -28,6 +28,22 @@
   </div>
 </div>
 
+<div class="f-card f-opening-balance-card">
+  <form method="post" action="{{ _base }}/budget/opening-balance" class="f-opening-balance-form">
+    <input type="hidden" name="fy" value="{{ fy }}"/>
+    <label class="f-opening-balance-label">Starting balance (Apr {{ fy - 1 }})</label>
+    {% if archived %}
+    <span class="f-opening-balance-val">${{ "{:,.2f}".format(opening_balance) }}</span>
+    {% else %}
+    <input type="number" step="0.01" name="opening_balance"
+           value="{{ opening_balance if opening_balance else '' }}"
+           placeholder="0.00" class="f-input f-opening-balance-input"/>
+    <button type="submit" class="f-btn-sm f-btn-primary">Save balance</button>
+    {% endif %}
+    <span class="f-text-muted">Cash / bank balance at the start of the selected fiscal year</span>
+  </form>
+</div>
+
 <form method="post" action="{{ _base }}/budget" id="budgetForm">
   <input type="hidden" name="fy" value="{{ fy }}"/>
 
@@ -133,6 +149,7 @@
 </form>
 
 <script>
+const OPENING_BALANCE = {{ opening_balance | default(0) }};
 // Section → calc row names
 const SECTIONS = {
   income:     ['Total Income'],
@@ -143,7 +160,7 @@ const SECTIONS = {
   investment: ['Total Investment'],
 };
 const CALC_NAMES = ['Total Income','Total Employee Costs','Total Office Costs',
-                    'Total Admin','Total Travel','Total Investment','Total Expenses','Net (Income - Expenses)'];
+                    'Total Admin','Total Travel','Total Investment','Total Expenses','Balance','Cash Position'];
 // Build lid maps
 const items = {{ items | tojson }};
 const nameToLid = {};
@@ -160,6 +177,7 @@ function secItems(sec) { return items.filter(i=>i.section===sec && !i.is_calcula
 function fmt(v) { return v===0?'—':'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
 
 function recalc() {
+  let cash = OPENING_BALANCE;
   months.forEach(m => {
     let ti=0,tec=0,toc=0,tad=0,ttr=0,tin=0;
     secItems('income').forEach(i=>ti+=getVal(i.id,m));
@@ -169,9 +187,10 @@ function recalc() {
     secItems('travel').forEach(i=>ttr+=getVal(i.id,m));
     secItems('investment').forEach(i=>tin+=getVal(i.id,m));
     const tex=tec+toc+tad+ttr+tin, net=ti-tex;
+    cash = cash + net;
     const map={'Total Income':ti,'Total Employee Costs':tec,'Total Office Costs':toc,
                'Total Admin':tad,'Total Travel':ttr,'Total Investment':tin,
-               'Total Expenses':tex,'Net (Income - Expenses)':net};
+               'Total Expenses':tex,'Balance':net,'Cash Position':cash};
     Object.entries(map).forEach(([name,val])=>{
       const lid=nameToLid[name];
       if(!lid) return;

@@ -64,8 +64,13 @@
     <td class="num f-bold">${{ "{:,.2f}".format(t.amount) }} <small class="f-text-muted">{{ t.currency }}</small></td>
     <td>
       {% if t.receipt_filename %}
-      <a href="{{ _base }}/expenses/{{ t.id }}/receipt" target="_blank" class="f-receipt-link">📎 View</a>
-      {% else %}—{% endif %}
+      <a href="{{ _base }}/expenses/{{ t.id }}/receipt" target="_blank" class="f-receipt-link">📎 Receipt</a>
+      {% endif %}
+      {% if t.image_url %}
+      {% if t.receipt_filename %}<br>{% endif %}
+      <a href="{{ t.image_url }}" target="_blank" rel="noopener" class="f-receipt-link">🖼 Image</a>
+      {% endif %}
+      {% if not t.receipt_filename and not t.image_url %}—{% endif %}
     </td>
     <td>
       <a href="{{ _base }}/expenses/{{ t.id }}/edit" class="f-action-btn">Edit</a>

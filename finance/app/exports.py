@@ -9,7 +9,7 @@ from openpyxl.utils import get_column_letter
 
 from finance.app.database import (
     FY_MONTHS, MONTH_LABELS, SECTION_LABELS, SECTION_ORDER,
-    compute_grid, get_budget_grid, get_transaction_rollup,
+    compute_grid, get_budget_grid, get_opening_balance, get_transaction_rollup,
     get_actuals_manual,
 )
 
@@ -232,11 +232,27 @@ SECTION_STYLES_XL = {
     "Total Admin":             ("subtotal", _GREEN_L, True),
     "Total Travel":            ("subtotal", _GREEN_L, True),
     "Total Expenses":          ("highlight","FFF9C4",  True),
-    "Net (Income - Expenses)": ("total",    _GREEN_L,  True),
+    "Balance":                 ("total",    _GREEN_L,  True),
+    "Cash Position":           ("highlight","E8F4FD",  True),
 }
 
 
-def _write_grid_sheet(ws, items: list, grid: dict, title: str, subtitle: str) -> None:
+def _grid_row_total(item: dict, full: dict, by_name: dict) -> float:
+    lid = item["id"]
+    if item["name"] == "Balance":
+        inc_lid = by_name.get("Total Income")
+        exp_lid = by_name.get("Total Expenses")
+        inc_tot = sum(full.get((inc_lid, m), 0) for m in FY_MONTHS) if inc_lid else 0
+        exp_tot = sum(full.get((exp_lid, m), 0) for m in FY_MONTHS) if exp_lid else 0
+        return inc_tot - exp_tot
+    if item["name"] == "Cash Position":
+        return full.get((lid, 3), 0)
+    return sum(full.get((lid, m), 0) for m in FY_MONTHS)
+
+
+def _write_grid_sheet(
+    ws, items: list, grid: dict, title: str, subtitle: str, opening_balance: float = 0.0,
+) -> None:
     ncols = 2 + len(FY_MONTHS) + 1  # label + 12 months + total
     _grid_header(ws, title, subtitle, ncols)
 
@@ -257,7 +273,8 @@ def _write_grid_sheet(ws, items: list, grid: dict, title: str, subtitle: str) ->
     for col in range(2, ncols + 1):
         ws.column_dimensions[get_column_letter(col)].width = 10
 
-    full = compute_grid(grid, items)
+    full = compute_grid(grid, items, opening_balance)
+    by_name = {i["name"]: i["id"] for i in items}
     data_row = hdr + 1
     prev_sec = None
 
@@ -281,15 +298,14 @@ def _write_grid_sheet(ws, items: list, grid: dict, title: str, subtitle: str) ->
         c.font = row_font; c.fill = _fill(fill_color)
         c.alignment = _al(h="left"); c.border = _border()
 
-        row_total = 0.0
         for i, m in enumerate(FY_MONTHS, start=2):
             val = full.get((item["id"], m), 0.0)
-            row_total += val
             cell = ws.cell(data_row, i, val if val else None)
             cell.fill = _fill(fill_color); cell.border = _border()
             cell.number_format = "#,##0.00"; cell.alignment = _al(h="right")
             cell.font = row_font
 
+        row_total = _grid_row_total(item, full, by_name)
         tot_cell = ws.cell(data_row, ncols, row_total if row_total else None)
         tot_cell.fill = _fill(_GREEN_L if style_info else _GREY)
         tot_cell.number_format = "#,##0.00"; tot_cell.alignment = _al(h="right")
@@ -307,10 +323,12 @@ def _write_grid_sheet(ws, items: list, grid: dict, title: str, subtitle: str) ->
 def export_budget_xlsx(items: list, fiscal_year: int) -> tuple:
     wb = openpyxl.Workbook()
     ws = wb.active; ws.title = f"Budget FY{fiscal_year}"
+    ob = get_opening_balance(fiscal_year)
     grid = get_budget_grid(fiscal_year)
     _write_grid_sheet(ws, items, grid,
         f"Budget — FY{fiscal_year}",
-        f"Apr {fiscal_year-1} – Mar {fiscal_year}")
+        f"Apr {fiscal_year-1} – Mar {fiscal_year}",
+        ob)
     buf = BytesIO(); wb.save(buf)
     return buf.getvalue(), f"GBInc-Budget-FY{fiscal_year}.xlsx"
 
@@ -325,11 +343,13 @@ def export_actuals_xlsx(items: list, fiscal_year: int) -> tuple:
     rollup  = get_transaction_rollup(fiscal_year)
     manual  = get_actuals_manual(fiscal_year)
     combined = {}
+    ob = get_opening_balance(fiscal_year)
     for k in set(list(rollup.keys()) + list(manual.keys())):
         combined[k] = rollup.get(k, 0) + manual.get(k, 0)
     _write_grid_sheet(ws, items, combined,
         f"Actuals — FY{fiscal_year}",
-        f"Apr {fiscal_year-1} – Mar {fiscal_year}")
+        f"Apr {fiscal_year-1} – Mar {fiscal_year}",
+        ob)
     buf = BytesIO(); wb.save(buf)
     return buf.getvalue(), f"GBInc-Actuals-FY{fiscal_year}.xlsx"
 
@@ -346,13 +366,14 @@ def export_variances_xlsx(items: list, fiscal_year: int) -> tuple:
     _grid_header(ws, f"Budget vs Actuals — FY{fiscal_year}",
                  f"Apr {fiscal_year-1} – Mar {fiscal_year}", min(ncols, 50))
 
-    b_grid = compute_grid(get_budget_grid(fiscal_year), items)
+    ob = get_opening_balance(fiscal_year)
+    b_grid = compute_grid(get_budget_grid(fiscal_year), items, ob)
     rollup  = get_transaction_rollup(fiscal_year)
     manual  = get_actuals_manual(fiscal_year)
     combined = {}
     for k in set(list(rollup.keys()) + list(manual.keys())):
         combined[k] = rollup.get(k, 0) + manual.get(k, 0)
-    a_grid = compute_grid(combined, items)
+    a_grid = compute_grid(combined, items, ob)
 
     # Sub-header rows
     hdr1, hdr2 = 5, 6
@@ -436,15 +457,15 @@ def export_transactions_xlsx(transactions: list, fiscal_year: int,
 
     label = "Income Entries" if tx_type == "income" else "Expenses"
     _grid_header(ws, f"{label} — FY{fiscal_year}",
-                 f"Apr {fiscal_year-1} – Mar {fiscal_year}", 8)
+                 f"Apr {fiscal_year-1} – Mar {fiscal_year}", 9)
 
-    headers = ["Date","Account","Vendor","Payment Account","Reference","Currency","Amount","Notes"]
+    headers = ["Date","Account","Vendor","Payment Account","Reference","Currency","Amount","Image URL","Notes"]
     for i, h in enumerate(headers, 1):
         c = ws.cell(5, i, h)
         c.font = _f(bold=True, size=8, color=_WHITE); c.fill = _fill(_GREEN)
         c.alignment = _al(h="center"); c.border = _border()
 
-    widths = [12, 28, 22, 18, 16, 9, 12, 30]
+    widths = [12, 28, 22, 18, 16, 9, 12, 36, 30]
     for i, w in enumerate(widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
@@ -454,7 +475,8 @@ def export_transactions_xlsx(transactions: list, fiscal_year: int,
         vals = [
             t.get("date",""), t.get("account_name",""), t.get("vendor_name") or "",
             t.get("payment_account_name") or "", t.get("reference") or "",
-            t.get("currency","USD"), t.get("amount",0), t.get("notes") or "",
+            t.get("currency","USD"), t.get("amount",0), t.get("image_url") or "",
+            t.get("notes") or "",
         ]
         for ci, v in enumerate(vals, 1):
             cell = ws.cell(r, ci, v)

@@ -88,6 +88,7 @@ def create_transaction(
     currency: str = "USD", transaction_type: str = "expense",
     payment_account_id: int = None, vendor_id: int = None,
     reference: str = "", notes: str = "", receipt_filename: str = "",
+    image_url: str = "",
 ) -> int:
     fy, month = fiscal_year_for_date(date)
     now = _now()
@@ -96,11 +97,11 @@ def create_transaction(
             """INSERT INTO transactions
                (date,account_id,amount,currency,transaction_type,
                 payment_account_id,vendor_id,reference,notes,
-                receipt_filename,fiscal_year,month,created_at,updated_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                receipt_filename,image_url,fiscal_year,month,created_at,updated_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (date, account_id, amount, currency, transaction_type,
              payment_account_id, vendor_id, reference, notes,
-             receipt_filename, fy, month, now, now)
+             receipt_filename, (image_url or "").strip(), fy, month, now, now)
         )
         return cur.lastrowid
 
@@ -110,29 +111,31 @@ def update_transaction(
     currency: str = "USD", transaction_type: str = "expense",
     payment_account_id: int = None, vendor_id: int = None,
     reference: str = "", notes: str = "", receipt_filename: str = None,
+    image_url: str = "",
 ) -> None:
     fy, month = fiscal_year_for_date(date)
     now = _now()
+    img = (image_url or "").strip()
     with get_db() as conn:
         if receipt_filename is not None:
             conn.execute(
                 """UPDATE transactions SET date=?,account_id=?,amount=?,currency=?,
                    transaction_type=?,payment_account_id=?,vendor_id=?,reference=?,
-                   notes=?,receipt_filename=?,fiscal_year=?,month=?,updated_at=?
+                   notes=?,receipt_filename=?,image_url=?,fiscal_year=?,month=?,updated_at=?
                    WHERE id=?""",
                 (date, account_id, amount, currency, transaction_type,
                  payment_account_id, vendor_id, reference, notes,
-                 receipt_filename, fy, month, now, tx_id)
+                 receipt_filename, img, fy, month, now, tx_id)
             )
         else:
             conn.execute(
                 """UPDATE transactions SET date=?,account_id=?,amount=?,currency=?,
                    transaction_type=?,payment_account_id=?,vendor_id=?,reference=?,
-                   notes=?,fiscal_year=?,month=?,updated_at=?
+                   notes=?,image_url=?,fiscal_year=?,month=?,updated_at=?
                    WHERE id=?""",
                 (date, account_id, amount, currency, transaction_type,
                  payment_account_id, vendor_id, reference, notes,
-                 fy, month, now, tx_id)
+                 img, fy, month, now, tx_id)
             )
 
 

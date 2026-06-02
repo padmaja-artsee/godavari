@@ -20,6 +20,24 @@
   </div>
 </div>
 
+<div class="f-card f-opening-balance-card">
+  <form method="post" action="{{ _base }}/budget/opening-balance" class="f-opening-balance-form">
+    <input type="hidden" name="fy" value="{{ fy }}"/>
+    <input type="hidden" name="return_to" value="actuals"/>
+    <label class="f-opening-balance-label">Starting balance (Apr {{ fy - 1 }})</label>
+    {% if archived %}
+    <span class="f-opening-balance-val">${{ "{:,.2f}".format(opening_balance) }}</span>
+    {% else %}
+    <input type="number" step="0.01" name="opening_balance"
+           value="{{ opening_balance if opening_balance else '' }}"
+           placeholder="0.00" class="f-input f-opening-balance-input"/>
+    <button type="submit" class="f-btn-sm f-btn-primary">Save</button>
+    {% endif %}
+    <span class="f-text-muted">Bank/cash at fiscal year start — feeds <strong>Balance</strong> and <strong>Cash Position</strong> rows below</span>
+    <a href="{{ _base }}/budget?fy={{ fy }}" class="f-btn-sm f-btn-outline" style="margin-left:auto">Budget →</a>
+  </form>
+</div>
+
 <div class="f-legend-bar">
   <span class="f-rollup-badge">$0</span> From transactions &nbsp;
   <span class="f-manual-badge">+$0</span> Manual addition
