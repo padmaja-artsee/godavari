@@ -106,7 +106,7 @@ from app.commission_invoices import (
     update_commission_invoice_dates,
     upgrade_commission_invoices_schema,
 )
-from app.ci_exports import export_ci_xlsx
+from app.ci_exports import export_ci_pdf, export_ci_xlsx
 from app.ci_data_template import generate_data_request_template, generate_prefilled_data_request
 from app.ci_data_fill import period_label_from_filters
 from app.database import (
@@ -157,6 +157,7 @@ from app.purchase_orders import (
     validation_warnings,
 )
 from app.document_assets import (
+    authorized_signature_file_uri,
     authorized_signature_url,
     save_authorized_signature,
     signature_media_type,
@@ -417,6 +418,7 @@ async def products_page(
 
 PRODUCTS_COLUMNS: list[tuple[str, str]] = [
     ("Product", "name"),
+    ("Short name", "short_name"),
     ("Trade Name", "trade_name"),
     ("CAS Number", "cas_number"),
     ("Category", "category"),
@@ -519,6 +521,7 @@ async def product_delete_pdf(file_id: int):
 @app.post("/products/save")
 async def product_save(
     name: str = Form(...),
+    short_name: str = Form(""),
     trade_name: str = Form(""),
     cas_number: str = Form(""),
     hs_code: str = Form(""),
@@ -535,6 +538,7 @@ async def product_save(
     save_product(
         {
             "name": name,
+            "short_name": short_name,
             "trade_name": trade_name,
             "cas_number": cas_number,
             "hs_code": hs_code,
@@ -590,6 +594,7 @@ async def deal_update_meta(
     ocean_freight_amount: str = Form(""),
     ocean_freight_currency: str = Form("USD"),
     commission_rate: str = Form(""),
+    product_short_name: str = Form(""),
     next_url: str = Form(""),
 ):
     update_deal_fields(
@@ -620,6 +625,7 @@ async def deal_update_meta(
         ocean_freight_amount=ocean_freight_amount,
         ocean_freight_currency=ocean_freight_currency,
         commission_rate=commission_rate,
+        product_short_name=product_short_name,
     )
     return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
 
@@ -2055,6 +2061,25 @@ async def ci_export_xlsx_route(ci_id: int):
         content, fname,
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@app.get("/generate/commission-invoices/{ci_id}/export.pdf")
+async def ci_export_pdf_route(request: Request, ci_id: int):
+    ci = get_commission_invoice_for_export(ci_id)
+    if not ci:
+        return RedirectResponse("/generate/commission-invoices", status_code=303)
+    html = templates.get_template("generate/commission_invoices/ci_pdf.html").render(
+        ci=ci,
+        authorized_signature_src=authorized_signature_file_uri(),
+    )
+    result = export_ci_pdf(ci, html)
+    if not result:
+        return RedirectResponse(
+            f"/generate/commission-invoices/{ci_id}/print?pdf_fallback=1",
+            status_code=303,
+        )
+    content, fname = result
+    return _download_response(content, fname, "application/pdf")
 
 
 # ── Sales (Commercial) Invoice routes ─────────────────────────────────────────

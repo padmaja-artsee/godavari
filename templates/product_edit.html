@@ -17,6 +17,10 @@
       <input name="name" required value="{{ product.name if product else '' }}" placeholder="e.g. N-Butyraldehyde" />
     </div>
     <div>
+      <label>Product short name <span class="form-hint" style="font-weight:400">optional override on catalogue</span></label>
+      <input name="short_name" value="{{ product.short_name if product else '' }}" placeholder="Usually leave blank — deals use trade name or full name" />
+    </div>
+    <div>
       <label>Trade name / brand</label>
       <input name="trade_name" value="{{ product.trade_name if product else '' }}" placeholder="NaturoBG®" />
     </div>

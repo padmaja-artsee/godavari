@@ -38,6 +38,7 @@
       <thead>
         <tr>
           <th>Product</th>
+          <th>Short name</th>
           <th>Trade name</th>
           <th>CAS</th>
           <th>Biobased</th>
@@ -51,6 +52,7 @@
       {% for p in products %}
       <tr>
         <td><a class="link" href="/products/{{ p.id }}"><strong>{{ p.name }}</strong></a></td>
+        <td>{{ p.short_name or '—' }}</td>
         <td>{{ p.trade_name or '—' }}</td>
         <td>{{ p.cas_number or '—' }}</td>
         <td>{{ p.biobased_content or '—' }}</td>
@@ -64,7 +66,7 @@
         <td><a class="link" href="/products/{{ p.id }}">Edit</a></td>
       </tr>
       {% else %}
-      <tr><td colspan="8" class="empty">No products. <a href="/products/new">Add one</a> or restart app to import catalogue.</td></tr>
+      <tr><td colspan="9" class="empty">No products. <a href="/products/new">Add one</a> or restart app to import catalogue.</td></tr>
       {% endfor %}
       </tbody>
     </table>

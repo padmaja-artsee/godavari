@@ -630,6 +630,7 @@ def create_purchase_order_from_deal(deal_id: int) -> dict[str, Any] | None:
         row = conn.execute(
             """
             SELECT d.*, c.name AS company, p.name AS product,
+                   p.trade_name AS catalog_trade_name,
                    p.hs_code AS product_hs_code
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
@@ -667,7 +668,10 @@ def create_purchase_order_from_deal(deal_id: int) -> dict[str, Any] | None:
 
     # --- marking section ---
     po["marking_buyer_name"] = d.get("company") or po["marking_buyer_name"]
-    po["marking_product_brand"] = d.get("product") or po["marking_product_brand"]
+    from app.product_labels import deal_document_product
+
+    doc_product = deal_document_product(d)
+    po["marking_product_brand"] = doc_product or po["marking_product_brand"]
 
     # --- shipping notes ---
     notes_parts = []
@@ -694,7 +698,7 @@ def create_purchase_order_from_deal(deal_id: int) -> dict[str, Any] | None:
     pricing_qty = commercial_qty * 1000 if commercial_qty and qty_unit.upper() != "KG" else qty_num
 
     line = po["line_items"][0]
-    line["product_description"] = d.get("product") or line["product_description"]
+    line["product_description"] = doc_product or line["product_description"]
     line["quantity_display"] = format_quantity_display(qty_raw, qty_unit) or line["quantity_display"]
     line["commercial_quantity"] = commercial_qty or line["commercial_quantity"]
     line["commercial_unit"] = "MT" if qty_unit.upper() != "KG" else "KG"

@@ -63,6 +63,7 @@ def upgrade_products_schema() -> None:
         )
         cols = _product_columns(conn)
         for col, typ in [
+            ("short_name", "TEXT"),
             ("trade_name", "TEXT"),
             ("cas_number", "TEXT"),
             ("hs_code", "TEXT"),
@@ -314,11 +315,11 @@ def list_products_full(
     if q:
         clauses.append(
             """(
-                name LIKE ? OR trade_name LIKE ? OR cas_number LIKE ?
+                name LIKE ? OR short_name LIKE ? OR trade_name LIKE ? OR cas_number LIKE ?
                 OR synonyms LIKE ? OR applications LIKE ? OR certifications LIKE ?
             )"""
         )
-        params.extend([f"%{q}%"] * 6)
+        params.extend([f"%{q}%"] * 7)
     if category:
         clauses.append("category = ?")
         params.append(category)
@@ -350,7 +351,7 @@ def save_product(data: dict[str, Any], product_id: Optional[int] = None) -> int:
             conn.execute(
                 """
                 UPDATE products SET
-                    name = ?, trade_name = ?, cas_number = ?, hs_code = ?,
+                    name = ?, short_name = ?, trade_name = ?, cas_number = ?, hs_code = ?,
                     biobased_content = ?,
                     applications = ?, certifications = ?, category = ?,
                     synonyms = ?, notes = ?, status = ?, updated_at = ?
@@ -358,6 +359,7 @@ def save_product(data: dict[str, Any], product_id: Optional[int] = None) -> int:
                 """,
                 (
                     name,
+                    data.get("short_name", ""),
                     data.get("trade_name", ""),
                     data.get("cas_number", ""),
                     data.get("hs_code", ""),
@@ -381,12 +383,13 @@ def save_product(data: dict[str, Any], product_id: Optional[int] = None) -> int:
         cur = conn.execute(
             """
             INSERT INTO products (
-                name, trade_name, cas_number, hs_code, biobased_content, applications,
+                name, short_name, trade_name, cas_number, hs_code, biobased_content, applications,
                 certifications, category, synonyms, notes, status, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 name,
+                data.get("short_name", ""),
                 data.get("trade_name", ""),
                 data.get("cas_number", ""),
                 data.get("hs_code", ""),
@@ -434,10 +437,13 @@ def merge_product_names(old_name: str, new_name: str) -> None:
 
 
 def update_deal_product(deal_id: int, product_id: int) -> None:
+    from app.product_labels import initial_deal_product_short_name
+
     with get_db() as conn:
+        psn = initial_deal_product_short_name(conn, product_id)
         conn.execute(
-            "UPDATE deals SET product_id = ?, updated_at = ? WHERE id = ?",
-            (product_id, now_iso(), deal_id),
+            "UPDATE deals SET product_id = ?, product_short_name = ?, updated_at = ? WHERE id = ?",
+            (product_id, psn or None, now_iso(), deal_id),
         )
 
 
@@ -467,11 +473,12 @@ def import_catalogue(merge_aliases: bool = True) -> dict:
                 if existing:
                     conn.execute(
                         """UPDATE products SET
-                            trade_name=?, cas_number=?, hs_code=?, biobased_content=?,
+                            short_name=?, trade_name=?, cas_number=?, hs_code=?, biobased_content=?,
                             applications=?, certifications=?, category=?,
                             synonyms=?, notes=?, status=?, updated_at=?
                            WHERE id=?""",
                         (
+                            item.get("short_name", "") or item.get("trade_name", ""),
                             item.get("trade_name", ""), item.get("cas_number", ""),
                             item.get("hs_code", ""), item.get("biobased_content", ""),
                             item.get("applications", ""), item.get("certifications", ""),
@@ -483,12 +490,13 @@ def import_catalogue(merge_aliases: bool = True) -> dict:
                 else:
                     conn.execute(
                         """INSERT INTO products (
-                               name, trade_name, cas_number, hs_code, biobased_content,
+                               name, short_name, trade_name, cas_number, hs_code, biobased_content,
                                applications, certifications, category, synonyms, notes,
                                status, created_at, updated_at
-                           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (
                             name,
+                            item.get("short_name", "") or item.get("trade_name", ""),
                             item.get("trade_name", ""), item.get("cas_number", ""),
                             item.get("hs_code", ""), item.get("biobased_content", ""),
                             item.get("applications", ""), item.get("certifications", ""),

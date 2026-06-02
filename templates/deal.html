@@ -31,6 +31,7 @@
 <div class="card" style="max-width:800px">
   <div class="card-header"><h2>Product info</h2></div>
   <div class="card-body" style="padding:1rem 1.25rem;font-size:0.9rem">
+    {% if product_record.short_name %}<p><strong>Short name (catalogue):</strong> {{ product_record.short_name }}</p>{% endif %}
     {% if product_record.cas_number %}<p><strong>CAS:</strong> {{ product_record.cas_number }}</p>{% endif %}
     {% if product_record.biobased_content %}<p><strong>Biobased:</strong> {{ product_record.biobased_content }}</p>{% endif %}
     {% if product_record.certifications %}<p><strong>Certifications:</strong> {{ product_record.certifications }}</p>{% endif %}
@@ -74,6 +75,12 @@
     {% set back_url = '/shipping' if request.query_params.get('from') == 'shipping' else '/deal/' ~ d.id %}
     <input type="hidden" name="next_url" value="{{ back_url }}" />
     <div class="full"><h3 class="form-section-title">Commercial</h3></div>
+    <div class="full">
+      <label>Product short name <span class="form-hint" style="font-weight:400">→ PO, CI, SI, DN · auto: trade name, else full name</span></label>
+      <input name="product_short_name"
+             value="{{ d.product_short_name or (product_record.trade_name or product_record.name) if product_record else '' }}"
+             placeholder="{{ (product_record.trade_name or product_record.name) if product_record else 'From product trade name or full name' }}" />
+    </div>
     <div>
       <label>PO #</label>
       <input name="po_number" value="{{ d.po_number or '' }}" placeholder="Customer PO" />

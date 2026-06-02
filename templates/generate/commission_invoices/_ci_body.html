@@ -48,11 +48,11 @@
         {% endif %}
       </div>
       <div class="ci-meta-line">
-        <span class="ci-meta-label">Invoice #:</span>
+        <span class="ci-meta-label">GBInc invoice:</span>
         {% if readonly %}
         <span class="ci-meta-val">{{ ci.invoice_number or '—' }}</span>
         {% else %}
-        <input class="ci-inline ci-field-yellow" name="invoice_number" value="{{ ci.invoice_number or '' }}" required placeholder="GBL/MPO/001/2025-26" />
+        <input class="ci-inline ci-field-yellow" name="invoice_number" value="{{ ci.invoice_number or '' }}" required placeholder="GBInc invoice #" />
         {% endif %}
         {{ ci_hint(ci, 'invoice_number', not readonly) }}
       </div>
@@ -173,7 +173,7 @@
   {# Row 30 — Total #}
   <div class="ci-total-row-excel">
     <span class="ci-total-label">Total</span>
-    <span class="ci-total-amt" id="ci-total-commission">$ {{ ci.total_commission|money if ci.total_commission else '0.00' }}</span>
+    <span class="ci-total-amt" id="ci-total-commission">$ {{ (ci.total_commission or 0)|money }}</span>
   </div>
 
   {# Bank block (rows 29–36) #}
@@ -241,9 +241,8 @@
         <th class="ci-bar-mid">Delivery Port {{ ci_hint(ci, 'delivery_port', not readonly) }}</th>
       </tr>
       <tr class="ci-bar-data">
-        <td class="ci-bar-left">
-          {% if readonly %}{{ ci.contact_person or '—' }}
-          {% else %}(same as invoice contact){% endif %}
+        <td class="ci-bar-left ci-notice-contact-display">
+          {{ ci.contact_person or 'Padmaja Ganapathy' }}
         </td>
         <td class="ci-bar-mid">
           {% if readonly %}{{ ci.delivery_port or '—' }}{% else %}
@@ -279,10 +278,11 @@
             <input class="ci-cell-num ci-cif ci-field-yellow" name="cif_price" value="{{ line.cif_price or '' }}" />{% endif %}</td>
           <td class="ci-num">{{ line.quantity|num }}</td>
           <td class="ci-num">{{ line.commission_rate|num }}%</td>
-          <td class="ci-num">{% if readonly %}{{ ci.shipment_date|ci_date }}{% else %}—{% endif %}</td>
+          <td class="ci-num">{% if readonly %}{{ (line.shipment_date or ci.shipment_date)|ci_date }}{% else %}
+            {{ ci_date_input('shipment_date', line.shipment_date or ci.shipment_date, 'ci-field-yellow') }}{% endif %}</td>
         </tr>
         {% endfor %}
-        {% set notice_pad = 7 - (ci.line_items|length) %}
+        {% set notice_pad = (5 if readonly else 7) - (ci.line_items|length) %}
         {% if notice_pad > 0 %}
         {% for _ in range(notice_pad) %}
         <tr class="ci-notice-empty-row">

@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="/static/generate.css" />
 <link rel="stylesheet" href="/static/po_wysiwyg.css" />
 <link rel="stylesheet" href="/static/ci_wysiwyg.css?v=2.4" />
-<link rel="stylesheet" href="/static/ci_template_us.css?v=2.9" />
+<link rel="stylesheet" href="/static/ci_template_us.css?v=3.0" />
 {% endblock %}
 {% block content %}
 <div class="po-shell">
@@ -15,6 +15,7 @@
     <div class="po-action-bar-right">
       {% if editing and ci.id %}
       <a href="/generate/commission-invoices/{{ ci.id }}" class="btn btn-ghost btn-sm">Preview</a>
+      <a href="/generate/commission-invoices/{{ ci.id }}/export.pdf" class="btn btn-ghost btn-sm">Download PDF</a>
       <a href="/generate/commission-invoices/{{ ci.id }}/export.xlsx" class="btn btn-ghost btn-sm">Export Excel</a>
       <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost btn-sm">Print</a>
       {% endif %}
@@ -52,5 +53,5 @@
     </div>
   </section>
 </div>
-<script src="/static/ci_wysiwyg.js?v=2.4"></script>
+<script src="/static/ci_wysiwyg.js?v=2.8"></script>
 {% endblock %}

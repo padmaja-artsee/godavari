@@ -133,7 +133,13 @@ def period_label_from_filters(
 
 
 def product_label_from_deals(deals: list[dict]) -> str:
-    names = list(dict.fromkeys((d.get("product") or "").strip() for d in deals if d.get("product")))
+    from app.product_labels import deal_document_product
+
+    names = list(
+        dict.fromkeys(
+            deal_document_product(d) for d in deals if deal_document_product(d)
+        )
+    )
     if not names:
         return ""
     if len(names) == 1:

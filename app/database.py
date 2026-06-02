@@ -512,6 +512,22 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
     for col in COMMERCIAL_EXTRA_FIELDS:
         if col not in cols:
             conn.execute(f"ALTER TABLE deals ADD COLUMN {col} TEXT")
+    if "product_short_name" not in cols:
+        conn.execute("ALTER TABLE deals ADD COLUMN product_short_name TEXT")
+    conn.execute(
+        """
+        UPDATE deals SET product_short_name = (
+            SELECT CASE
+                WHEN TRIM(COALESCE(p.trade_name, '')) != ''
+                THEN TRIM(p.trade_name)
+                ELSE TRIM(p.name)
+            END
+            FROM products p WHERE p.id = deals.product_id
+        )
+        WHERE product_short_name IS NULL OR TRIM(product_short_name) = ''
+           OR LOWER(TRIM(product_short_name)) = 'none'
+        """
+    )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS contacts (
@@ -1216,20 +1232,24 @@ def create_deal(data: dict[str, Any]) -> int:
                     (merged, now_iso(), lead_id),
                 )
         pid = upsert_product(conn, data["product"])
+        from app.product_labels import initial_deal_product_short_name
+
+        psn = initial_deal_product_short_name(conn, pid) or None
         ts = now_iso()
         qref = default_quote_ref(conn, cid, pid, data.get("quote_ref", ""))
         cur = conn.execute(
             """
             INSERT INTO deals (
-                lead_id, customer_id, product_id, po_number, quote_ref,
+                lead_id, customer_id, product_id, product_short_name, po_number, quote_ref,
                 quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
             """,
             (
                 lead_id,
                 cid,
                 pid,
+                psn,
                 data.get("po_number") or None,
                 qref,
                 data.get("quantity", "").strip(),
@@ -1289,6 +1309,7 @@ def update_deal_fields(
     ocean_freight_currency: str = "USD",
     commission_rate: str = "",
     fob_currency: str = "USD",
+    product_short_name: str = "",
 ) -> None:
     unit = (price_unit or "/MT").strip() or "/MT"
     qty_unit = normalize_quantity_unit(quantity_unit, quantity_unit_other)
@@ -1305,6 +1326,7 @@ def update_deal_fields(
     fob_cur = (fob_currency or freight_cur or "USD").strip().upper()
     if fob_cur not in ("INR", "USD"):
         fob_cur = "USD"
+    psn = (product_short_name or "").strip()
     shipping_vals = {
         "po_date": po_date.strip(),
         "packing": packing.strip(),
@@ -1318,6 +1340,19 @@ def update_deal_fields(
         "eta": eta.strip(),
     }
     with get_db() as conn:
+        if not psn or psn.lower() == "none":
+            row = conn.execute(
+                """
+                SELECT p.name, p.trade_name FROM deals d
+                JOIN products p ON p.id = d.product_id
+                WHERE d.id = ? AND d.deleted_at IS NULL
+                """,
+                (deal_id,),
+            ).fetchone()
+            if row:
+                from app.product_labels import product_row_document_label
+
+                psn = product_row_document_label(dict(row))
         conn.execute(
             """
             UPDATE deals SET
@@ -1332,6 +1367,7 @@ def update_deal_fields(
                 ocean_freight_amount = ?, ocean_freight_currency = ?,
                 fob_value = ?, fob_currency = ?,
                 commission_rate = ?, commission_amount = ?,
+                product_short_name = ?,
                 updated_at = ?
             WHERE id = ? AND deleted_at IS NULL
             """,
@@ -1366,6 +1402,7 @@ def update_deal_fields(
                 fob_cur,
                 commission_rate.strip(),
                 comm_amt,
+                psn or None,
                 now_iso(),
                 deal_id,
             ),
@@ -1897,7 +1934,9 @@ def list_deals_for_commission(
                d.commercial_total, d.insurance_amount, d.insurance_currency,
                d.ocean_freight_amount, d.ocean_freight_currency,
                d.fob_value, d.fob_currency, d.commission_rate, d.commission_amount,
-               c.name AS company, p.name AS product
+               c.name AS company, p.name AS product,
+               p.trade_name AS catalog_trade_name,
+               d.product_short_name
         FROM deals d
         JOIN customers c ON c.id = d.customer_id
         JOIN products p ON p.id = d.product_id
@@ -2135,6 +2174,9 @@ def log_update(data: dict[str, Any]) -> dict:
             if not product_name:
                 raise ValueError("Product required for new deal")
             pid = upsert_product(conn, product_name)
+            from app.product_labels import initial_deal_product_short_name
+
+            psn = initial_deal_product_short_name(conn, pid) or None
             lead = conn.execute(
                 "SELECT id, products_interested FROM leads WHERE customer_id = ?",
                 (cid,),
@@ -2164,15 +2206,16 @@ def log_update(data: dict[str, Any]) -> dict:
             cur = conn.execute(
                 """
                 INSERT INTO deals (
-                    lead_id, customer_id, product_id, po_number, quote_ref,
+                    lead_id, customer_id, product_id, product_short_name, po_number, quote_ref,
                     quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
                 """,
                 (
                     lead_id,
                     cid,
                     pid,
+                    psn,
                     comm["po_number"] or None,
                     qref,
                     comm["quantity"],
@@ -2249,7 +2292,8 @@ def get_deal_detail(deal_id: int) -> Optional[dict]:
     with get_db() as conn:
         deal = conn.execute(
             """
-            SELECT d.*, c.name AS company, p.name AS product
+            SELECT d.*, c.name AS company, p.name AS product,
+                   p.trade_name AS catalog_trade_name
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
             JOIN products p ON p.id = d.product_id
@@ -2372,6 +2416,9 @@ def _resolve_activity_link(
         if not deal_date:
             raise ValueError("Deal start date is required")
         pid = upsert_product(conn, product_name)
+        from app.product_labels import initial_deal_product_short_name
+
+        psn = initial_deal_product_short_name(conn, pid) or None
         lead = conn.execute(
             "SELECT id, products_interested FROM leads WHERE customer_id = ?",
             (customer_id,),
@@ -2401,15 +2448,16 @@ def _resolve_activity_link(
         cur = conn.execute(
             """
             INSERT INTO deals (
-                lead_id, customer_id, product_id, po_number, quote_ref,
+                lead_id, customer_id, product_id, product_short_name, po_number, quote_ref,
                 quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
             """,
             (
                 lead_id,
                 customer_id,
                 pid,
+                psn,
                 comm["po_number"] or None,
                 qref,
                 comm["quantity"],

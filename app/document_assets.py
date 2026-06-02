@@ -28,6 +28,12 @@ def authorized_signature_url() -> Optional[str]:
     return f"/generate/document-assets/authorized-signature?v={int(p.stat().st_mtime)}"
 
 
+def authorized_signature_file_uri() -> Optional[str]:
+    """file:// URI for WeasyPrint / server-side PDF rendering."""
+    p = signature_path()
+    return p.as_uri() if p else None
+
+
 def save_authorized_signature(content: bytes, filename: str) -> Path:
     ext = Path(filename or "").suffix.lower()
     if ext not in ALLOWED_SIGNATURE_EXT:

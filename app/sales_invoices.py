@@ -425,7 +425,9 @@ def _deal_to_si_line(d: dict) -> dict:
     qty_nums = re.findall(r"\d+\.?\d*", qty_raw.replace(",", ""))
     qty      = float(qty_nums[0]) if qty_nums else 0.0
     line = deepcopy(DEFAULT_SI["line_items"][0])
-    line["product_description"] = d.get("product") or ""
+    from app.product_labels import deal_document_product
+
+    line["product_description"] = deal_document_product(d)
     line["quantity"] = qty
     line["rate"]     = price or 0.0
     line["value"]    = round(price * qty, 2) if price and qty else 0.0
@@ -441,6 +443,7 @@ def create_si_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
         rows = conn.execute(
             f"""
             SELECT d.*, c.name AS company, p.name AS product,
+                   p.trade_name AS catalog_trade_name,
                    p.hs_code AS product_hs_code
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
@@ -468,7 +471,11 @@ def create_si_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
     si["delivery_address"]    = first.get("destination") or ""
 
     # Transaction description
-    products = list({dict(r).get("product") or "" for r in rows if dict(r).get("product")})
+    from app.product_labels import deal_document_product
+
+    products = list(
+        {deal_document_product(dict(r)) for r in rows if deal_document_product(dict(r))}
+    )
     companies = list({dict(r).get("company") or "" for r in rows if dict(r).get("company")})
     bl = first.get("gbl_invoice") or ""
     si["transaction_description"] = (

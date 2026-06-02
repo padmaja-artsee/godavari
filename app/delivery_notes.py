@@ -293,6 +293,7 @@ def create_dn_from_deal(deal_id: int) -> dict[str, Any] | None:
         row = conn.execute(
             """
             SELECT d.*, c.name AS company, p.name AS product,
+                   p.trade_name AS catalog_trade_name,
                    p.hs_code AS product_hs_code
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
@@ -318,7 +319,9 @@ def create_dn_from_deal(deal_id: int) -> dict[str, Any] | None:
     dn["delivery_address"]  = d.get("destination") or ""
 
     # Product
-    dn["product_name"]      = d.get("product") or ""
+    from app.product_labels import deal_document_product
+
+    dn["product_name"] = deal_document_product(d)
     dn["batch_number"]      = d.get("container_number") or ""
 
     # Quantity / weight from deal quantity if available

@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Commission Invoice</title>
+  <link rel="stylesheet" href="static/po_wysiwyg.css" />
+  <link rel="stylesheet" href="static/ci_template_us.css" />
+  <style>
+    @page { size: A4; margin: 12mm 14mm; }
+    body { margin: 0; background: #fff; color: #000; }
+    .po-page { box-shadow: none !important; border: none !important; max-width: none !important; }
+    .ci-invoice-page { page-break-after: always; }
+    .ci-notice-page { page-break-before: always; }
+    .no-print { display: none !important; }
+  </style>
+</head>
+<body>
+{% from "generate/commission_invoices/_ci_body.html" import ci_body %}
+{{ ci_body(ci, readonly=true) }}
+</body>
+</html>

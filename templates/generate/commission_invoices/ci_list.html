@@ -178,6 +178,7 @@
           <form method="post" action="/generate/commission-invoices/{{ row.id }}/duplicate" style="display:inline">
             <button type="submit" class="link-btn">Duplicate</button>
           </form>
+          <a class="link" href="/generate/commission-invoices/{{ row.id }}/export.pdf">PDF</a>
           <a class="link" href="/generate/commission-invoices/{{ row.id }}/export.xlsx">XLSX</a>
           <a class="link" href="/generate/commission-invoices/{{ row.id }}/print">Print</a>
           <form method="post" action="/generate/commission-invoices/{{ row.id }}/delete" style="display:inline"

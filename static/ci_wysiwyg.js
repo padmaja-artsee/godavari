@@ -52,12 +52,14 @@
     const cif      = _float(row.querySelector(".ci-cif")    && row.querySelector(".ci-cif").value);
     const rate     = _float(row.querySelector(".ci-rate")   && row.querySelector(".ci-rate").value);
 
+    const fobHidden = row.querySelector(".ci-fob");
+    const fobFromDeal = _float(fobHidden && fobHidden.value);
     const unit = uprice || cif;
-    const fob = unit ? qty * unit : _float(row.querySelector(".ci-fob") && row.querySelector(".ci-fob").value);
+    // FOB column is total $ from deal (Value − insurance − freight), not qty × CIF/MT
+    const fob = unit ? qty * unit : fobFromDeal;
     const fobOut = row.querySelector(".ci-fob-out");
     if (fobOut) fobOut.textContent = "$" + _num(fob);
-    const fobHidden = row.querySelector(".ci-fob");
-    if (fobHidden) fobHidden.value = fob.toFixed(2);
+    if (fobHidden && unit) fobHidden.value = fob.toFixed(2);
 
     // commission = fob × rate / 100
     const comm = fob * rate / 100;
@@ -116,14 +118,30 @@
     return clone;
   }
 
+  function syncNoticeContact() {
+    const src = document.querySelector('.ci-invoice-page input[name="contact_person"]');
+    const dst = document.querySelector(".ci-notice-contact-display");
+    if (!src || !dst) return;
+    dst.textContent = (src.value || "").trim() || "Padmaja Ganapathy";
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     bindDatePickers(document);
+
+    const contactInp = document.querySelector('.ci-invoice-page input[name="contact_person"]');
+    if (contactInp) {
+      contactInp.addEventListener("input", syncNoticeContact);
+      syncNoticeContact();
+    }
 
     const tbody  = document.getElementById("ci-lines-body");
     const addBtn = document.getElementById("ci-add-line");
     const vatInp = document.querySelector(".ci-vat-pct");
 
     if (!tbody) return;
+
+    // Print / preview: line values are server-rendered text, not inputs — do not recalc to $0
+    if (!tbody.querySelector("input.ci-qty")) return;
 
     // Bind existing rows
     tbody.querySelectorAll(".ci-line-row").forEach(bindRow);

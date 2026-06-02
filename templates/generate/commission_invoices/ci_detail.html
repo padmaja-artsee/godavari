@@ -5,7 +5,7 @@
 <link rel="stylesheet" href="/static/generate.css" />
 <link rel="stylesheet" href="/static/po_wysiwyg.css" />
 <link rel="stylesheet" href="/static/ci_wysiwyg.css?v=2.4" />
-<link rel="stylesheet" href="/static/ci_template_us.css?v=2.9" />
+<link rel="stylesheet" href="/static/ci_template_us.css?v=3.0" />
 {% endblock %}
 {% block content %}
 <div class="page-header no-print">
@@ -21,6 +21,7 @@
     <form method="post" action="/generate/commission-invoices/{{ ci.id }}/duplicate" style="display:inline">
       <button type="submit" class="btn btn-ghost">Duplicate</button>
     </form>
+    <a href="/generate/commission-invoices/{{ ci.id }}/export.pdf" class="btn btn-primary">Download PDF</a>
     <a href="/generate/commission-invoices/{{ ci.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
     <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost">Print</a>
     <form method="post" action="/generate/commission-invoices/{{ ci.id }}/delete" style="display:inline"

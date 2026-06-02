@@ -15,8 +15,10 @@ from openpyxl.styles import PatternFill
 from app.commission_invoices import _float, dollars_in_words, safe_ci_filename
 from app.database import get_data_dir
 from app.document_assets import signature_path
+from app.po_exports import export_po_pdf_html
 
 XLSX_DIR = get_data_dir() / "exports" / "commission_invoices" / "xlsx"
+PDF_DIR = get_data_dir() / "exports" / "commission_invoices" / "pdf"
 
 _MISSING_FILL = PatternFill("solid", fgColor="FFFDE7")  # light yellow highlight
 
@@ -215,8 +217,16 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
             _mark_missing(ws, f"C{nr}", None, "⚠ NEEDS INPUT")
         ws.cell(nr, 4, f"=C{_DATA_START + i}")
         ws.cell(nr, 5, rate_dec or None)
-        ship = _excel_date(ci.get("shipment_date") or "") if i == 0 else f"=F{notice_row}"
-        ws.cell(nr, 6, ship)
+        line_ship = _excel_date(li.get("shipment_date") or "")
+        if not line_ship and i == 0:
+            line_ship = _excel_date(ci.get("shipment_date") or "")
+        if line_ship:
+            ws.cell(nr, 6, line_ship)
+        elif i == 0:
+            ws.cell(nr, 6, "⚠ NEEDS INPUT")
+            ws.cell(nr, 6).fill = _MISSING_FILL
+        else:
+            ws.cell(nr, 6, f"=F{notice_row}")
 
     # Document title product list in B2 area — template uses static; update if product known
     if products:
@@ -231,6 +241,17 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
     _add_signature_image(ws, f"D{sig_row}")
 
     return wb
+
+
+def export_ci_pdf(ci: dict[str, Any], html: str) -> tuple[bytes, str] | None:
+    result = export_po_pdf_html(html)
+    if not result:
+        return None
+    pdf_bytes, _ = result
+    PDF_DIR.mkdir(parents=True, exist_ok=True)
+    fname = f"CI_{safe_ci_filename(ci.get('invoice_number', 'CI'))}.pdf"
+    (PDF_DIR / fname).write_bytes(pdf_bytes)
+    return pdf_bytes, fname
 
 
 def export_ci_xlsx(ci: dict[str, Any]) -> tuple[bytes, str]:

@@ -11,7 +11,8 @@ from copy import deepcopy
 from datetime import date
 from typing import Any
 
-from app.database import get_db, now_iso
+from app.database import compute_commission_amount, compute_fob_value, get_db, now_iso
+from app.product_labels import deal_document_product
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -139,6 +140,7 @@ DEFAULT_CI: dict[str, Any] = {
             "fob_value":           0.0,
             "commission_rate":     3.0,
             "commission_value":    0.0,
+            "shipment_date":       "",
         }
     ],
 }
@@ -147,17 +149,22 @@ DEFAULT_CI: dict[str, Any] = {
 # ── calculations ─────────────────────────────────────────────────────────────
 
 def recalc_line(line: dict[str, Any]) -> dict[str, Any]:
+    """Recalculate commission from FOB; only derive FOB from qty×price when FOB not set."""
     line = dict(line)
-    qty        = _float(line.get("quantity"))
+    qty = _float(line.get("quantity"))
     unit_price = _float(line.get("unit_price"))
-    cif        = _float(line.get("cif_price"))
-    if unit_price:
-        line["fob_value"] = round(qty * unit_price, 2)
-    elif cif:
-        line["fob_value"] = round(qty * cif, 2)
-    fob  = _float(line.get("fob_value"))
+    cif = _float(line.get("cif_price"))
+    fob = _float(line.get("fob_value"))
+    if not fob:
+        if unit_price and qty:
+            fob = round(qty * unit_price, 2)
+        elif cif and qty:
+            fob = round(qty * cif, 2)
+        line["fob_value"] = fob
     rate = _float(line.get("commission_rate"))
-    line["commission_value"] = round(fob * rate / 100, 2) if fob and rate else 0.0
+    comm = _float(line.get("commission_value"))
+    if not comm and fob and rate:
+        line["commission_value"] = round(fob * rate / 100, 2)
     return line
 
 
@@ -204,6 +211,7 @@ def _upgrade_ci_extra_columns(conn) -> None:
         ("unit_price", "REAL DEFAULT 0"),
         ("end_customer", "TEXT DEFAULT ''"),
         ("cif_price", "REAL DEFAULT 0"),
+        ("shipment_date", "TEXT DEFAULT ''"),
     ]:
         if col not in li_cols:
             conn.execute(f"ALTER TABLE commission_invoice_line_items ADD COLUMN {col} {ddl}")
@@ -219,7 +227,7 @@ def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
 
     products = form_getlist(form, "product_description")
     end_customers = form_getlist(form, "end_customer")
-    text_fields    = ["gbl_invoice_number"]
+    text_fields    = ["gbl_invoice_number", "shipment_date"]
     numeric_fields = ["quantity", "unit_price", "cif_price", "fob_value", "commission_rate"]
 
     line_items: list[dict[str, Any]] = []
@@ -365,8 +373,9 @@ def _save_ci_lines(conn, ci_id: int, line_items: list[dict[str, Any]]) -> None:
             """
             INSERT INTO commission_invoice_line_items (
                 commission_invoice_id, end_customer, product_description, gbl_invoice_number,
-                quantity, unit_price, cif_price, fob_value, commission_rate, commission_value, sort_order
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                quantity, unit_price, cif_price, fob_value, commission_rate, commission_value,
+                shipment_date, sort_order
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 ci_id,
@@ -375,6 +384,7 @@ def _save_ci_lines(conn, ci_id: int, line_items: list[dict[str, Any]]) -> None:
                 line.get("quantity"), line.get("unit_price"), line.get("cif_price"),
                 line.get("fob_value"),
                 line.get("commission_rate"), line.get("commission_value"),
+                (line.get("shipment_date") or "")[:10],
                 sort_order,
             ),
         )
@@ -517,21 +527,49 @@ def duplicate_commission_invoice(ci_id: int) -> int | None:
     )
 
 
+def _deal_fob_value(d: dict) -> float:
+    """FOB total from deal commercial fields (not qty × price / Value)."""
+    fob = _float(d.get("fob_value"))
+    if fob:
+        return fob
+    commercial = (d.get("commercial_total") or d.get("value") or "").strip()
+    if commercial:
+        computed = compute_fob_value(
+            commercial,
+            d.get("insurance_amount") or "",
+            d.get("ocean_freight_amount") or "",
+        )
+        return _float(computed)
+    return 0.0
+
+
 def _deal_to_ci_line(d: dict) -> dict:
     """Build a single CI line item from a deal row dict."""
-    price    = _float(d.get("price"))
-    qty_raw  = d.get("quantity") or ""
+    price = _float(d.get("price"))
+    qty_raw = d.get("quantity") or ""
     qty_nums = re.findall(r"\d+\.?\d*", qty_raw.replace(",", ""))
-    qty      = float(qty_nums[0]) if qty_nums else 0.0
+    qty = float(qty_nums[0]) if qty_nums else 0.0
     line = deepcopy(DEFAULT_CI["line_items"][0])
-    line["end_customer"]        = d.get("company") or ""
-    line["product_description"] = d.get("product") or ""
-    line["gbl_invoice_number"]  = d.get("gbl_invoice") or ""
-    line["quantity"]    = qty
-    line["unit_price"]  = price or 0.0
-    line["cif_price"]   = price or 0.0
-    line["fob_value"]   = round(price * qty, 2) if price and qty else 0.0
-    return recalc_line(line)
+    line["end_customer"] = d.get("company") or ""
+    line["product_description"] = deal_document_product(d)
+    line["gbl_invoice_number"] = d.get("gbl_invoice") or ""
+    line["quantity"] = qty
+    line["unit_price"] = price or 0.0
+    line["cif_price"] = price or 0.0
+    line["fob_value"] = _deal_fob_value(d)
+    line["commission_rate"] = _float(d.get("commission_rate")) or 3.0
+    comm = _float(d.get("commission_amount"))
+    if comm:
+        line["commission_value"] = comm
+    else:
+        computed = compute_commission_amount(
+            str(line["fob_value"]) if line["fob_value"] else "",
+            str(line["commission_rate"]),
+        )
+        line["commission_value"] = _float(computed)
+    etd = (d.get("etd_india") or d.get("shipped_date") or d.get("gbl_invoice_date") or "").strip()
+    line["shipment_date"] = etd[:10] if etd else ""
+    return line
 
 
 def create_ci_from_deal(deal_id: int) -> dict[str, Any] | None:
@@ -550,7 +588,8 @@ def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
     with get_db() as conn:
         rows = conn.execute(
             f"""
-            SELECT d.*, c.name AS company, p.name AS product
+            SELECT d.*, c.name AS company, p.name AS product,
+                   p.trade_name AS catalog_trade_name
             FROM deals d
             JOIN customers c ON c.id = d.customer_id
             JOIN products p  ON p.id = d.product_id
@@ -572,17 +611,18 @@ def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
         or ci["invoice_date"]
     )[:10]
     ci["notice_date"] = ci["invoice_date"]
-    ci["invoice_number"] = first.get("gbl_invoice") or ""
+    # GBInc invoice # is entered on the CI (may span multiple deals); not copied from deal.
     ci["customer_order_no"] = first.get("po_number") or ""
     ci["delivery_port"] = first.get("destination") or ""
-    ci["shipment_date"] = (
-        first.get("shipped_date") or first.get("etd_india") or first.get("gbl_invoice_date") or ""
-    )[:10]
+    first_etd = (first.get("etd_india") or first.get("shipped_date") or first.get("gbl_invoice_date") or "")[:10]
+    ci["shipment_date"] = first_etd
     ci["container_numbers"] = first.get("container_number") or ""
     ci["port_of_loading"] = first.get("etd_india") and "India" or (ci.get("port_of_loading") or "")
 
     companies = list(dict.fromkeys(dict(r)["company"] for r in rows))
-    products  = list(dict.fromkeys(dict(r)["product"]  for r in rows))
+    products = list(
+        dict.fromkeys(deal_document_product(dict(r)) for r in rows if deal_document_product(dict(r)))
+    )
     ci["transaction_description"] = (
         f"Commission for supply of {', '.join(products)} to {', '.join(companies)}"
     )
@@ -592,9 +632,9 @@ def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
     ci["amount_in_words"] = dollars_in_words(totals["total_commission"])
 
     ci["_field_hints"] = {
-        "invoice_number": "deal" if first.get("gbl_invoice") else "missing",
+        "invoice_number": "missing",
         "delivery_port":  "deal" if first.get("destination") else "missing",
-        "shipment_date":  "deal" if ci["shipment_date"] else "missing",
+        "shipment_date":  "deal" if first.get("etd_india") else "missing",
         "cif_price":      "deal" if _float(first.get("price")) else "missing",
     }
     return ci
