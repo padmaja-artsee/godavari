@@ -91,34 +91,32 @@ cargo install tauri-cli --version "^2.0"
 # npm install -g @tauri-apps/cli
 ```
 
-### Step 1 — Build the Python binary
+### One-command build (recommended)
 
 ```bash
 cd /path/to/Leads
-pyinstaller leads.spec
-# Output: dist/leads  (Mac/Linux)  or  dist/leads.exe  (Windows)
+./scripts/kill_godavari_leads.sh   # only if apps are stuck / port 8000 busy
+./build_app.sh
 ```
 
-### Step 2 — Copy the binary into the Tauri bundle location
+Output: **`GodavariLeads_1.1.0_<arch>.dmg`** — drag **GodavariLeads.app** to Applications.
+
+**Do not distribute** `dist/GodavariLeads.app` from PyInstaller alone — it is missing `Contents/Resources/leads-bin/` and will white-screen when used with Tauri.
+
+The build script:
+
+1. PyInstaller → `dist/leads/`
+2. `cargo tauri build`
+3. Injects Python into `Contents/Resources/leads-bin/`
+4. Smoke-tests `http://127.0.0.1:8000/` before creating the DMG
+
+### If the app white-screens or spawns endlessly
 
 ```bash
-# Mac / Linux
-cp dist/leads src-tauri/
-
-# Windows
-copy dist\leads.exe src-tauri\
+./scripts/kill_godavari_leads.sh
 ```
 
-### Step 3 — Build the Tauri app
-
-```bash
-cd src-tauri
-cargo tauri build
-# Output: src-tauri/target/release/bundle/
-#   Mac:     Leads.app  +  Leads_1.0.0_aarch64.dmg
-#   Windows: Leads_1.0.0_x64-setup.exe
-#   Linux:   leads_1.0.0_amd64.AppImage
-```
+Check log: `~/Library/Application Support/GodavariLeads/leads.log`
 
 ### Development mode (no packaging)
 

@@ -356,9 +356,12 @@ def _seed_payment_accounts(conn) -> None:
 def _run_migrations(conn) -> None:
     """Idempotent — safe to run on every startup.
     Inserts any line items / accounts that were added after initial release."""
-    fy_cols = {r[1] for r in conn.execute("PRAGMA table_info(fy_archive)").fetchall()}
-    if "opening_balance" not in fy_cols:
-        conn.execute("ALTER TABLE fy_archive ADD COLUMN opening_balance REAL DEFAULT 0")
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fy_archive'"
+    ).fetchone():
+        fy_cols = {r[1] for r in conn.execute("PRAGMA table_info(fy_archive)").fetchall()}
+        if "opening_balance" not in fy_cols:
+            conn.execute("ALTER TABLE fy_archive ADD COLUMN opening_balance REAL DEFAULT 0")
 
     conn.execute(
         "UPDATE line_items SET name='Balance' WHERE name='Net (Income - Expenses)' AND section='totals'"

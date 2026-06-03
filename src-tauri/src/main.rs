@@ -3,7 +3,7 @@
 
 use std::net::TcpStream;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Child, Command};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -76,24 +76,38 @@ fn find_backend() -> Option<PathBuf> {
     let macos_dir = exe.parent()?;        // .../Contents/MacOS
     let contents = macos_dir.parent()?;   // .../Contents
 
+    let bin_name = if cfg!(target_os = "windows") { "leads.exe" } else { "leads" };
+
     // Primary: Resources/leads-bin/leads  (build_app.sh injects it here)
-    let in_resources = contents
-        .join("Resources")
-        .join("leads-bin")
-        .join(if cfg!(target_os = "windows") { "leads.exe" } else { "leads" });
+    let in_resources = contents.join("Resources").join("leads-bin").join(bin_name);
     if in_resources.exists() {
         return Some(in_resources);
     }
 
-    // Fallback: next to the exe (dev / non-bundle layout)
-    let next_to_exe = macos_dir
-        .join("leads-bin")
-        .join(if cfg!(target_os = "windows") { "leads.exe" } else { "leads" });
+    // PyInstaller BUNDLE puts the binary at Contents/MacOS/leads
+    let in_macos = macos_dir.join(bin_name);
+    if in_macos.exists() {
+        return Some(in_macos);
+    }
+
+    // Fallback: MacOS/leads-bin/leads (dev / alternate layout)
+    let next_to_exe = macos_dir.join("leads-bin").join(bin_name);
     if next_to_exe.exists() {
         return Some(next_to_exe);
     }
 
     None
+}
+
+fn server_up(port: u16) -> bool {
+    TcpStream::connect(format!("127.0.0.1:{}", port)).is_ok()
+}
+
+fn run_tauri() {
+    tauri::Builder::default()
+        .plugin(tauri_plugin_shell::init())
+        .run(tauri::generate_context!())
+        .expect("error running Tauri application");
 }
 
 fn main() {
@@ -103,46 +117,64 @@ fn main() {
     // In dev mode `cargo tauri dev` uses beforeDevCommand instead.
     #[cfg(not(debug_assertions))]
     {
-        // Kill any stale instance and wait until the port is confirmed free.
-        // This prevents "Address already in use" when the app is relaunched quickly.
+        let mut backend_child: Option<Child> = None;
+
+        // Another window already started the server — attach UI only.
+        if server_up(PORT) {
+            run_tauri();
+            return;
+        }
+
         kill_port(PORT);
         wait_for_port_free(PORT, 15);
 
-        if let Some(backend) = find_backend() {
-            let mut cmd = Command::new(&backend);
-            // Tell the Python launcher not to open the browser — Tauri owns the window.
-            cmd.env("LEADS_NO_BROWSER", "1");
+        if server_up(PORT) {
+            run_tauri();
+            return;
+        }
 
-            match cmd.spawn() {
-                Ok(mut child) => {
-                    // Poll until the server is ready (up to 30 s).
-                    if !wait_for_server(PORT, 30) {
-                        eprintln!("Warning: Python backend did not respond within 30s on port {}", PORT);
+        let Some(backend) = find_backend() else {
+            eprintln!(
+                "ERROR: Python backend not found in app bundle.\n\
+                 Expected Contents/Resources/leads-bin/leads (run ./build_app.sh).\n\
+                 Log: ~/Library/Application Support/GodavariLeads/leads.log"
+            );
+            std::process::exit(1);
+        };
+
+        let mut cmd = Command::new(&backend);
+        cmd.env("LEADS_NO_BROWSER", "1");
+
+        match cmd.spawn() {
+            Ok(child) => {
+                backend_child = Some(child);
+                if !wait_for_server(PORT, 45) {
+                    eprintln!(
+                        "ERROR: Python backend did not start on port {} within 45s.\n\
+                         See ~/Library/Application Support/GodavariLeads/leads.log",
+                        PORT
+                    );
+                    if let Some(mut c) = backend_child.take() {
+                        let _ = c.kill();
+                        let _ = c.wait();
                     }
-                    // When Tauri exits, kill the child so it doesn't become
-                    // an orphan that blocks the port on next launch.
-                    tauri::Builder::default()
-                        .plugin(tauri_plugin_shell::init())
-                        .run(tauri::generate_context!())
-                        .expect("error running Tauri application");
-                    // Kill Python backend and wait for it to fully exit so the
-                    // port is released before the OS reports the app as closed.
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return;
-                }
-                Err(e) => {
-                    eprintln!("Failed to start Python backend at {:?}: {}", backend, e);
+                    std::process::exit(1);
                 }
             }
-        } else {
-            eprintln!("Python backend binary not found — tried Resources/leads-bin/leads");
-            thread::sleep(Duration::from_secs(2));
+            Err(e) => {
+                eprintln!("ERROR: Failed to start Python backend at {:?}: {}", backend, e);
+                std::process::exit(1);
+            }
         }
+
+        run_tauri();
+
+        if let Some(mut child) = backend_child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+        return;
     }
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .run(tauri::generate_context!())
-        .expect("error running Tauri application");
+    run_tauri();
 }

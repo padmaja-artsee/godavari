@@ -107,6 +107,22 @@ def _setup_logging(log_dir: str) -> None:
         pass
 
 
+def _acquire_single_instance(lock_dir: str) -> None:
+    """Exit quietly if another desktop instance already holds the lock."""
+    if os.environ.get("LEADS_NO_BROWSER") != "1":
+        return
+    lock_path = os.path.join(lock_dir, ".leads_instance.lock")
+    os.makedirs(lock_dir, exist_ok=True)
+    import fcntl
+
+    global _INSTANCE_LOCK_FD  # noqa: PLW0603
+    _INSTANCE_LOCK_FD = open(lock_path, "w")
+    try:
+        fcntl.flock(_INSTANCE_LOCK_FD, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        sys.exit(0)
+
+
 def main() -> None:
     # When frozen by PyInstaller sys._MEIPASS is set; resolve the app root.
     if getattr(sys, "frozen", False):
@@ -134,6 +150,7 @@ def main() -> None:
 
         # Write errors to a log file so they're visible without a console.
         _setup_logging(user_dir)
+        _acquire_single_instance(user_dir)
 
         # Clean up stale SQLite WAL/SHM files that can leave DBs read-only.
         # A -wal file left behind by a crashed previous session prevents
@@ -154,7 +171,23 @@ def main() -> None:
         here = os.path.dirname(os.path.abspath(__file__))
         sys.path.insert(0, here)
 
-    port = _find_free_port(PORT)
+    # Tauri always loads http://localhost:8000 — never bind a different port in desktop mode.
+    if os.environ.get("LEADS_NO_BROWSER") == "1":
+        port = PORT
+        for attempt in range(6):
+            _kill_port(PORT)
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind((HOST, PORT))
+                    break
+                except OSError:
+                    if attempt == 5:
+                        raise RuntimeError(
+                            f"Port {PORT} is still in use; quit other Godavari Leads instances and retry."
+                        ) from None
+                    time.sleep(0.5)
+    else:
+        port = _find_free_port(PORT)
 
     # Finance is now mounted at /finance inside the Leads app (Option B).
     # No separate Finance server needed.
