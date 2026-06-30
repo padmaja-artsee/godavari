@@ -205,17 +205,16 @@
 
     <div class="ci-seller-meta">
       <div class="ci-seller-col">
-        <p class="ci-seller-name">Godavari Biorefineries Inc</p>
-        <p class="ci-seller-addr">103 Carnegie Center Dr, Suite 300</p>
-        <p class="ci-seller-addr">Princeton, NJ 08540, USA</p>
+        <p class="ci-seller-name">{{ ci.company_name or 'Godavari Biorefineries Inc' }}</p>
+        <p class="ci-seller-addr">{{ ci.notice_seller_address_1 or '103 Carnegie Center Dr, Suite 300' }}</p>
+        <p class="ci-seller-addr">{{ ci.notice_seller_address_2 or 'Princeton, NJ 08540, USA' }}</p>
       </div>
       <div class="ci-meta-col">
         <div class="ci-meta-line">
           <span class="ci-meta-label">Date:</span>
-          {% if readonly and not editable_dates %}
-          <span class="ci-meta-val">{{ notice_date_val|ci_date }}</span>
-          {% else %}
-          {{ ci_date_input('notice_date', notice_date_val, 'ci-field-yellow', dates_form_id) }}
+          <span class="ci-meta-val ci-notice-date-display">{{ notice_date_val|ci_date }}</span>
+          {% if not readonly or editable_dates %}
+          <input type="hidden" name="notice_date" class="ci-notice-date-hidden" value="{{ notice_date_val or ci.invoice_date or '' }}" />
           {% endif %}
         </div>
       </div>
@@ -251,13 +250,6 @@
       </tr>
     </table>
 
-    {% if not readonly %}
-    <div class="ci-notice-ship-edit no-print">
-      <span class="ci-notice-ship-label">Shipment Date {{ ci_hint(ci, 'shipment_date', not readonly) }}</span>
-      {{ ci_date_input('shipment_date', ci.shipment_date, 'ci-field-yellow') }}
-    </div>
-    {% endif %}
-
     <table class="ci-table ci-notice-table">
       <thead>
         <tr>
@@ -277,9 +269,10 @@
           <td class="ci-num">{% if readonly %}{% if line.cif_price %}${{ line.cif_price|money }}{% else %}—{% endif %}{% else %}
             <input class="ci-cell-num ci-cif ci-field-yellow" name="cif_price" value="{{ line.cif_price or '' }}" />{% endif %}</td>
           <td class="ci-num">{{ line.quantity|num }}</td>
-          <td class="ci-num">{{ line.commission_rate|num }}%</td>
-          <td class="ci-num">{% if readonly %}{{ (line.shipment_date or ci.shipment_date)|ci_date }}{% else %}
-            {{ ci_date_input('shipment_date', line.shipment_date or ci.shipment_date, 'ci-field-yellow') }}{% endif %}</td>
+          <td class="ci-num">{% if readonly %}{{ line.commission_rate|num }}%{% else %}
+            <input class="ci-cell-num ci-notice-rate ci-field-yellow" value="{{ line.commission_rate or 3 }}" data-line-index="{{ loop.index0 }}" />{% endif %}</td>
+          <td class="ci-num ci-ship-date-cell">{% if readonly and not editable_dates %}{{ (line.shipment_date or ci.shipment_date)|ci_date }}{% else %}
+            {{ ci_date_input('shipment_date', line.shipment_date or ci.shipment_date, 'ci-field-yellow ci-line-ship-date', dates_form_id) }}{% endif %}</td>
         </tr>
         {% endfor %}
         {% set notice_pad = (5 if readonly else 7) - (ci.line_items|length) %}
@@ -314,6 +307,7 @@
   </div>
 
   <input type="hidden" name="document_title" value="{{ ci.document_title or 'Commercial Invoice' }}" />
+  <input type="hidden" name="variant" value="{{ ci.variant or 'gbinc' }}" />
   <input type="hidden" name="vat_percent" value="0" />
   <input type="hidden" name="qty_unit" value="{{ ci.qty_unit or 'MT' }}" />
   <input type="hidden" name="fob_currency" value="{{ ci.fob_currency or 'USD' }}" />

@@ -23,13 +23,21 @@ GENERATE_DOCUMENTS = [
         "create_url": "/generate/purchase-orders/new",
         "list_url": "/generate/purchase-orders",
     },
-    # ── Commission Invoice ──────────────────────────────────────────────────
+    # ── Commission Invoice (GBInc → GBL) ────────────────────────────────────
     {
         "key": "commission_invoice",
         "title": "Commission Invoice",
         "description": "Invoice Godavari Biorefineries Ltd for commission on product sales. Calculates commission from FOB value and rate. Export to Excel or print.",
         "create_url": "/generate/commission-invoices/new",
         "list_url": "/generate/commission-invoices",
+    },
+    # ── GBBV Commission Invoice (GBInc → GBBV BV) ─────────────────────────
+    {
+        "key": "gbbv_commission_invoice",
+        "title": "GBBV Commission Invoice",
+        "description": "Same US commission invoice layout billed to Godavari Biorefineries BV (Netherlands). Prefill from deals, export Excel/PDF, print locally.",
+        "create_url": "/generate/gbbv-commission-invoices/new",
+        "list_url": "/generate/gbbv-commission-invoices",
     },
     # ── Commercial (Sales) Invoice ──────────────────────────────────────────
     {

@@ -7,6 +7,7 @@ A local web dashboard for managing sales leads — replaces spreadsheet workflow
 ```bash
 cd /Users/padmajaganapathy/Documents/Cursor/Leads
 python3 -m pip install -r requirements.txt
+python3 -m playwright install chromium   # one-time: required for Download PDF layout
 python3 run.py
 ```
 

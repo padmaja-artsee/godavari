@@ -61,6 +61,10 @@ a = Analysis(
         "app.commission_invoices",
         "app.ci_consolidated",
         "app.ci_exports",
+        "app.ci_routes",
+        "app.pdf_render",
+        "app.jinja_compat",
+        "app.document_assets",
         "app.sales_invoices",
         "app.si_exports",
         "app.delivery_notes",
@@ -82,12 +86,18 @@ a = Analysis(
     ],
     hookspath=[],
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "scipy", "numpy", "pandas", "test", "unittest"],
+    excludes=[
+        "tkinter", "matplotlib", "scipy", "numpy", "pandas", "test", "unittest",
+        "pkg_resources", "setuptools",
+    ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
+
+# pkg_resources run-time hook crashes in one-folder builds (InvalidVersion on _internal paths).
+a.scripts = [s for s in a.scripts if s[0] != "pyi_rth_pkgres"]
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)  # noqa: F821
 

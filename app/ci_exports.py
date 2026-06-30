@@ -4,6 +4,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import sys
 from copy import copy
 from datetime import date, datetime
 from pathlib import Path
@@ -12,7 +13,13 @@ from typing import Any
 import openpyxl
 from openpyxl.styles import PatternFill
 
-from app.commission_invoices import _float, dollars_in_words, safe_ci_filename
+from app.commission_invoices import (
+    VARIANT_GBINC,
+    _float,
+    dollars_in_words,
+    get_ci_variant_meta,
+    safe_ci_filename,
+)
 from app.database import get_data_dir
 from app.document_assets import signature_path
 from app.po_exports import export_po_pdf_html
@@ -28,13 +35,15 @@ _WORDS_ROW = 27
 _NOTICE_DATA = 69
 
 
-def _template_path() -> Path:
+def _template_path(variant: str = VARIANT_GBINC) -> Path:
+    meta = get_ci_variant_meta(variant)
+    filename = meta["template_file"]
     bundle = os.environ.get("LEADS_BUNDLE_BASE")
     if bundle:
-        p = Path(bundle) / "app" / "assets" / "commission_invoice_template.xlsx"
+        p = Path(bundle) / "app" / "assets" / filename
         if p.exists():
             return p
-    return Path(__file__).resolve().parent / "assets" / "commission_invoice_template.xlsx"
+    return Path(__file__).resolve().parent / "assets" / filename
 
 
 def _excel_date(val: str) -> datetime | str:
@@ -95,7 +104,9 @@ def _add_signature_image(ws, anchor: str) -> None:
 
 
 def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
-    path = _template_path()
+    variant = ci.get("variant") or VARIANT_GBINC
+    meta = get_ci_variant_meta(variant)
+    path = _template_path(variant)
     if not path.exists():
         raise FileNotFoundError(f"Commission invoice template not found: {path}")
 
@@ -103,6 +114,12 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
     ws = wb.active
     safe_title = re.sub(r'[\\/*?:\[\]]', "-", ci.get("invoice_number") or "Commission")[:31]
     ws.title = safe_title or "Commission"
+
+    # Bill-to (customer) block
+    ws["B9"] = ci.get("bill_to_name") or meta["bill_to_label"]
+    ws["B10"] = ci.get("bill_to_address_1") or ""
+    ws["B11"] = ci.get("bill_to_address_2") or ""
+    ws["B12"] = ci.get("bill_to_address_3") or ""
 
     lines = ci.get("line_items") or [{}]
     n = len(lines)
@@ -172,8 +189,8 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
         _float(li.get("fob_value")) * _rate_decimal(li.get("commission_rate"))
     ) for li in lines), 2)
 
-    # Amount in words + total formulas
-    words = (ci.get("amount_in_words") or "").strip() or dollars_in_words(total_comm)
+    # Amount in words + total formulas (always derive from computed total)
+    words = dollars_in_words(total_comm)
     ws.cell(words_row, 1, words)
     ws.cell(words_row, 6, f'=IF(SUM(F{_DATA_START}:F{last_data})>0,SUM(F{_DATA_START}:F{last_data}),"")')
     ws.cell(total_row, 6, f"=F{words_row}")
@@ -184,6 +201,9 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
     delivery_row = 66 + extra
     notice_date = _excel_date(ci.get("notice_date") or ci.get("invoice_date") or "")
     ws.cell(notice_seller_row, 6, notice_date)
+    ws.cell(notice_seller_row, 1, ci.get("company_name") or "Godavari Biorefineries Inc")
+    ws.cell(notice_seller_row + 1, 1, meta["notice_seller_address_1"])
+    ws.cell(notice_seller_row + 2, 1, meta["notice_seller_address_2"])
     first_end = (lines[0].get("end_customer") or "").strip() if lines else ""
     ws.cell(notice_customer_row, 1, first_end or "⚠ NEEDS INPUT")
     if not first_end:
@@ -231,7 +251,7 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
     # Document title product list in B2 area — template uses static; update if product known
     if products:
         prod_label = products[0] if len(products) == 1 else ", ".join(products[:3])
-        ws["B2"] = f"GBINC COMMISSION TOWARDS SUPPLY OF {prod_label.upper()}"
+        ws["B2"] = f"{meta['excel_prefix']} COMMISSION TOWARDS SUPPLY OF {prod_label.upper()}"
 
     # Drop embedded images (broken refs break openpyxl save)
     if hasattr(ws, "_images"):
@@ -243,20 +263,45 @@ def build_ci_workbook(ci: dict[str, Any]) -> openpyxl.Workbook:
     return wb
 
 
-def export_ci_pdf(ci: dict[str, Any], html: str) -> tuple[bytes, str] | None:
+def _ci_pdf_bytes(ci: dict[str, Any], html: str) -> tuple[bytes, str] | None:
+    """Build commission invoice PDF — Excel layout on Mac, HTML render elsewhere."""
+    from app.pdf_render import is_packaged_app, render_html_to_pdf, xlsx_bytes_to_pdf_mac
+
+    # Packaged desktop app: Excel PDF matches the template (Playwright not bundled).
+    if is_packaged_app() or sys.platform == "darwin":
+        buf = io.BytesIO()
+        build_ci_workbook(ci).save(buf)
+        pdf = xlsx_bytes_to_pdf_mac(buf.getvalue())
+        if pdf:
+            return pdf, "excel"
+
+    pdf = render_html_to_pdf(html, base=Path(__file__).resolve().parent.parent)
+    if pdf:
+        return pdf, "playwright"
+
     result = export_po_pdf_html(html)
+    if result:
+        return result[0], result[1]
+
+    return None
+
+
+def export_ci_pdf(ci: dict[str, Any], html: str) -> tuple[bytes, str] | None:
+    result = _ci_pdf_bytes(ci, html)
     if not result:
         return None
     pdf_bytes, _ = result
     PDF_DIR.mkdir(parents=True, exist_ok=True)
-    fname = f"CI_{safe_ci_filename(ci.get('invoice_number', 'CI'))}.pdf"
+    prefix = get_ci_variant_meta(ci.get("variant")).get("excel_prefix", "CI")
+    fname = f"CI_{prefix}_{safe_ci_filename(ci.get('invoice_number', 'CI'))}.pdf"
     (PDF_DIR / fname).write_bytes(pdf_bytes)
     return pdf_bytes, fname
 
 
 def export_ci_xlsx(ci: dict[str, Any]) -> tuple[bytes, str]:
     XLSX_DIR.mkdir(parents=True, exist_ok=True)
-    fname = f"CI_{safe_ci_filename(ci.get('invoice_number', 'CI'))}.xlsx"
+    prefix = get_ci_variant_meta(ci.get("variant")).get("excel_prefix", "CI")
+    fname = f"CI_{prefix}_{safe_ci_filename(ci.get('invoice_number', 'CI'))}.xlsx"
     path = XLSX_DIR / fname
     wb = build_ci_workbook(ci)
     wb.save(path)

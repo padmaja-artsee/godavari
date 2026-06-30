@@ -47,6 +47,9 @@ if (BASE.parent / "static").exists():
     app.mount("/leads-static", StaticFiles(directory=str(BASE.parent / "static")), name="leads_static")
 
 templates = Jinja2Templates(directory=str(BASE / "templates"))
+from app.jinja_compat import patch_template_response
+
+patch_template_response(templates)
 templates.env.globals["_base"] = FINANCE_BASE
 
 

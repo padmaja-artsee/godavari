@@ -85,7 +85,25 @@ def form_getlist(form: Any, key: str) -> list[str]:
     return [str(val)]
 
 
+# ── variants ─────────────────────────────────────────────────────────────────
+
+VARIANT_GBINC = "gbinc"
+VARIANT_GBBV = "gbbv"
+
 # ── defaults ─────────────────────────────────────────────────────────────────
+
+_DEFAULT_LINE = {
+    "end_customer":        "",
+    "product_description": "",
+    "gbl_invoice_number":  "",
+    "quantity":            0.0,
+    "unit_price":          0.0,
+    "cif_price":           0.0,
+    "fob_value":           0.0,
+    "commission_rate":     3.0,
+    "commission_value":    0.0,
+    "shipment_date":       "",
+}
 
 DEFAULT_CI: dict[str, Any] = {
     "document_title":        "Commercial Invoice",
@@ -128,22 +146,73 @@ DEFAULT_CI: dict[str, Any] = {
     "status":                "Draft",
     "prepared_by":           "",
     "internal_notes":        "",
+    "variant":               VARIANT_GBINC,
     # Lines
-    "line_items": [
-        {
-            "end_customer":        "",
-            "product_description": "",
-            "gbl_invoice_number":  "",
-            "quantity":            0.0,
-            "unit_price":          0.0,
-            "cif_price":           0.0,
-            "fob_value":           0.0,
-            "commission_rate":     3.0,
-            "commission_value":    0.0,
-            "shipment_date":       "",
-        }
-    ],
+    "line_items": [dict(_DEFAULT_LINE)],
 }
+
+DEFAULT_CI_GBBV: dict[str, Any] = {
+    **{k: v for k, v in DEFAULT_CI.items() if k != "line_items"},
+    "variant": VARIANT_GBBV,
+    "bill_to_name":          "Godavari Biorefineries BV",
+    "bill_to_address_1":     "Opaallaan 1180, 2132 LN",
+    "bill_to_address_2":     "Hoofddorp",
+    "bill_to_address_3":     "The Netherlands",
+    "line_items": [dict(_DEFAULT_LINE)],
+}
+
+CI_VARIANTS: dict[str, dict[str, Any]] = {
+    VARIANT_GBINC: {
+        "key": VARIANT_GBINC,
+        "short_label": "Commission Invoice",
+        "list_label": "GBInc Commission Invoices",
+        "bill_to_label": "Godavari Biorefineries Ltd",
+        "url_prefix": "/generate/commission-invoices",
+        "document_type": "commission_invoice",
+        "excel_prefix": "GBINC",
+        "template_file": "commission_invoice_template.xlsx",
+        "notice_seller_address_1": "103 Carnegie Center Dr, Suite 300",
+        "notice_seller_address_2": "Princeton, NJ 08540, USA",
+        "default": DEFAULT_CI,
+    },
+    VARIANT_GBBV: {
+        "key": VARIANT_GBBV,
+        "short_label": "GBBV Commission Invoice",
+        "list_label": "GBBV Commission Invoices",
+        "bill_to_label": "Godavari Biorefineries BV",
+        "url_prefix": "/generate/gbbv-commission-invoices",
+        "document_type": "gbbv_commission_invoice",
+        "excel_prefix": "GBBV",
+        "template_file": "gbbv_commission_invoice_template.xlsx",
+        "notice_seller_address_1": "One Liberty Place, 1650 Market Street, Suite 3600",
+        "notice_seller_address_2": "Philadelphia, PA 19103, USA",
+        "default": DEFAULT_CI_GBBV,
+    },
+}
+
+
+def get_default_ci(variant: str = VARIANT_GBINC) -> dict[str, Any]:
+    meta = CI_VARIANTS.get(variant) or CI_VARIANTS[VARIANT_GBINC]
+    return deepcopy(meta["default"])
+
+
+def get_ci_variant_meta(variant: str | None) -> dict[str, Any]:
+    return CI_VARIANTS.get(variant or VARIANT_GBINC, CI_VARIANTS[VARIANT_GBINC])
+
+
+def enrich_ci(ci: dict[str, Any]) -> dict[str, Any]:
+    """Attach variant metadata used by templates and exports."""
+    variant = ci.get("variant") or VARIANT_GBINC
+    meta = get_ci_variant_meta(variant)
+    ci["variant"] = variant
+    ci["ci_base"] = meta["url_prefix"]
+    ci["ci_title"] = meta["short_label"]
+    ci["ci_list_label"] = meta["list_label"]
+    ci["notice_seller_address_1"] = meta["notice_seller_address_1"]
+    ci["notice_seller_address_2"] = meta["notice_seller_address_2"]
+    if ci.get("invoice_date"):
+        ci["notice_date"] = ci["invoice_date"]
+    return ci
 
 
 # ── calculations ─────────────────────────────────────────────────────────────
@@ -205,6 +274,14 @@ def _upgrade_ci_extra_columns(conn) -> None:
     for col in CI_EXTRA_FIELDS:
         if col not in cols:
             conn.execute(f"ALTER TABLE commission_invoices ADD COLUMN {col} TEXT")
+    if "variant" not in cols:
+        conn.execute(
+            f"ALTER TABLE commission_invoices ADD COLUMN variant TEXT DEFAULT '{VARIANT_GBINC}'"
+        )
+    conn.execute(
+        "UPDATE commission_invoices SET variant = ? WHERE variant IS NULL OR variant = ''",
+        (VARIANT_GBINC,),
+    )
     # Migrate line-items table
     li_cols = {r[1] for r in conn.execute("PRAGMA table_info(commission_invoice_line_items)").fetchall()}
     for col, ddl in [
@@ -222,8 +299,7 @@ def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     data["vat_percent"] = _float(form.get("vat_percent"), 0)
     if not data.get("document_title"):
         data["document_title"] = "COMMISSION INVOICE"
-    if not data.get("notice_date"):
-        data["notice_date"] = data.get("invoice_date", "")
+    data["notice_date"] = data.get("invoice_date", "")
 
     products = form_getlist(form, "product_description")
     end_customers = form_getlist(form, "end_customer")
@@ -248,7 +324,25 @@ def parse_ci_form(form: Any) -> tuple[dict[str, Any], list[dict[str, Any]]]:
             line[nf] = _float(vals[i] if i < len(vals) else 0)
         line_items.append(recalc_line(line))
 
+    if line_items:
+        first_ship = (line_items[0].get("shipment_date") or "").strip()[:10]
+        if first_ship:
+            data["shipment_date"] = first_ship
+
+    variant = (form.get("variant") or VARIANT_GBINC).strip()
+    data["variant"] = variant if variant in CI_VARIANTS else VARIANT_GBINC
     return data, line_items
+
+
+def _finalize_ci_save(
+    data: dict[str, Any], line_items: list[dict[str, Any]]
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    """Recalculate line totals and always refresh amount in words from commission total."""
+    totals = calculate_ci_totals(line_items, _float(data.get("vat_percent")))
+    out = dict(data)
+    out["notice_date"] = out.get("invoice_date", "")
+    out["amount_in_words"] = dollars_in_words(totals["total_commission"])
+    return out, totals["line_items"]
 
 
 # ── DB schema ────────────────────────────────────────────────────────────────
@@ -328,13 +422,11 @@ def _load_ci_rows(conn, ci_id: int) -> dict[str, Any] | None:
     ci["line_items"] = [dict(l) for l in lines]
     totals = calculate_ci_totals(ci["line_items"], _float(ci.get("vat_percent")))
     ci.update(totals)
-    return ci
+    return enrich_ci(ci)
 
 
-def list_commission_invoices() -> list[dict[str, Any]]:
-    with get_db() as conn:
-        rows = conn.execute(
-            """
+def list_commission_invoices(variant: str | None = None) -> list[dict[str, Any]]:
+    sql = """
             SELECT ci.*,
                    li.product_description AS product,
                    li.commission_value    AS line_commission,
@@ -343,10 +435,15 @@ def list_commission_invoices() -> list[dict[str, Any]]:
             LEFT JOIN commission_invoice_line_items li
               ON li.commission_invoice_id = ci.id AND li.sort_order = 0
             LEFT JOIN customers c ON c.id = ci.customer_id
-            ORDER BY ci.updated_at DESC, ci.id DESC
             """
-        ).fetchall()
-    return [dict(r) for r in rows]
+    params: tuple = ()
+    if variant:
+        sql += " WHERE COALESCE(ci.variant, ?) = ?"
+        params = (VARIANT_GBINC, variant)
+    sql += " ORDER BY ci.updated_at DESC, ci.id DESC"
+    with get_db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [enrich_ci(dict(r)) for r in rows]
 
 
 def get_commission_invoice(ci_id: int) -> dict[str, Any] | None:
@@ -396,10 +493,14 @@ def create_commission_invoice(
     *,
     deal_id: int | None = None,
     customer_id: int | None = None,
+    variant: str | None = None,
 ) -> int:
-    totals     = calculate_ci_totals(line_items, _float(data.get("vat_percent")))
-    line_items = totals["line_items"]
-    now        = now_iso()
+    if variant:
+        data = {**data, "variant": variant}
+    data, line_items = _finalize_ci_save(data, line_items)
+    variant_key = data.get("variant") or VARIANT_GBINC
+    meta = get_ci_variant_meta(variant_key)
+    now = now_iso()
 
     with get_db() as conn:
         cur = conn.execute(
@@ -410,23 +511,25 @@ def create_commission_invoice(
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "commission_invoice",
+                meta["document_type"],
                 data.get("invoice_number"),
-                data.get("document_title") or "COMMISSION INVOICE",
+                data.get("document_title") or meta["short_label"].upper(),
                 data.get("status") or "Draft",
                 None, None, now, now,
             ),
         )
         gen_id = int(cur.lastrowid)
 
+        scalar_vals = [data.get(f, "") for f in CI_SCALAR_FIELDS]
+        scalar_vals.append(data.get("variant") or VARIANT_GBINC)
         cur = conn.execute(
             f"""
             INSERT INTO commission_invoices (
-                {", ".join(CI_SCALAR_FIELDS)}, vat_percent,
+                {", ".join(CI_SCALAR_FIELDS)}, variant, vat_percent,
                 generated_document_id, deal_id, customer_id, created_at, updated_at
-            ) VALUES ({", ".join("?" for _ in CI_SCALAR_FIELDS)}, ?, ?, ?, ?, ?, ?)
+            ) VALUES ({", ".join("?" for _ in CI_SCALAR_FIELDS)}, ?, ?, ?, ?, ?, ?, ?)
             """,
-            [data.get(f, "") for f in CI_SCALAR_FIELDS]
+            scalar_vals
             + [data.get("vat_percent", 0), gen_id, deal_id, customer_id, now, now],
         )
         ci_id = int(cur.lastrowid)
@@ -440,9 +543,14 @@ def create_commission_invoice(
 def update_commission_invoice(
     ci_id: int, data: dict[str, Any], line_items: list[dict[str, Any]]
 ) -> None:
-    totals     = calculate_ci_totals(line_items, _float(data.get("vat_percent")))
-    line_items = totals["line_items"]
-    now        = now_iso()
+    existing = get_commission_invoice(ci_id)
+    if not existing:
+        raise ValueError("Commission Invoice not found")
+    if not data.get("variant"):
+        data["variant"] = existing.get("variant") or VARIANT_GBINC
+    data, line_items = _finalize_ci_save(data, line_items)
+    now = now_iso()
+    meta = get_ci_variant_meta(data.get("variant"))
 
     with get_db() as conn:
         row = conn.execute(
@@ -453,8 +561,9 @@ def update_commission_invoice(
 
         set_clause = ", ".join(f"{f} = ?" for f in CI_SCALAR_FIELDS)
         conn.execute(
-            f"UPDATE commission_invoices SET {set_clause}, vat_percent = ?, updated_at = ? WHERE id = ?",
-            [data.get(f, "") for f in CI_SCALAR_FIELDS] + [data.get("vat_percent", 0), now, ci_id],
+            f"UPDATE commission_invoices SET {set_clause}, variant = ?, vat_percent = ?, updated_at = ? WHERE id = ?",
+            [data.get(f, "") for f in CI_SCALAR_FIELDS]
+            + [data.get("variant") or VARIANT_GBINC, data.get("vat_percent", 0), now, ci_id],
         )
         _save_ci_lines(conn, ci_id, line_items)
 
@@ -472,7 +581,7 @@ def update_commission_invoice(
                 """,
                 (
                     data.get("invoice_number"),
-                    data.get("document_title") or "COMMISSION INVOICE",
+                    data.get("document_title") or meta["short_label"].upper(),
                     data.get("status") or "Draft",
                     now, gen_id,
                 ),
@@ -480,12 +589,16 @@ def update_commission_invoice(
 
 
 def update_commission_invoice_dates(
-    ci_id: int, invoice_date: str, notice_date: str
+    ci_id: int,
+    invoice_date: str = "",
+    notice_date: str = "",
+    line_shipment_dates: list[str] | None = None,
 ) -> bool:
     inv = (invoice_date or "").strip()[:10]
-    notice = (notice_date or "").strip()[:10] or inv
+    notice = inv
     if not inv:
         return False
+    ship_dates = [(d or "").strip()[:10] for d in (line_shipment_dates or [])]
     now = now_iso()
     with get_db() as conn:
         row = conn.execute(
@@ -493,14 +606,44 @@ def update_commission_invoice_dates(
         ).fetchone()
         if not row:
             return False
-        conn.execute(
-            """
-            UPDATE commission_invoices
-            SET invoice_date = ?, notice_date = ?, updated_at = ?
-            WHERE id = ?
-            """,
-            (inv, notice, now, ci_id),
-        )
+        if any(ship_dates):
+            conn.execute(
+                """
+                UPDATE commission_invoices
+                SET invoice_date = ?, notice_date = ?, shipment_date = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (inv, notice, next((d for d in ship_dates if d), ""), now, ci_id),
+            )
+        else:
+            conn.execute(
+                """
+                UPDATE commission_invoices
+                SET invoice_date = ?, notice_date = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (inv, notice, now, ci_id),
+            )
+        if any(ship_dates):
+            line_rows = conn.execute(
+                """
+                SELECT id FROM commission_invoice_line_items
+                WHERE commission_invoice_id = ?
+                ORDER BY sort_order, id
+                """,
+                (ci_id,),
+            ).fetchall()
+            for idx, line_row in enumerate(line_rows):
+                ship = ship_dates[idx] if idx < len(ship_dates) else ship_dates[-1]
+                if ship:
+                    conn.execute(
+                        """
+                        UPDATE commission_invoice_line_items
+                        SET shipment_date = ?
+                        WHERE id = ?
+                        """,
+                        (ship, line_row["id"]),
+                    )
     from app.ci_consolidated import refresh_consolidated_commission_workbook
 
     refresh_consolidated_commission_workbook()
@@ -585,12 +728,16 @@ def _deal_to_ci_line(d: dict) -> dict:
     return line
 
 
-def create_ci_from_deal(deal_id: int) -> dict[str, Any] | None:
+def create_ci_from_deal(
+    deal_id: int, variant: str = VARIANT_GBINC
+) -> dict[str, Any] | None:
     """Prefill a Commission Invoice from a single deal (backwards-compat wrapper)."""
-    return create_ci_from_deals([deal_id])
+    return create_ci_from_deals([deal_id], variant=variant)
 
 
-def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
+def create_ci_from_deals(
+    deal_ids: list[int], variant: str = VARIANT_GBINC
+) -> dict[str, Any] | None:
     """Prefill a Commission Invoice from one or more deals.
 
     Each deal becomes one line item. Header fields are taken from the first deal.
@@ -614,7 +761,7 @@ def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
     if not rows:
         return None
 
-    ci = deepcopy(DEFAULT_CI)
+    ci = get_default_ci(variant)
     first = dict(rows[0])
 
     ci["deal_id"]      = first["id"]
@@ -643,6 +790,7 @@ def create_ci_from_deals(deal_ids: list[int]) -> dict[str, Any] | None:
     totals = calculate_ci_totals(ci["line_items"], 0)
     ci["line_items"] = totals["line_items"]
     ci["amount_in_words"] = dollars_in_words(totals["total_commission"])
+    enrich_ci(ci)
 
     ci["_field_hints"] = {
         "invoice_number": "missing",

@@ -1,7 +1,6 @@
 """Purchase Order Excel and PDF export."""
 from __future__ import annotations
 
-import re
 import shutil
 from io import BytesIO
 from pathlib import Path
@@ -152,40 +151,27 @@ def export_po_xlsx(po: dict[str, Any]) -> tuple[bytes, str]:
 
 
 def export_po_pdf_html(html: str) -> tuple[bytes, str] | None:
+    from app.pdf_render import render_html_to_pdf
+
+    pdf = render_html_to_pdf(html, base=BASE)
+    if pdf:
+        return pdf, "playwright"
+
     try:
         from weasyprint import HTML
+
         return HTML(string=html, base_url=str(BASE)).write_pdf(), "weasyprint"
     except Exception:
         pass
     try:
         from xhtml2pdf import pisa
+
         buf = BytesIO()
         pisa.CreatePDF(html, dest=buf, encoding="utf-8")
         return buf.getvalue(), "xhtml2pdf"
     except Exception:
         pass
-    try:
-        from reportlab.lib.pagesizes import A4
-        from reportlab.lib.units import mm
-        from reportlab.pdfgen import canvas
-        text = re.sub(r"<[^>]+>", "\n", html)
-        buf = BytesIO()
-        c = canvas.Canvas(buf, pagesize=A4)
-        y = A4[1] - 20 * mm
-        c.setFont("Helvetica", 9)
-        for line in text.splitlines():
-            line = line.strip()
-            if not line:
-                continue
-            if y < 20 * mm:
-                c.showPage()
-                y = A4[1] - 20 * mm
-            c.drawString(20 * mm, y, line[:110])
-            y -= 5 * mm
-        c.save()
-        return buf.getvalue(), "reportlab"
-    except Exception:
-        return None
+    return None
 
 
 def export_po_pdf(po: dict[str, Any], html: str) -> tuple[bytes, str] | None:

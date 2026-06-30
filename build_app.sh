@@ -20,6 +20,22 @@ DMG_NAME="GodavariLeads_${VERSION}_${ARCH}.dmg"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 
+_rm_tree() {
+  local d="$1"
+  [ -e "$d" ] || return 0
+  chmod -R u+w "$d" 2>/dev/null || true
+  if [ "$(uname -s)" = "Darwin" ]; then
+    chflags -R nouchg,noschg "$d" 2>/dev/null || true
+    xattr -cr "$d" 2>/dev/null || true
+  fi
+  rm -rf "$d" 2>/dev/null || true
+  if [ -e "$d" ]; then
+    find "$d" -depth -mindepth 1 -exec rm -rf {} + 2>/dev/null || true
+    rm -rf "$d" 2>/dev/null || true
+  fi
+  [ ! -e "$d" ] || die "Could not remove $d — quit Godavari Leads and close Finder windows on dist/, then retry."
+}
+
 echo "▶ Step 0: Stop stale Godavari processes (free port 8000)..."
 if [ -x "$SCRIPT_DIR/scripts/kill_godavari_leads.sh" ]; then
   "$SCRIPT_DIR/scripts/kill_godavari_leads.sh" || true
@@ -28,8 +44,9 @@ fi
 echo ""
 echo "▶ Step 1: Build Python bundle with PyInstaller (clean build)..."
 command -v pyinstaller >/dev/null 2>&1 || die "pyinstaller not found — pip install pyinstaller"
-chmod -R u+w build/ dist/ 2>/dev/null || true
-rm -rf build/ dist/
+pkill -9 -f "dist/leads/leads" 2>/dev/null || true
+_rm_tree build
+_rm_tree dist
 pyinstaller -y leads.spec
 [ -x "dist/leads/leads" ] || die "dist/leads/leads missing after PyInstaller"
 echo "  ✓ Python bundle: dist/leads/"

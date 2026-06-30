@@ -1,24 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Commission Invoices{% endblock %}
+{% set _base = ci_base or '/generate/commission-invoices' %}
+{% block title %}{{ ci_list_label or 'Commission Invoices' }}{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Commission Invoices</h1>
+    <h1>{{ ci_list_label or 'Commission Invoices' }}</h1>
     <p class="subtitle">
       <a class="link" href="/generate">← Back to Generate</a>
+      {% if _base == '/generate/commission-invoices' %}
       · Saved invoices auto-sync to
-      <a class="link" href="/generate/commission-invoices/consolidated.xlsx">GBINC_Commission_Invoices_Consolidated.xlsx</a>
+      <a class="link" href="{{ _base }}/consolidated.xlsx">GBINC_Commission_Invoices_Consolidated.xlsx</a>
       for Finance
+      {% endif %}
     </p>
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-    <a href="/generate/commission-invoices/new" class="btn btn-primary">New Commission Invoice</a>
-    <a href="/generate/commission-invoices/consolidated.xlsx" class="btn btn-ghost">↓ Consolidated Excel (all CIs)</a>
-    <a href="/generate/commission-invoices/data-request-template.xlsx" class="btn btn-ghost">↓ Blank template</a>
+    <a href="{{ _base }}/new" class="btn btn-primary">New {{ ci_title or 'Commission Invoice' }}</a>
+    {% if _base == '/generate/commission-invoices' %}
+    <a href="{{ _base }}/consolidated.xlsx" class="btn btn-ghost">↓ Consolidated Excel (all CIs)</a>
+    <a href="{{ _base }}/data-request-template.xlsx" class="btn btn-ghost">↓ Blank template</a>
+    {% endif %}
   </div>
 </div>
 
+{% if _base == '/generate/commission-invoices' %}
 <section class="card" id="ci-export" style="margin-bottom:1.25rem;padding:1.25rem">
   <h2 style="margin:0 0 0.35rem;font-size:1rem">Export data request (prefilled from deals)</h2>
   <p style="margin:0 0 1rem;color:#374151;font-size:.9rem">
@@ -26,7 +32,7 @@
     Monthly filter uses shipped date → GBL invoice date → deal date.
   </p>
 
-  <form method="get" action="/generate/commission-invoices#ci-export-results" id="ci-export-form">
+  <form method="get" action="{{ _base }}#ci-export-results" id="ci-export-form">
     <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
       <label style="display:flex;align-items:center;gap:.35rem;font-size:.88rem;cursor:pointer">
         <input type="radio" name="mode" value="monthly" {% if mode != 'range' %}checked{% endif %} /> Monthly
@@ -93,7 +99,7 @@
 
     <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-top:1rem;align-items:center">
       <button type="submit" class="btn btn-primary btn-sm">Run</button>
-      <a href="/generate/commission-invoices" class="btn btn-ghost btn-sm">Reset</a>
+      <a href="{{ _base }}" class="btn btn-ghost btn-sm">Reset</a>
       <button type="button" id="ci-prefilled-dl" class="btn btn-ghost btn-sm">↓ Download prefilled Excel</button>
     </div>
   </form>
@@ -153,6 +159,7 @@
     {% endif %}
   </div>
 </section>
+{% endif %}
 
 <div class="table-wrap card" style="padding:0;overflow-x:auto">
   <table class="data-table">
@@ -171,7 +178,7 @@
     <tbody>
       {% for row in rows %}
       <tr>
-        <td><a class="link" href="/generate/commission-invoices/{{ row.id }}">{{ row.invoice_number or '—' }}</a></td>
+        <td><a class="link" href="{{ _base }}/{{ row.id }}">{{ row.invoice_number or '—' }}</a></td>
         <td>{{ row.invoice_date or '—' }}</td>
         <td>{{ row.bill_to_name or '—' }}</td>
         <td>{{ row.product or '—' }}</td>
@@ -179,15 +186,23 @@
         <td><span class="badge">{{ row.status or 'Draft' }}</span></td>
         <td>{{ (row.created_at or '')[:10] }}</td>
         <td class="action-links">
-          <a class="link" href="/generate/commission-invoices/{{ row.id }}">View</a>
-          <a class="link" href="/generate/commission-invoices/{{ row.id }}/edit">Edit</a>
-          <form method="post" action="/generate/commission-invoices/{{ row.id }}/duplicate" style="display:inline">
+          <a class="link" href="{{ _base }}/{{ row.id }}">View</a>
+          <a class="link" href="{{ _base }}/{{ row.id }}/edit">Edit</a>
+          <form method="post" action="{{ _base }}/{{ row.id }}/duplicate" style="display:inline">
             <button type="submit" class="link-btn">Duplicate</button>
           </form>
-          <a class="link" href="/generate/commission-invoices/{{ row.id }}/export.pdf">PDF</a>
-          <a class="link" href="/generate/commission-invoices/{{ row.id }}/export.xlsx">XLSX</a>
-          <a class="link" href="/generate/commission-invoices/{{ row.id }}/print">Print</a>
-          <form method="post" action="/generate/commission-invoices/{{ row.id }}/delete" style="display:inline"
+          {% if is_desktop %}
+          <a class="link" href="/open-print?url={{ _base }}/{{ row.id }}/print">PDF</a>
+          {% else %}
+          <a class="link" href="{{ _base }}/{{ row.id }}/export.pdf">PDF</a>
+          {% endif %}
+          <a class="link" href="{{ _base }}/{{ row.id }}/export.xlsx">XLSX</a>
+          {% if is_desktop %}
+          <a class="link" href="/open-print?url={{ _base }}/{{ row.id }}/print">Print</a>
+          {% else %}
+          <a class="link" href="{{ _base }}/{{ row.id }}/print">Print</a>
+          {% endif %}
+          <form method="post" action="{{ _base }}/{{ row.id }}/delete" style="display:inline"
                 data-confirm="Delete CI {{ row.invoice_number }}?">
             <button type="submit" class="link-btn" style="color:var(--danger,#b91c1c)">Delete</button>
           </form>
@@ -294,7 +309,7 @@
       if (el && el.value) params.set(name, el.value);
     });
     ids.forEach(function (id) { params.append("deal_ids", id); });
-    return "/generate/commission-invoices/prefilled-template.xlsx?" + params.toString();
+    return "{{ _base }}/prefilled-template.xlsx?" + params.toString();
   }
 
   form.querySelectorAll('input[name="mode"]').forEach(function (r) {

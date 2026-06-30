@@ -20,6 +20,57 @@
     return n === 0 ? "0.00" : n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
+  var _ONES = [
+    "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+    "Seventeen", "Eighteen", "Nineteen"
+  ];
+  var _TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+  function _underThousand(n) {
+    if (n < 20) return _ONES[n];
+    if (n < 100) {
+      var t = Math.floor(n / 10);
+      var o = n % 10;
+      return (_TENS[t] + (o ? " " + _ONES[o] : "")).trim();
+    }
+    var h = Math.floor(n / 100);
+    var rem = n % 100;
+    return _ONES[h] + " Hundred" + (rem ? " " + _underThousand(rem) : "");
+  }
+
+  function _intWords(n) {
+    if (n === 0) return "Zero";
+    var parts = [];
+    var chunks = [
+      ["Million", 1000000],
+      ["Thousand", 1000],
+      ["", 1]
+    ];
+    chunks.forEach(function (pair) {
+      var label = pair[0];
+      var div = pair[1];
+      if (n >= div) {
+        var chunk = Math.floor(n / div);
+        n = n % div;
+        var w = _underThousand(chunk);
+        parts.push(label ? w + " " + label : w);
+      }
+    });
+    return parts.join(" ");
+  }
+
+  function dollarsInWords(amount) {
+    var v = Math.round(_float(amount) * 100) / 100;
+    var dollars = Math.floor(v);
+    var cents = Math.round((v - dollars) * 100);
+    var words = _intWords(dollars) + " Dollar" + (dollars !== 1 ? "s" : "");
+    if (cents) {
+      words += " and " + _intWords(cents) + " Cent" + (cents !== 1 ? "s" : "");
+    }
+    return words;
+  }
+
   /** ISO yyyy-mm-dd → 22-May-2026 for display */
   var _MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   function _fmtDateDisplay(iso) {
@@ -38,10 +89,24 @@
       if (!native || !show) return;
       function sync() {
         show.value = _fmtDateDisplay(native.value);
+        if (native.name === "invoice_date") syncNoticeDateFromInvoice();
       }
       sync();
       native.addEventListener("change", sync);
       native.addEventListener("input", sync);
+    });
+  }
+
+  function syncNoticeDateFromInvoice() {
+    const inv = document.querySelector('.ci-invoice-page .ci-date-native[name="invoice_date"]');
+    if (!inv) return;
+    const iso = (inv.value || "").trim().slice(0, 10);
+    const display = _fmtDateDisplay(iso) || "—";
+    document.querySelectorAll(".ci-notice-date-display").forEach(function (el) {
+      el.textContent = display;
+    });
+    document.querySelectorAll(".ci-notice-date-hidden").forEach(function (el) {
+      el.value = iso;
     });
   }
 
@@ -87,6 +152,33 @@
     set("ci-total-commission", total);
     const totEl = document.getElementById("ci-total-commission");
     if (totEl) totEl.textContent = "$ " + _money(total);
+
+    const wordsInp = document.querySelector('input[name="amount_in_words"]');
+    if (wordsInp) wordsInp.value = dollarsInWords(total);
+
+    syncNoticeRatesFromMain();
+  }
+
+  function syncNoticeRatesFromMain() {
+    const mainRows = document.querySelectorAll("#ci-lines-body .ci-line-row");
+    const noticeRates = document.querySelectorAll(".ci-notice-table .ci-notice-rate");
+    mainRows.forEach(function (row, i) {
+      const rateInp = row.querySelector(".ci-rate");
+      const noticeInp = noticeRates[i];
+      if (rateInp && noticeInp && document.activeElement !== noticeInp) {
+        noticeInp.value = rateInp.value;
+      }
+    });
+  }
+
+  function syncMainRatesFromNotice(noticeInp) {
+    const idx = parseInt(noticeInp.getAttribute("data-line-index") || "0", 10);
+    const mainRows = document.querySelectorAll("#ci-lines-body .ci-line-row");
+    const row = mainRows[idx];
+    if (!row) return;
+    const rateInp = row.querySelector(".ci-rate");
+    if (rateInp) rateInp.value = noticeInp.value;
+    recalcTotals();
   }
 
   // ── Bind inputs in a row ──────────────────────────────────────────────────
@@ -127,6 +219,7 @@
 
   document.addEventListener("DOMContentLoaded", function () {
     bindDatePickers(document);
+    syncNoticeDateFromInvoice();
 
     const contactInp = document.querySelector('.ci-invoice-page input[name="contact_person"]');
     if (contactInp) {
@@ -145,6 +238,10 @@
 
     // Bind existing rows
     tbody.querySelectorAll(".ci-line-row").forEach(bindRow);
+
+    document.querySelectorAll(".ci-notice-rate").forEach(function (inp) {
+      inp.addEventListener("input", function () { syncMainRatesFromNotice(inp); });
+    });
 
     // Add line button
     if (addBtn) {

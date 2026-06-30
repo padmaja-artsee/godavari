@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "generate/commission_invoices/_ci_body.html" import ci_body with context %}
+{% set _base = ci_base or ci.ci_base or '/generate/commission-invoices' %}
 {% block title %}CI {{ ci.invoice_number }}{% endblock %}
 {% block extra_css %}
 <link rel="stylesheet" href="/static/generate.css" />
@@ -12,19 +13,24 @@
   <div>
     <h1>CI {{ ci.invoice_number }}</h1>
     <p class="subtitle">
-      <a class="link" href="/generate/commission-invoices">← Commission Invoices</a> ·
+      <a class="link" href="{{ _base }}">← {{ ci_list_label or ci.ci_list_label or 'Commission Invoices' }}</a> ·
       <a class="link" href="/generate">Generate</a>
     </p>
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
-    <a href="/generate/commission-invoices/{{ ci.id }}/edit" class="btn btn-primary">Edit</a>
-    <form method="post" action="/generate/commission-invoices/{{ ci.id }}/duplicate" style="display:inline">
+    <a href="{{ _base }}/{{ ci.id }}/edit" class="btn btn-primary">Edit</a>
+    <form method="post" action="{{ _base }}/{{ ci.id }}/duplicate" style="display:inline">
       <button type="submit" class="btn btn-ghost">Duplicate</button>
     </form>
-    <a href="/generate/commission-invoices/{{ ci.id }}/export.pdf" class="btn btn-primary">Download PDF</a>
-    <a href="/generate/commission-invoices/{{ ci.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
-    <a href="/generate/commission-invoices/{{ ci.id }}/print" class="btn btn-ghost">Print</a>
-    <form method="post" action="/generate/commission-invoices/{{ ci.id }}/delete" style="display:inline"
+    {% if is_desktop %}
+    <a href="/open-print?url={{ _base }}/{{ ci.id }}/print" class="btn btn-primary">Download PDF</a>
+    <a href="/open-print?url={{ _base }}/{{ ci.id }}/print" class="btn btn-ghost">Print</a>
+    {% else %}
+    <a href="{{ _base }}/{{ ci.id }}/export.pdf" class="btn btn-primary">Download PDF</a>
+    <a href="{{ _base }}/{{ ci.id }}/print" class="btn btn-ghost">Print</a>
+    {% endif %}
+    <a href="{{ _base }}/{{ ci.id }}/export.xlsx" class="btn btn-ghost">Export Excel</a>
+    <form method="post" action="{{ _base }}/{{ ci.id }}/delete" style="display:inline"
           data-confirm="Delete this Commission Invoice?">
       <button type="submit" class="btn btn-ghost" style="color:#b91c1c">Delete</button>
     </form>

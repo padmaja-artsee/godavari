@@ -395,6 +395,11 @@
 
 .ci-notice-table { margin-top: 0; }
 
+.ci-ship-date-cell .ci-date-wrap {
+  min-height: 1.35em;
+  min-width: 6.5rem;
+}
+
 .ci-notice-table .ci-notice-empty-row td {
   height: 0.14in;
   padding: 1px 3px;

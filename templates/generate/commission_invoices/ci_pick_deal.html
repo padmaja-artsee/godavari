@@ -1,15 +1,18 @@
 {% extends "base.html" %}
-{% block title %}New Commission Invoice{% endblock %}
+{% set _base = ci_base or '/generate/commission-invoices' %}
+{% block title %}New {{ ci_title or 'Commission Invoice' }}{% endblock %}
 {% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>New Commission Invoice</h1>
-    <p class="subtitle"><a class="link" href="/generate/commission-invoices">← Commission Invoices</a></p>
+    <h1>New {{ ci_title or 'Commission Invoice' }}</h1>
+    <p class="subtitle"><a class="link" href="{{ _base }}">← {{ ci_list_label or 'Commission Invoices' }}</a></p>
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-    <a href="/generate/commission-invoices/new?blank=1" class="btn btn-ghost">Start blank (no deal)</a>
-    <a href="/generate/commission-invoices/data-request-template.xlsx" class="btn btn-ghost btn-sm">↓ Data template</a>
+    <a href="{{ _base }}/new?blank=1" class="btn btn-ghost">Start blank (no deal)</a>
+    {% if _base == '/generate/commission-invoices' %}
+    <a href="{{ _base }}/data-request-template.xlsx" class="btn btn-ghost btn-sm">↓ Data template</a>
+    {% endif %}
   </div>
 </div>
 
@@ -56,9 +59,9 @@
 
     <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.6rem">
       <button id="create-btn" class="btn btn-primary" disabled onclick="submitSelected()">
-        Create Commission Invoice →
+        Create {{ ci_title or 'Commission Invoice' }} →
       </button>
-      <a href="/generate/commission-invoices/new?blank=1" class="btn btn-ghost" style="text-align:center">
+      <a href="{{ _base }}/new?blank=1" class="btn btn-ghost" style="text-align:center">
         Start blank (no deal)
       </a>
     </div>
@@ -264,7 +267,7 @@
 function submitSelected() {
   const ids = [...document.querySelectorAll(".ci-selected-chip button")].map(b => b.dataset.id);
   if (!ids.length) return;
-  window.location.href = "/generate/commission-invoices/new?deal_ids=" + ids.join(",");
+  window.location.href = "{{ _base }}/new?deal_ids=" + ids.join(",");
 }
 </script>
 {% endblock %}
