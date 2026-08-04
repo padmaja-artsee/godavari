@@ -89,11 +89,13 @@ def create_transaction(
     payment_account_id: int = None, vendor_id: int = None,
     reference: str = "", notes: str = "", receipt_filename: str = "",
     image_url: str = "",
+    conn=None,
 ) -> int:
     fy, month = fiscal_year_for_date(date)
     now = _now()
-    with get_db() as conn:
-        cur = conn.execute(
+
+    def _insert(c) -> int:
+        cur = c.execute(
             """INSERT INTO transactions
                (date,account_id,amount,currency,transaction_type,
                 payment_account_id,vendor_id,reference,notes,
@@ -104,6 +106,11 @@ def create_transaction(
              receipt_filename, (image_url or "").strip(), fy, month, now, now)
         )
         return cur.lastrowid
+
+    if conn is not None:
+        return _insert(conn)
+    with get_db() as c:
+        return _insert(c)
 
 
 def update_transaction(
@@ -146,4 +153,13 @@ def delete_transaction(tx_id: int) -> None:
         ).fetchone()
         if row and row["receipt_filename"]:
             delete_receipt(row["receipt_filename"])
+        # Bank-import fingerprints reference transactions(id); clear them first
+        # so deletes of imported rows don't raise FOREIGN KEY constraint failed.
+        try:
+            conn.execute(
+                "DELETE FROM bank_import_fingerprints WHERE transaction_id=?",
+                (tx_id,),
+            )
+        except Exception:
+            pass
         conn.execute("DELETE FROM transactions WHERE id=?", (tx_id,))

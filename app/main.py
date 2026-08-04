@@ -49,6 +49,7 @@ from app.database import (
     unarchive_deal,
     update_deal_fields,
     PRICE_UNITS,
+    DEAL_CURRENCIES,
     format_quantity_display,
     list_quantity_unit_options,
     normalize_quantity_unit,
@@ -151,6 +152,8 @@ import os as _os
 # Mount Finance as a sub-app at /finance (Option B single-port architecture).
 # Must set env var BEFORE importing finance.app.main so FINANCE_BASE is correct.
 _os.environ.setdefault("FINANCE_BASE_PATH", "/finance")
+# Mount Management Report (MR) at /mr — set before importing mr.app.main.
+_os.environ.setdefault("MR_BASE_PATH", "/mr")
 
 # When frozen by PyInstaller the launcher sets LEADS_BUNDLE_BASE = sys._MEIPASS,
 # which is the directory that actually contains templates/, static/, data/.
@@ -230,6 +233,14 @@ try:
 except Exception as _e:
     import warnings
     warnings.warn(f"Finance sub-app could not be mounted: {_e}")
+
+# Mount the Management Report (MR) sub-app at /mr.
+try:
+    from mr.app.main import app as _mr_app
+    app.mount("/mr", _mr_app)
+except Exception as _e:
+    import warnings
+    warnings.warn(f"MR sub-app could not be mounted: {_e}")
 
 
 @app.on_event("startup")
@@ -354,6 +365,7 @@ def ctx(request: Request, **extra):
     return {
         "request": request,
         "price_units": PRICE_UNITS,
+        "deal_currencies": DEAL_CURRENCIES,
         "quantity_units": list_quantity_unit_options(),
         "authorized_signature_url": authorized_signature_url(),
         "is_desktop": bool(_os.environ.get("LEADS_BUNDLE_BASE") or getattr(_sys, "frozen", False)),
@@ -578,6 +590,7 @@ async def deal_update_meta(
     ocean_freight_amount: str = Form(""),
     ocean_freight_currency: str = Form("USD"),
     commission_rate: str = Form(""),
+    fob_currency: str = Form("USD"),
     product_short_name: str = Form(""),
     next_url: str = Form(""),
 ):
@@ -609,6 +622,7 @@ async def deal_update_meta(
         ocean_freight_amount=ocean_freight_amount,
         ocean_freight_currency=ocean_freight_currency,
         commission_rate=commission_rate,
+        fob_currency=fob_currency,
         product_short_name=product_short_name,
     )
     return RedirectResponse(next_url or f"/deal/{deal_id}", status_code=303)
@@ -868,6 +882,7 @@ async def post_deal(
     ocean_freight_amount: str = Form(""),
     ocean_freight_currency: str = Form("USD"),
     commission_rate: str = Form(""),
+    fob_currency: str = Form("USD"),
 ):
     deal_id = create_deal(
         {
@@ -897,6 +912,7 @@ async def post_deal(
         "ocean_freight_amount": ocean_freight_amount,
         "ocean_freight_currency": ocean_freight_currency,
         "commission_rate": commission_rate,
+        "fob_currency": fob_currency,
     }
     if any(v.strip() for v in extra.values()):
         update_deal_fields(
@@ -958,6 +974,7 @@ async def post_log(
     ocean_freight_amount: str = Form(""),
     ocean_freight_currency: str = Form("USD"),
     commission_rate: str = Form(""),
+    fob_currency: str = Form("USD"),
 ):
     if link_mode == "new":
         product_val = product_new or product
@@ -1044,6 +1061,7 @@ async def post_log(
             ocean_freight_amount=ocean_freight_amount or cur.get("ocean_freight_amount") or "",
             ocean_freight_currency=ocean_freight_currency or cur.get("ocean_freight_currency") or "USD",
             commission_rate=commission_rate or cur.get("commission_rate") or "",
+            fob_currency=fob_currency or cur.get("fob_currency") or "USD",
         )
     return_to = request.query_params.get("return_to", "")
     if return_to.startswith("/"):

@@ -1,19 +1,31 @@
 {% extends "base.html" %}
 {% set page = "analysis" %}
-{% block title %}Analysis — FY{{ fy }}{% endblock %}
+{% block title %}Analysis — {{ period_label }}{% endblock %}
 {% block content %}
 <div class="f-page-header">
   <div>
-    <h1 class="f-title">Analysis — FY{{ fy }}</h1>
+    <h1 class="f-title">Analysis — {{ period_label }}</h1>
     <p class="f-subtitle">Budget vs actuals with interactive charts and filters.</p>
   </div>
   <div class="f-header-controls" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-    <form method="get" action="{{ _base }}/analysis">
+    <form method="get" action="{{ _base }}/analysis" class="f-filter-row" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
-        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
+        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>{% endfor %}
+      </select>
+      <label class="f-text-muted" style="font-size:.78rem">From</label>
+      <select name="from_month" class="f-select-sm" onchange="this.form.submit()">
+        {% for m in months %}
+        <option value="{{ m }}" {% if m==from_month %}selected{% endif %}>{{ month_labels[m] }}</option>
+        {% endfor %}
+      </select>
+      <label class="f-text-muted" style="font-size:.78rem">To</label>
+      <select name="to_month" class="f-select-sm" onchange="this.form.submit()">
+        {% for m in months %}
+        <option value="{{ m }}" {% if m==to_month %}selected{% endif %}>{{ month_labels[m] }}</option>
+        {% endfor %}
       </select>
     </form>
-    <a href="{{ _base }}/export/analysis.xlsx?fy={{ fy }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
+    <a href="{{ _base }}/export/analysis.xlsx?fy={{ fy }}&from_month={{ from_month }}&to_month={{ to_month }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
   </div>
 </div>
 
@@ -79,7 +91,7 @@
   <div class="f-card f-card-wide" id="mainChartCard">
     <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
       <span id="mainChartTitle">Monthly Budget vs Actuals</span>
-      <button type="button" onclick="downloadChart('mainChart','GBInc-BudgetVsActual-FY{{ fy }}.png', document.getElementById('mainChartTitle').textContent + ' — FY{{ fy }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      <button type="button" onclick="downloadChart('mainChart','GBInc-BudgetVsActual-{{ period_label|replace(' ','') }}.png', document.getElementById('mainChartTitle').textContent + ' — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
     </div>
     <canvas id="mainChart" height="90"></canvas>
   </div>
@@ -87,7 +99,7 @@
   <div class="f-card" id="breakdownCard" style="display:none;max-width:480px">
     <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
       <span>Expense Breakdown by Category</span>
-      <button type="button" onclick="downloadChart('breakdownChart','GBInc-Breakdown-FY{{ fy }}.png','Expense Breakdown — FY{{ fy }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      <button type="button" onclick="downloadChart('breakdownChart','GBInc-Breakdown-{{ period_label|replace(' ','') }}.png','Expense Breakdown — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
     </div>
     <canvas id="breakdownChart" height="200"></canvas>
   </div>
@@ -95,7 +107,7 @@
   <div class="f-card f-card-wide" id="netChartCard">
     <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
       <span>Cumulative Balance</span>
-      <button type="button" onclick="downloadChart('netChart','GBInc-NetTrend-FY{{ fy }}.png','Cumulative Balance — FY{{ fy }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      <button type="button" onclick="downloadChart('netChart','GBInc-NetTrend-{{ period_label|replace(' ','') }}.png','Cumulative Balance — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
     </div>
     <canvas id="netChart" height="70"></canvas>
   </div>
@@ -154,8 +166,9 @@ function setChartType(type, btn) {
 }
 
 function sumMonthly(sections, itemId) {
-  let budget = new Array(12).fill(0);
-  let actual = new Array(12).fill(0);
+  const n = MONTHS.length;
+  let budget = new Array(n).fill(0);
+  let actual = new Array(n).fill(0);
   Object.entries(LINE_DATA).forEach(([id, d]) => {
     if (!sections.includes(d.section)) return;
     if (itemId !== "all" && String(id) !== String(itemId)) return;
@@ -166,8 +179,9 @@ function sumMonthly(sections, itemId) {
 }
 
 function getNetData() {
-  let incActual = new Array(12).fill(0);
-  let expActual = new Array(12).fill(0);
+  const n = MONTHS.length;
+  let incActual = new Array(n).fill(0);
+  let expActual = new Array(n).fill(0);
   Object.values(LINE_DATA).forEach(d => {
     if (d.section === "income")
       d.actual.forEach((v, i) => incActual[i] += v);

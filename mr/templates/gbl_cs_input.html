@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}GBL CS Input — GBInc Management Report{% endblock %}
+{% block content %}
+<div class="mr-page-header">
+  <div>
+    <h1 class="mr-title">GBL CS Input</h1>
+    <p class="mr-subtitle">Upload GBL commission statement Excel sheets — rows append to the cumulative register</p>
+  </div>
+  <a href="{{ _base }}/gbl-cs-register" class="mr-btn mr-btn-outline">View register →</a>
+</div>
+
+{% if error %}
+<div class="mr-alert mr-alert-error">{{ error }}</div>
+{% endif %}
+{% if notice %}
+<div class="mr-alert mr-alert-ok">{{ notice }}</div>
+{% endif %}
+
+{% if not preview %}
+<div class="mr-card mr-upload-card">
+  <form method="post" action="{{ _base }}/gbl-cs-input" enctype="multipart/form-data">
+    <label class="mr-label" for="cs-file">Commission statement Excel <span class="mr-required">*</span></label>
+    <input id="cs-file" type="file" name="file" class="mr-input" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+    <p class="mr-hint">
+      Accepts monthly GBINC CS workbooks (all product sheets). Columns may include optional
+      PO. NO. / PO DATE. Sail month is taken from vessel sail date. Same invoice in more than
+      one file is kept and flagged as DUPLICATE in the register.
+    </p>
+    <button type="submit" class="mr-btn mr-btn-primary">Upload &amp; add to register</button>
+  </form>
+</div>
+{% else %}
+<div class="mr-alert mr-alert-ok">
+  Parsed <strong>{{ preview.row_count }}</strong> line{{ 's' if preview.row_count != 1 else '' }}
+  from <strong>{{ uploaded_name }}</strong>
+  {% if saved_as %}(saved as {{ saved_as }}){% endif %}.
+  {% if merge %}
+  Register: <strong>{{ merge.inserted }}</strong> line{{ 's' if merge.inserted != 1 else '' }} added
+  {% if merge.replaced %}(replaced {{ merge.replaced }} from a previous upload of this file){% endif %}{% if merge.skipped %},
+  {{ merge.skipped }} skipped{% endif %}.
+  {% endif %}
+  <a href="{{ _base }}/gbl-cs-register" style="margin-left:.5rem">Open register →</a>
+</div>
+
+<div class="mr-card" style="margin-bottom:1rem">
+  <div class="mr-card-title">{{ preview.title }}</div>
+  <p class="mr-hint" style="margin:0">
+    Sheets: {{ preview.sheet_name }}
+    {% if preview.sheets and preview.sheets|length > 1 %}
+    ({% for s in preview.sheets %}{{ s.sheet_name }}: {{ s.row_count }}{% if not loop.last %}, {% endif %}{% endfor %})
+    {% endif %}
+  </p>
+</div>
+
+<div class="mr-table-scroll">
+  <table class="mr-table">
+    <thead>
+      <tr>
+        {% for key, label in display_columns %}
+        <th>{{ label }}</th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in preview.rows %}
+      <tr>
+        <td>{{ row.sr_no }}</td>
+        <td>{{ row.sail_month }}</td>
+        <td>{{ row.invoice_no }}</td>
+        <td>{{ row.vessel_sail_date }}</td>
+        <td>{{ row.po_no or '—' }}</td>
+        <td>{{ row.po_date or '—' }}</td>
+        <td>{{ row.ship_to_party }}</td>
+        <td>{{ row.port_of_discharge }}</td>
+        <td class="num">{{ row.qty | num }}</td>
+        <td>{{ row.currency }}</td>
+        <td class="num">{{ row.rate_per_mt | money }}</td>
+        <td class="num">{{ row.value | money }}</td>
+        <td class="num">{{ row.ocean_freight | money }}</td>
+        <td class="num">{{ row.insurance | money }}</td>
+        <td class="num">{{ row.fob_value | money }}</td>
+        <td class="num">{{ row.commission | money }}</td>
+        <td>{{ row.commission_currency }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div style="margin-top:1rem;display:flex;gap:.5rem;margin-bottom:1.5rem">
+  <a href="{{ _base }}/gbl-cs-input" class="mr-btn mr-btn-outline">← Upload another</a>
+  <a href="{{ _base }}/gbl-cs-register" class="mr-btn mr-btn-primary">View cumulative register</a>
+</div>
+{% endif %}
+
+<div class="mr-card mr-files-card">
+  <div class="mr-card-title">Uploaded input files</div>
+  <p class="mr-hint">Use Delete to remove a file and its lines from the cumulative register.</p>
+  {% if input_files %}
+  <ul class="mr-file-list">
+    {% for f in input_files %}
+    <li class="mr-file-item">
+      <div class="mr-file-info">
+        <div class="mr-file-name">{{ f.display_name }}</div>
+        <div class="mr-file-meta">
+          {{ f.row_count }} line{{ 's' if f.row_count != 1 else '' }}
+          · Sheets: {{ f.sheets }}
+          {% if f.uploaded_at %} · {{ f.uploaded_at[:19].replace('T', ' ') }}{% endif %}
+        </div>
+      </div>
+      <form method="post" action="{{ _base }}/gbl-cs-input/delete"
+            data-confirm="Delete “{{ f.display_name }}” and remove its {{ f.row_count }} line(s) from the register?">
+        <input type="hidden" name="key" value="{{ f.key }}" />
+        <button type="submit" class="mr-btn mr-btn-danger mr-btn-sm">Delete</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="mr-empty" style="margin:0">No input files yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

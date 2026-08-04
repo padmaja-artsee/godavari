@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — GBInc Management Report{% endblock %}
+{% block content %}
+<div class="mr-page-header">
+  <div>
+    <h1 class="mr-title">Management Report</h1>
+    <p class="mr-subtitle">Executive overview across Leads and Finance</p>
+  </div>
+</div>
+
+<div class="mr-kpi-row mr-kpi-row-3">
+  <div class="mr-kpi">
+    <span class="mr-kpi-label">Total MT</span>
+    <span class="mr-kpi-val">{{ stats.qty_total | num }}</span>
+  </div>
+  <div class="mr-kpi">
+    <span class="mr-kpi-label">Total sale $</span>
+    <span class="mr-kpi-val">${{ stats.sale_total | money }}</span>
+  </div>
+  <div class="mr-kpi">
+    <span class="mr-kpi-label">Total commission $</span>
+    <span class="mr-kpi-val">${{ stats.commission_total | money }}</span>
+  </div>
+</div>
+
+<div class="mr-card">
+  <p class="mr-empty">
+    Upload monthly GBL commission statements under
+    <a href="{{ _base }}/gbl-cs-input">GBL CS Input</a>,
+    then review the cumulative sheet in
+    <a href="{{ _base }}/gbl-cs-register">GBL CS Register</a>.
+  </p>
+</div>
+{% endblock %}

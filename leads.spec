@@ -28,6 +28,9 @@ a = Analysis(
         (str(ROOT / "finance" / "templates"),  "finance/templates"),
         (str(ROOT / "finance" / "static"),     "finance/static"),
         (str(ROOT / "finance" / "assets"),     "finance/assets"),
+        # ── Management Report (MR) sub-app ─────────────────────────────────
+        (str(ROOT / "mr" / "templates"),       "mr/templates"),
+        (str(ROOT / "mr" / "static"),          "mr/static"),
         # finance/__init__.py and app/__init__.py are picked up via hiddenimports
     ],
 
@@ -83,6 +86,15 @@ a = Analysis(
         "finance.app.expenses",
         "finance.app.exports",
         "finance.app.commission_exports",
+        "finance.app.bank_import",
+        # ── Management Report (MR) ─────────────────────────────────────────
+        "mr",
+        "mr.app",
+        "mr.app.main",
+        "mr.app.cs_input",
+        "mr.app.projections",
+        "mr.app.actual_vs_projection",
+        "mr.app.avp_exports",
     ],
     hookspath=[],
     runtime_hooks=[],

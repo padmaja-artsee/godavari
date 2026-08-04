@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% block title %}Import Bank CSV — GBInc Finance{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Import Bank Transactions</h1>
+    <p class="f-subtitle">Chemung Canal Trust CSV → expenses &amp; income (manual review, no duplicates)</p>
+  </div>
+  {% if preview %}
+  <a href="{{ _base }}/bank-import" class="f-btn-sm f-btn-outline">← New import</a>
+  {% endif %}
+</div>
+
+{% if error %}
+<div class="f-card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem">{{ error }}</div>
+{% endif %}
+{% if imported or import_errors or already_submitted %}
+<div class="f-card" style="border-color:{{ '#86efac' if imported else '#fcd34d' }};background:{{ '#ecfdf5' if imported else '#fffbeb' }};margin-bottom:1rem">
+  {% if already_submitted and imported %}
+  <strong>Import already completed</strong> for this batch ({{ imported }} transaction{{ 's' if imported != 1 else '' }}).
+  {% elif already_submitted %}
+  <strong>Import already submitted</strong> for this batch. No new transactions were created.
+  {% elif imported %}
+  Imported <strong>{{ imported }}</strong> transaction{{ 's' if imported != 1 else '' }}.
+  {% else %}
+  <strong>No transactions imported.</strong>
+  {% endif %}
+  {% if warnings %}<span class="f-text-muted">({{ warnings }} row(s) skipped)</span>{% endif %}
+  {% if import_errors %}
+  <ul style="margin:.5rem 0 0;padding-left:1.25rem;font-size:.85rem">
+    {% for e in import_errors %}<li>{{ e }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <p style="margin:.75rem 0 0">
+    <a href="{{ _base }}/expenses?tx_type=expense" class="f-link-small">View expenses</a> ·
+    <a href="{{ _base }}/expenses?tx_type=income" class="f-link-small">View income</a> ·
+    <a href="{{ _base }}/bank-import" class="f-link-small">New import</a>
+  </p>
+</div>
+{% endif %}
+
+{% if not preview %}
+<div class="f-form-card" style="max-width:640px">
+  <form method="post" action="{{ _base }}/bank-import/preview" enctype="multipart/form-data">
+    <div class="f-form-grid">
+      <div class="f-field full">
+        <label class="f-label">Bank CSV file <span class="f-required">*</span></label>
+        <input type="file" name="file" class="f-input" accept=".csv,text/csv" required />
+        <p class="f-text-muted" style="font-size:.8rem;margin:.35rem 0 0">
+          Expected columns: Account, ChkRef, Debit, Credit, Balance, Date, Description
+        </p>
+      </div>
+      <div class="f-field">
+        <label class="f-label">From date</label>
+        <input type="date" name="from_date" class="f-input" value="{{ from_date }}" />
+      </div>
+      <div class="f-field">
+        <label class="f-label">To date</label>
+        <input type="date" name="to_date" class="f-input" value="{{ to_date }}" />
+      </div>
+      <div class="f-field full">
+        <label class="f-label">Payment account <span class="f-required">*</span></label>
+        <select name="payment_account_id" class="f-select" required>
+          {% for p in payment_accounts %}
+          <option value="{{ p.id }}" {% if p.id == default_payment_account_id %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <div style="margin-top:1.25rem">
+      <button type="submit" class="f-btn f-btn-primary">Preview transactions</button>
+    </div>
+  </form>
+</div>
+
+{% else %}
+<div class="f-card" style="margin-bottom:1rem;display:flex;flex-wrap:wrap;gap:.75rem;align-items:center">
+  <span class="f-badge f-badge-green">{{ summary.new }} new</span>
+  <span class="f-badge f-badge-blue">{{ summary.duplicate }} already imported</span>
+  <span class="f-badge f-badge-warning">{{ summary.fuzzy }} possible match</span>
+  <span class="f-badge f-badge-red">{{ summary.review }} needs review</span>
+  <span class="f-text-muted">{{ summary.total }} rows in range ({{ from_date }} → {{ to_date }})</span>
+  <span style="flex:1"></span>
+  <button type="button" class="f-btn-sm f-btn-outline" id="bi-select-new">Select new (high confidence)</button>
+  <button type="button" class="f-btn-sm f-btn-outline" id="bi-select-none">Clear all</button>
+</div>
+
+<form method="post" action="{{ _base }}/bank-import/commit" id="bi-commit-form">
+  <input type="hidden" name="batch_id" value="{{ batch_id }}" />
+  <input type="hidden" name="payment_account_id" value="{{ payment_account_id }}" />
+
+  <div class="f-grid-scroll">
+  <table class="f-expense-table f-bank-import-table">
+    <thead>
+      <tr>
+        <th style="width:2rem"><input type="checkbox" id="bi-check-all" title="Toggle all importable" /></th>
+        <th>Date</th>
+        <th>Description</th>
+        <th class="num">Amount</th>
+        <th>Type</th>
+        <th>Account</th>
+        <th>Vendor</th>
+        <th>Rule</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for row in rows %}
+    <tr class="bi-row bi-status-{{ row.status }}" data-precheck="{{ 1 if row.precheck else 0 }}" data-importable="{{ 1 if row.status in ['new','review','fuzzy'] else 0 }}">
+      <td>
+        {% if row.status != 'duplicate' %}
+        <input type="checkbox" name="selected" value="{{ row.row_index }}" class="bi-cb"
+               {% if row.precheck %}checked{% endif %} />
+        {% endif %}
+      </td>
+      <td>{{ row.posted_date | fmtdate }}</td>
+      <td class="bi-desc" title="{{ row.description }}">
+        {{ row.description[:72] }}{% if row.description|length > 72 %}…{% endif %}
+        {% if row.chk_ref %}<br><small class="f-text-muted">Chk {{ row.chk_ref }}</small>{% endif %}
+      </td>
+      <td class="num f-bold">
+        {% if row.direction == 'credit' %}+{% else %}−{% endif %}${{ "{:,.2f}".format(row.amount) }}
+      </td>
+      <td>{{ "Income" if row.transaction_type == 'income' else "Expense" }}</td>
+      <td>
+        {% if row.status != 'duplicate' %}
+        <select name="account_id_{{ row.row_index }}" class="f-select-sm bi-acct">
+          {% if row.transaction_type == 'income' %}
+            {% for a in income_accounts %}
+            <option value="{{ a.id }}" {% if a.id == row.account_id %}selected{% endif %}>{{ a.name }}</option>
+            {% endfor %}
+          {% else %}
+            {% set cur_sec = namespace(v='') %}
+            {% for a in expense_accounts %}
+              {% if a.section != cur_sec.v %}
+              {% if cur_sec.v %}</optgroup>{% endif %}
+              {% set cur_sec.v = a.section %}
+              <optgroup label="{{ a.section|upper }}">
+              {% endif %}
+              <option value="{{ a.id }}" {% if a.id == row.account_id %}selected{% endif %}>{{ a.name }}</option>
+            {% endfor %}
+            {% if cur_sec.v %}</optgroup>{% endif %}
+          {% endif %}
+        </select>
+        {% else %}
+        <span class="f-text-muted">{{ row.account_name }}</span>
+        {% endif %}
+      </td>
+      <td>
+        {% if row.status != 'duplicate' %}
+        <select name="vendor_id_{{ row.row_index }}" class="f-select-sm">
+          <option value="">—</option>
+          {% for v in vendors %}
+          <option value="{{ v.id }}" {% if v.id == row.vendor_id %}selected{% endif %}>{{ v.name }}</option>
+          {% endfor %}
+        </select>
+        {% else %}—{% endif %}
+      </td>
+      <td><small>{{ row.rule_label }}</small></td>
+      <td>
+        {% if row.status == 'new' %}
+        <span class="f-badge f-badge-green">New</span>
+        {% elif row.status == 'duplicate' %}
+        <span class="f-badge f-badge-blue">Imported</span>
+        {% elif row.status == 'fuzzy' %}
+        <span class="f-badge f-badge-warning" title="Similar entry #{{ row.fuzzy_transaction_id }}">Match?</span>
+        {% else %}
+        <span class="f-badge f-badge-red">Review</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+
+  <div style="margin-top:1.25rem;display:flex;gap:.75rem;align-items:center">
+    <button type="submit" class="f-btn f-btn-primary" id="bi-submit-btn">Import selected rows</button>
+    <span class="f-text-muted" id="bi-selected-count"></span>
+    <span class="f-text-muted" id="bi-import-status" style="display:none">Importing…</span>
+  </div>
+</form>
+{% endif %}
+
+<style>
+.f-bank-import-table .bi-desc { max-width: 280px; font-size: .82rem; }
+.f-bank-import-table .f-select-sm { font-size: .75rem; padding: .2rem .35rem; max-width: 160px; }
+.bi-status-duplicate { opacity: .55; }
+</style>
+
+{% if preview %}
+<script>
+(function () {
+  const form = document.getElementById("bi-commit-form");
+  if (!form) return;
+  const countEl = document.getElementById("bi-selected-count");
+  let submitting = false;
+  function boxes() { return Array.from(document.querySelectorAll(".bi-cb")); }
+  function syncCount() {
+    const n = boxes().filter(function (b) { return b.checked; }).length;
+    if (countEl) countEl.textContent = n + " selected";
+  }
+  boxes().forEach(function (b) { b.addEventListener("change", syncCount); });
+  syncCount();
+
+  document.getElementById("bi-select-new").addEventListener("click", function () {
+    document.querySelectorAll(".bi-row").forEach(function (tr) {
+      const cb = tr.querySelector(".bi-cb");
+      if (!cb) return;
+      cb.checked = tr.dataset.precheck === "1";
+    });
+    syncCount();
+  });
+  document.getElementById("bi-select-none").addEventListener("click", function () {
+    boxes().forEach(function (b) { b.checked = false; });
+    syncCount();
+  });
+  const all = document.getElementById("bi-check-all");
+  if (all) {
+    all.addEventListener("change", function () {
+      boxes().forEach(function (b) { b.checked = all.checked; });
+      syncCount();
+    });
+  }
+  form.addEventListener("submit", function (e) {
+    if (submitting) {
+      e.preventDefault();
+      return;
+    }
+    const selected = boxes().filter(function (b) { return b.checked; });
+    if (!selected.length) {
+      e.preventDefault();
+      alert("Select at least one row to import.");
+      return;
+    }
+    submitting = true;
+    boxes().forEach(function (b) {
+      const tr = b.closest(".bi-row");
+      if (!tr) return;
+      tr.querySelectorAll("select, input").forEach(function (el) {
+        if (el !== b) el.disabled = !b.checked;
+      });
+    });
+    const btn = document.getElementById("bi-submit-btn");
+    const status = document.getElementById("bi-import-status");
+    if (btn) { btn.disabled = true; btn.textContent = "Importing…"; }
+    if (status) status.style.display = "inline";
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -11,7 +11,7 @@
     <form method="get" action="{{ _base }}/expenses" id="filterForm" class="f-filter-row">
       <input type="hidden" name="tx_type" value="{{ tx_type }}"/>
       <select name="fy" class="f-select-sm" onchange="document.getElementById('filterForm').submit()">
-        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
+        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>{% endfor %}
       </select>
       <select name="account_id" class="f-select-sm" onchange="document.getElementById('filterForm').submit()">
         <option value="">All Accounts</option>
@@ -24,9 +24,14 @@
     </form>
     <a href="{{ _base }}/expenses/new?fy={{ fy }}&tx_type={{ tx_type }}&account_id={{ filter_account }}&vendor_id={{ filter_vendor }}"
        class="f-btn-sm f-btn-primary">+ {{ "Record Income" if tx_type=="income" else "Record Expense" }}</a>
+    <a href="{{ _base }}/bank-import" class="f-btn-sm f-btn-outline">Import Bank CSV</a>
     <a href="{{ _base }}/export/transactions.xlsx?fy={{ fy }}&tx_type={{ tx_type }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
   </div>
 </div>
+
+{% if error %}
+<div class="f-card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem">{{ error }}</div>
+{% endif %}
 
 <div id="f-confirm-modal" class="f-modal-overlay" style="display:none">
   <div class="f-modal">
@@ -61,7 +66,7 @@
     <td>{{ t.vendor_name or "—" }}</td>
     <td>{{ t.payment_account_name or "—" }}</td>
     <td class="f-text-muted">{{ t.reference or "—" }}</td>
-    <td class="num f-bold">${{ "{:,.2f}".format(t.amount) }} <small class="f-text-muted">{{ t.currency }}</small></td>
+    <td class="num f-bold">${{ "{:,.2f}".format(t.amount) }} <small class="f-text-muted">{{ t.currency or 'USD' }}</small></td>
     <td>
       {% if t.receipt_filename %}
       <a href="{{ _base }}/expenses/{{ t.id }}/receipt" target="_blank" class="f-receipt-link">📎 Receipt</a>

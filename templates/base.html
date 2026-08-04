@@ -6,10 +6,17 @@
   <title>{% block title %}Leads{% endblock %} · GBInc</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=1.2.0" />
+  <link rel="stylesheet" href="/static/style.css?v=1.4.0" />
   {% block extra_css %}{% endblock %}
 </head>
 <body>
+  {% if not hide_nav %}
+  <div class="app-switch no-print" aria-label="App switcher">
+    <a href="/" class="app-switch-btn active">Leads</a>
+    <a href="/finance/" class="app-switch-btn">Finance</a>
+    <a href="/mr/" class="app-switch-btn">MR</a>
+  </div>
+  {% endif %}
   <div class="layout{% if hide_nav %} layout-full{% endif %}">
     {% if not hide_nav %}
     <aside class="sidebar no-print">
@@ -30,9 +37,6 @@
         <a href="/add?tab=log" class="{% if page == 'add' %}active{% endif %}">Add or update</a>
         <a href="/summary" class="{% if page == 'summary' %}active{% endif %}">Summary</a>
       </nav>
-      <div class="nav-footer-area">
-        <a href="/finance/" class="nav-finance-btn">Finance →</a>
-      </div>
     </aside>
     {% endif %}
     <main class="main">

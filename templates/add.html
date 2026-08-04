@@ -95,6 +95,14 @@
               <input name="deal_price" id="f-price" placeholder="e.g. 150" />
             </div>
             <div>
+              <label>Currency</label>
+              <select name="fob_currency" id="f-currency">
+                {% for c in deal_currencies|default(['Euro','USD','GBP','JPY','CHF','CAD','AUD','CNY','INR','SGD']) %}
+                <option value="{{ c }}" {% if c == 'USD' %}selected{% endif %}>{{ c }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div>
               <label>Price unit</label>
               <select name="deal_price_unit" id="f-price-unit">
                 {% for u in price_units %}
@@ -149,6 +157,14 @@
         <div>
           <label>Price</label>
           <input name="price" placeholder="e.g. 150" />
+        </div>
+        <div>
+          <label>Currency</label>
+          <select name="fob_currency">
+            {% for c in deal_currencies|default(['Euro','USD','GBP','JPY','CHF','CAD','AUD','CNY','INR','SGD']) %}
+            <option value="{{ c }}" {% if c == 'USD' %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
         </div>
         <div>
           <label>Price unit</label>

@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}GBL CS Register — GBInc Management Report{% endblock %}
+{% block content %}
+<div class="mr-page-header">
+  <div>
+    <h1 class="mr-title">GBL CS Register</h1>
+    <p class="mr-subtitle">Cumulative commission statement lines from all uploaded GBL CS sheets</p>
+  </div>
+  <a href="{{ _base }}/gbl-cs-input" class="mr-btn mr-btn-primary">+ Upload sheet</a>
+</div>
+
+<div class="mr-kpi-row mr-kpi-row-3">
+  <div class="mr-kpi">
+    <span class="mr-kpi-label">Total MT</span>
+    <span class="mr-kpi-val">{{ stats.qty_total | num }}</span>
+  </div>
+  <div class="mr-kpi">
+    <span class="mr-kpi-label">Total sale $</span>
+    <span class="mr-kpi-val">${{ stats.sale_total | money }}</span>
+  </div>
+  <div class="mr-kpi">
+    <span class="mr-kpi-label">Total commission $</span>
+    <span class="mr-kpi-val">${{ stats.commission_total | money }}</span>
+  </div>
+</div>
+
+{% if notice %}
+<div class="mr-alert mr-alert-ok">{{ notice }}</div>
+{% endif %}
+
+<form method="get" action="{{ _base }}/gbl-cs-register" class="mr-filters" id="top-filters">
+  <div class="mr-filter-field">
+    <label class="mr-label" for="filter-month">Month</label>
+    <select id="filter-month" name="month" class="mr-select" onchange="this.form.submit()">
+      <option value="">All months</option>
+      {% for m in months %}
+      <option value="{{ m }}" {% if filter_month == m %}selected{% endif %}>{{ m }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mr-filter-field">
+    <label class="mr-label" for="filter-po">PO Number</label>
+    <select id="filter-po" name="po" class="mr-select" onchange="this.form.submit()">
+      <option value="">All PO numbers</option>
+      {% for p in po_numbers %}
+      <option value="{{ p }}" {% if filter_po == p %}selected{% endif %}>{{ p }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if filter_month or filter_po %}
+  <div class="mr-filter-field" style="align-self:flex-end">
+    <a href="{{ _base }}/gbl-cs-register" class="mr-btn mr-btn-outline">Clear top filters</a>
+  </div>
+  {% endif %}
+</form>
+
+{% if not rows %}
+<div class="mr-card">
+  <p class="mr-empty">
+    No commission lines yet.
+    <a href="{{ _base }}/gbl-cs-input">Upload a GBL CS Excel sheet</a> to start the register.
+  </p>
+</div>
+{% else %}
+<div class="mr-table-scroll" id="cs-register-wrap">
+  <table class="mr-table mr-register-table" id="cs-register-table">
+    <thead>
+      <tr>
+        <th class="mr-sticky-col">Delete</th>
+        <th>SR.NO</th>
+        <th>SAIL MONTH</th>
+        <th>INVOICE NO.</th>
+        <th>DUPLICATE</th>
+        <th class="mr-col-hl">VESSEL SAIL DATE</th>
+        <th class="mr-col-hl">PO. NO.</th>
+        <th>PO DATE</th>
+        <th>SHIP TO PARTY</th>
+        <th>PORT OF DISCHARGE</th>
+        <th>QTY</th>
+        <th>CURRENCY</th>
+        <th>RATE PER MT</th>
+        <th>VALUE</th>
+        <th>OCEAN FREIGHT</th>
+        <th>INSURANCE</th>
+        <th>FOB VALUE</th>
+        <th>COMMISSION</th>
+        <th>CURRENCY</th>
+      </tr>
+      <tr class="mr-col-filters">
+        <th class="mr-sticky-col"></th>
+        <th><input type="search" class="mr-col-filter" data-col="1" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="2" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="3" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="4" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="5" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="6" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="7" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="8" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="9" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="10" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="11" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="12" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="13" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="14" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="15" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="16" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="17" placeholder="Filter" /></th>
+        <th><input type="search" class="mr-col-filter" data-col="18" placeholder="Filter" /></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr class="{% if row.is_duplicate %}mr-dup-row{% endif %}">
+        <td class="mr-sticky-col mr-row-actions">
+          <form method="post" action="{{ _base }}/gbl-cs-register/delete"
+                data-confirm="Delete invoice {{ row.invoice_no }} ({{ row.sail_month }}) from the register?">
+            <input type="hidden" name="row_id" value="{{ row.id }}" />
+            <input type="hidden" name="month" value="{{ filter_month }}" />
+            <input type="hidden" name="po" value="{{ filter_po }}" />
+            <button type="submit" class="mr-btn mr-btn-danger mr-btn-sm">Delete</button>
+          </form>
+        </td>
+        <td>{{ row.display_sr }}</td>
+        <td>{{ row.sail_month }}</td>
+        <td class="mr-wrap mr-wrap-md">{{ row.invoice_no }}</td>
+        <td class="mr-dup-cell">{% if row.is_duplicate %}<span class="mr-dup-flag">{{ row.duplicate_flag }}</span>{% else %}—{% endif %}</td>
+        <td class="mr-col-hl mr-wrap mr-wrap-lg">{{ row.vessel_sail_date }}</td>
+        <td class="mr-col-hl mr-po-cell">{{ row.po_no }}</td>
+        <td>{{ row.po_date }}</td>
+        <td class="mr-wrap mr-wrap-md">{{ row.ship_to_party }}</td>
+        <td class="mr-wrap mr-wrap-md">{{ row.port_of_discharge }}</td>
+        <td class="num">{{ row.qty | num }}</td>
+        <td>{{ row.currency }}</td>
+        <td class="num">{{ row.rate_per_mt | money }}</td>
+        <td class="num">{{ row.value | money }}</td>
+        <td class="num">{{ row.ocean_freight | money }}</td>
+        <td class="num">{{ row.insurance | money }}</td>
+        <td class="num">{{ row.fob_value | money }}</td>
+        <td class="num mr-commission">{{ row.commission | money }}</td>
+        <td>{{ row.commission_currency }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+<p class="mr-hint" id="col-filter-status" style="margin-top:.75rem"></p>
+{% endif %}
+
+<script>
+(function () {
+  var table = document.getElementById('cs-register-table');
+  if (!table) return;
+  var inputs = table.querySelectorAll('.mr-col-filter');
+  var status = document.getElementById('col-filter-status');
+  var bodyRows = Array.prototype.slice.call(table.tBodies[0].rows);
+
+  function applyFilters() {
+    var filters = Array.prototype.map.call(inputs, function (inp) {
+      return (inp.value || '').trim().toLowerCase();
+    });
+    var visible = 0;
+    bodyRows.forEach(function (tr) {
+      var show = true;
+      for (var i = 0; i < filters.length; i++) {
+        if (!filters[i]) continue;
+        var cell = tr.cells[i];
+        var text = (cell ? cell.textContent : '').toLowerCase();
+        if (text.indexOf(filters[i]) === -1) { show = false; break; }
+      }
+      tr.style.display = show ? '' : 'none';
+      if (show) visible += 1;
+    });
+    if (status) {
+      var active = filters.some(Boolean);
+      status.textContent = active
+        ? ('Column filters: showing ' + visible + ' of ' + bodyRows.length + ' rows')
+        : '';
+    }
+  }
+
+  inputs.forEach(function (inp) {
+    inp.addEventListener('input', applyFilters);
+  });
+})();
+</script>
+{% endblock %}

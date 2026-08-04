@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+{% block title %}Actual vs Projection — GBInc Management Report{% endblock %}
+{% block content %}
+<div class="mr-page-header">
+  <div>
+    <h1 class="mr-title">Actual vs Projection</h1>
+    <p class="mr-subtitle">CS register actuals vs sales projection targets — generate by month</p>
+  </div>
+  <div class="mr-header-actions">
+    <a class="mr-btn mr-btn-outline"
+       href="{{ _base }}/actual-vs-projection/export.xlsx?fy={{ report.fiscal_year }}&month={{ report.month }}">Download Excel</a>
+    <a class="mr-btn mr-btn-outline"
+       href="{{ _base }}/actual-vs-projection/export.png?fy={{ report.fiscal_year }}&month={{ report.month }}">Download Image</a>
+    <a class="mr-btn mr-btn-primary"
+       href="{{ _base }}/actual-vs-projection/export.pdf?fy={{ report.fiscal_year }}&month={{ report.month }}">Download PDF</a>
+  </div>
+</div>
+
+<form method="get" action="{{ _base }}/actual-vs-projection" class="mr-filters">
+  <div class="mr-filter-field">
+    <label class="mr-label" for="fy">Fiscal year</label>
+    <select id="fy" name="fy" class="mr-select" onchange="this.form.submit()">
+      {% for y in report.available_years %}
+      <option value="{{ y }}" {% if y == report.fiscal_year %}selected{% endif %}>
+        {{ fy_labels[y] }} (Apr {{ y-1 }}–Mar {{ y }})
+      </option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="mr-filter-field">
+    <label class="mr-label" for="month">Month</label>
+    <select id="month" name="month" class="mr-select" onchange="this.form.submit()">
+      {% for m in report.available_months %}
+      <option value="{{ m }}" {% if m == report.month %}selected{% endif %}>{{ m|title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</form>
+
+{% if notice %}
+<div class="mr-alert mr-alert-ok">{{ notice }}</div>
+{% endif %}
+
+{% if report.unmapped_rows %}
+<div class="mr-alert mr-alert-ok" style="background:#fffbeb;border-color:#fcd34d;color:#92400e">
+  {{ report.unmapped_count }} CS register line(s) could not be mapped and were excluded from totals:
+  <strong>{{ report.unmapped_names | join(', ') }}</strong>.
+  Pick a projection product on each row below to include them.
+</div>
+{% endif %}
+
+<div class="mr-table-scroll">
+  <table class="mr-table mr-avp-table">
+    <thead>
+      <tr>
+        <th rowspan="2" class="mr-avp-product">Product</th>
+        <th colspan="2">{{ report.month_header }}</th>
+        <th colspan="2">{{ report.ytd_header }}</th>
+        <th colspan="3">{{ report.target_header }}</th>
+      </tr>
+      <tr>
+        <th class="num">Qty<br/><span class="mr-subh">in MT</span></th>
+        <th class="num">Income<br/><span class="mr-subh">in $</span></th>
+        <th class="num">Qty<br/><span class="mr-subh">in MT</span></th>
+        <th class="num">Income<br/><span class="mr-subh">in $</span></th>
+        <th class="num">Qty<br/><span class="mr-subh">in MT</span></th>
+        <th class="num">Sales Val<br/><span class="mr-subh">$</span></th>
+        <th class="num">Income<br/><span class="mr-subh">in $</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in report.rows %}
+      <tr>
+        <td class="mr-avp-product">{{ row.product }}</td>
+        <td class="num">{{ row.month_qty | num }}</td>
+        <td class="num">{{ "{:,.0f}".format(row.month_income) }}</td>
+        <td class="num">{{ row.ytd_qty | num }}</td>
+        <td class="num">{{ "{:,.0f}".format(row.ytd_income) }}</td>
+        <td class="num">{{ row.target_qty | num }}</td>
+        <td class="num">{% if row.target_sales is not none %}{{ "{:,.0f}".format(row.target_sales) }}{% else %}{% endif %}</td>
+        <td class="num">{{ "{:,.0f}".format(row.target_income) }}</td>
+      </tr>
+      {% endfor %}
+
+      {% for u in report.unmapped_rows %}
+      <tr class="mr-avp-unmapped">
+        <td class="mr-avp-product">
+          <form method="post" action="{{ _base }}/actual-vs-projection/map-product" class="mr-avp-map-form">
+            <input type="hidden" name="fy" value="{{ report.fiscal_year }}" />
+            <input type="hidden" name="month" value="{{ report.month }}" />
+            <input type="hidden" name="alias_key" value="{{ u.alias_key }}" />
+            <input type="hidden" name="display_label" value="{{ u.label }}" />
+            <label class="mr-avp-map-label">
+              CS: {{ u.label }}{% if u.codes %} ({{ u.codes | join(', ') }}){% endif %}
+              <span class="mr-avp-map-meta">{{ u.line_count }} line(s)</span>
+            </label>
+            <select name="product" class="mr-select mr-avp-map-select" onchange="this.form.submit()" required>
+              <option value="">Map to product…</option>
+              {% for p in report.product_choices %}
+              <option value="{{ p }}">{{ p }}</option>
+              {% endfor %}
+              <option value="__new__:{{ u.label }}">Add as “{{ u.label }}”</option>
+            </select>
+          </form>
+        </td>
+        <td class="num">{{ u.month_qty | num }}</td>
+        <td class="num">{{ "{:,.0f}".format(u.month_income) }}</td>
+        <td class="num">{{ u.ytd_qty | num }}</td>
+        <td class="num">{{ "{:,.0f}".format(u.ytd_income) }}</td>
+        <td class="num mr-avp-na">—</td>
+        <td class="num mr-avp-na">—</td>
+        <td class="num mr-avp-na">—</td>
+      </tr>
+      {% endfor %}
+
+      <tr class="mr-total-row">
+        <td class="mr-avp-product"><strong>Total</strong></td>
+        <td class="num"><strong>{{ report.totals.month_qty | num }}</strong></td>
+        <td class="num"><strong>{{ "{:,.0f}".format(report.totals.month_income) }}</strong></td>
+        <td class="num"><strong>{{ report.totals.ytd_qty | num }}</strong></td>
+        <td class="num"><strong>{{ "{:,.0f}".format(report.totals.ytd_income) }}</strong></td>
+        <td class="num"><strong>{{ report.totals.target_qty | num }}</strong></td>
+        <td class="num"><strong>{{ "{:,.0f}".format(report.totals.target_sales) }}</strong></td>
+        <td class="num"><strong>{{ "{:,.0f}".format(report.totals.target_income) }}</strong></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}

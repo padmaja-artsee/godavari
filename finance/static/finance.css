@@ -70,6 +70,48 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 }
 .f-leads-btn:hover { background: #1C5631; }
 
+/* Fixed Leads / Finance switcher (top right) */
+.app-switch {
+  position: fixed;
+  top: 0.75rem;
+  right: 1rem;
+  z-index: 200;
+  display: inline-flex;
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid var(--grey-b);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+}
+.app-switch-btn {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: var(--muted);
+  background: #fff;
+  border: none;
+  transition: background 0.15s, color 0.15s;
+}
+.app-switch-btn + .app-switch-btn {
+  border-left: 1px solid var(--grey-b);
+}
+.app-switch-btn:hover {
+  background: var(--grey);
+  color: var(--green);
+}
+.app-switch-btn.active {
+  background: var(--green);
+  color: #fff;
+}
+.app-switch-btn.active:hover {
+  background: var(--green-d);
+  color: #fff;
+}
+
 /* ─── Main area ─── */
 .f-main { margin-left: var(--sidebar); padding: 1.5rem 1.75rem; flex: 1; max-width: 1600px; }
 
@@ -77,6 +119,7 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-page-header {
   display: flex; align-items: flex-start; justify-content: space-between;
   gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;
+  padding-right: 14rem; /* clear fixed Leads/Finance/MR switcher */
 }
 .f-title { font-size: 1.4rem; font-weight: 700; color: var(--green-d); }
 .f-subtitle { font-size: .82rem; color: var(--muted); margin-top: .1rem; }
@@ -189,6 +232,11 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 .f-rollup-badge {
   display: inline-block; padding: .05rem .3rem; border-radius: 3px;
   background: var(--blue-l); color: var(--blue); font-size: .72rem; font-weight: 600;
+}
+.f-ci-badge {
+  display: inline-block; padding: .05rem .3rem; border-radius: 3px;
+  background: #f3e8ff; color: #7c3aed; font-size: .72rem; font-weight: 600;
+  margin-left: .2rem;
 }
 .f-manual-badge {
   display: inline-block; padding: .05rem .3rem; border-radius: 3px;
@@ -353,8 +401,9 @@ body { font-family: var(--font); color: var(--text); background: var(--grey); di
 
 /* ─── Print styles ─── */
 @media print {
-  .f-sidebar, .f-page-header, .no-print { display: none !important; }
+  .f-sidebar, .f-page-header, .no-print, .app-switch { display: none !important; }
   .f-main { margin-left: 0 !important; padding: 0 !important; }
+  .f-page-header { padding-right: 0 !important; }
   .f-report { border: none !important; padding: 0 !important; max-width: 100% !important; }
   body { background: #fff !important; font-size: 11pt; }
   .f-pl-table { font-size: 8pt; }

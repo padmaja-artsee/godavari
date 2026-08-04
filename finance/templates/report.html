@@ -10,7 +10,7 @@
   <div class="f-header-controls">
     <form method="get" action="{{ _base }}/report" class="f-filter-row" id="reportForm">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
-        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>{% endfor %}
+        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>{% endfor %}
       </select>
       <select name="month" class="f-select-sm" onchange="this.form.submit()">
         {% for m in months %}

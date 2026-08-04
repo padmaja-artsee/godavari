@@ -400,6 +400,9 @@ def _run_migrations(conn) -> None:
     if "image_url" not in cols:
         conn.execute("ALTER TABLE transactions ADD COLUMN image_url TEXT DEFAULT ''")
 
+    from finance.app.bank_import import ensure_bank_import_schema
+    ensure_bank_import_schema(conn)
+
 
 # ---------------------------------------------------------------------------
 # Line item queries
@@ -588,9 +591,11 @@ def get_fiscal_years() -> list[int]:
 
 
 def is_archived(fiscal_year: int) -> bool:
+    """True only when explicitly archived — opening_balance alone must not lock the year."""
     with get_db() as conn:
         return bool(conn.execute(
-            "SELECT 1 FROM fy_archive WHERE fiscal_year=?", (fiscal_year,)
+            "SELECT 1 FROM fy_archive WHERE fiscal_year=? AND archived_at IS NOT NULL",
+            (fiscal_year,),
         ).fetchone())
 
 
@@ -598,16 +603,30 @@ def archive_year(fiscal_year: int) -> None:
     from datetime import datetime, timezone
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     with get_db() as conn:
-        conn.execute(
-            "INSERT OR IGNORE INTO fy_archive (fiscal_year,archived_at) VALUES (?,?)",
-            (fiscal_year, now),
-        )
+        existing = conn.execute(
+            "SELECT fiscal_year FROM fy_archive WHERE fiscal_year=?",
+            (fiscal_year,),
+        ).fetchone()
+        if existing:
+            # Row may already exist for opening_balance — set archived_at
+            conn.execute(
+                "UPDATE fy_archive SET archived_at=? WHERE fiscal_year=?",
+                (now, fiscal_year),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO fy_archive (fiscal_year, archived_at) VALUES (?, ?)",
+                (fiscal_year, now),
+            )
 
 
 def unarchive_year(fiscal_year: int) -> None:
+    """Clear archive flag only — keep opening_balance intact."""
     with get_db() as conn:
-        conn.execute("DELETE FROM fy_archive WHERE fiscal_year=?", (fiscal_year,))
-
+        conn.execute(
+            "UPDATE fy_archive SET archived_at=NULL WHERE fiscal_year=?",
+            (fiscal_year,),
+        )
 
 # ---------------------------------------------------------------------------
 # Account / Vendor / Payment account queries

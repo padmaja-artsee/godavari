@@ -10,7 +10,7 @@
     <form method="get" action="{{ _base }}/">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}
-        <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>
+        <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>
         {% endfor %}
       </select>
     </form>
@@ -27,7 +27,8 @@
       <button class="f-btn-sm f-btn-outline">Archive Year</button>
     </form>
     {% endif %}
-    <a href="{{ _base }}/budget?fy={{ fy+1 }}" class="f-btn-sm f-btn-primary">+ New Year (FY{{ fy+1 }})</a>
+    <a href="{{ _base }}/budget?fy={{ fy+1 }}" class="f-btn-sm f-btn-primary"
+       onclick="return confirm('Open a blank Budget for FY{{ fy+1 }} (Apr {{ fy }}–Mar {{ fy+1 }})?\n\nThis does NOT erase or replace FY{{ fy }} data. It only opens the next year so you can enter a new budget.')">+ New Year (FY{{ fy+1 }})</a>
   </div>
 </div>
 

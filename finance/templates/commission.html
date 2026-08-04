@@ -11,7 +11,7 @@
     <form method="get" action="{{ _base }}/commission" class="f-filter-row" id="commissionForm">
       <select name="fy" class="f-select-sm" onchange="this.form.submit()">
         {% for y in fiscal_years %}
-        <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }}</option>
+        <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>
         {% endfor %}
       </select>
       <select name="month" class="f-select-sm" onchange="this.form.submit()">

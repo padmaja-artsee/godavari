@@ -338,14 +338,17 @@ def export_budget_xlsx(items: list, fiscal_year: int) -> tuple:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def export_actuals_xlsx(items: list, fiscal_year: int) -> tuple:
+    from finance.app.commission_income import get_commission_invoice_rollup
+
     wb = openpyxl.Workbook()
     ws = wb.active; ws.title = f"Actuals FY{fiscal_year}"
     rollup  = get_transaction_rollup(fiscal_year)
     manual  = get_actuals_manual(fiscal_year)
+    ci_rollup = get_commission_invoice_rollup(fiscal_year, items)
     combined = {}
     ob = get_opening_balance(fiscal_year)
-    for k in set(list(rollup.keys()) + list(manual.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    for k in set(list(rollup.keys()) + list(manual.keys()) + list(ci_rollup.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0) + ci_rollup.get(k, 0)
     _write_grid_sheet(ws, items, combined,
         f"Actuals — FY{fiscal_year}",
         f"Apr {fiscal_year-1} – Mar {fiscal_year}",
@@ -368,11 +371,13 @@ def export_variances_xlsx(items: list, fiscal_year: int) -> tuple:
 
     ob = get_opening_balance(fiscal_year)
     b_grid = compute_grid(get_budget_grid(fiscal_year), items, ob)
+    from finance.app.commission_income import get_commission_invoice_rollup
     rollup  = get_transaction_rollup(fiscal_year)
     manual  = get_actuals_manual(fiscal_year)
+    ci_rollup = get_commission_invoice_rollup(fiscal_year, items)
     combined = {}
-    for k in set(list(rollup.keys()) + list(manual.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    for k in set(list(rollup.keys()) + list(manual.keys()) + list(ci_rollup.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0) + ci_rollup.get(k, 0)
     a_grid = compute_grid(combined, items, ob)
 
     # Sub-header rows

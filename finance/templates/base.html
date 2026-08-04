@@ -4,9 +4,14 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}GBInc Finance{% endblock %}</title>
-  <link rel="stylesheet" href="{{ _base }}/static/finance.css?v=1.5.0"/>
+  <link rel="stylesheet" href="{{ _base }}/static/finance.css?v=1.8.0"/>
 </head>
 <body>
+<div class="app-switch no-print" aria-label="App switcher">
+  <a href="/" class="app-switch-btn">Leads</a>
+  <a href="{{ _base }}/" class="app-switch-btn active">Finance</a>
+  <a href="/mr/" class="app-switch-btn">MR</a>
+</div>
 <nav class="f-sidebar">
   <div class="f-brand">
     <img src="{{ _base }}/leads-static/logo.png" alt="GBInc" class="f-logo" onerror="this.style.display='none'"/>
@@ -33,6 +38,7 @@
 
   <div class="f-nav-section">
     <span class="f-nav-label">Transactions</span>
+    <a href="{{ _base }}/bank-import" class="f-nav-link {% if page=='bank_import' %}active{% endif %}">Import Bank CSV</a>
     <a href="{{ _base }}/expenses/new?tx_type=expense" class="f-nav-link f-nav-action {% if page=='expense_new' %}active{% endif %}">+ Record Expense</a>
     <a href="{{ _base }}/expenses?tx_type=expense" class="f-nav-link f-nav-sub {% if page=='expenses' %}active{% endif %}">All Expenses</a>
     <a href="{{ _base }}/expenses/new?tx_type=income" class="f-nav-link f-nav-action {% if page=='income_new' %}active{% endif %}">+ Record Income</a>
@@ -44,10 +50,6 @@
     <a href="{{ _base }}/vendors/new" class="f-nav-link f-nav-action {% if page=='vendor_new' %}active{% endif %}">+ Add Vendor</a>
     <a href="{{ _base }}/vendors" class="f-nav-link f-nav-sub {% if page=='vendors' %}active{% endif %}">All Vendors</a>
     <a href="{{ _base }}/settings" class="f-nav-link {% if page=='settings' %}active{% endif %}">Settings</a>
-  </div>
-
-  <div class="f-nav-footer">
-    <a href="/" class="f-leads-btn">← Leads</a>
   </div>
 </nav>
 

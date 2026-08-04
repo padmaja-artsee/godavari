@@ -63,15 +63,26 @@ def _int_words(n: int) -> str:
     return " ".join(parts)
 
 
-def dollars_in_words(amount: float) -> str:
-    """USD amount in words for invoice (e.g. commission total)."""
+def dollars_in_words(amount: float, currency: str = "USD") -> str:
+    """Amount in words for invoice (currency-aware major/minor units)."""
+    from app.database import currency_unit_words, normalize_deal_currency
+
     v = round(_float(amount), 2)
-    dollars = int(v)
-    cents = int(round((v - dollars) * 100))
-    words = _int_words(dollars) + " Dollar" + ("s" if dollars != 1 else "")
-    if cents:
-        words += f" and {_int_words(cents)} Cent" + ("s" if cents != 1 else "")
+    major = int(v)
+    minor = int(round((v - major) * 100))
+    major_name, minor_name = currency_unit_words(currency)
+    words = _int_words(major) + f" {major_name}" + ("s" if major != 1 else "")
+    if minor:
+        words += f" and {_int_words(minor)} {minor_name}" + ("s" if minor != 1 else "")
+    # Keep currency label visible when not USD
+    cur = normalize_deal_currency(currency)
+    if cur not in ("USD",) and cur.lower() not in words.lower():
+        words = f"{words} ({cur})"
     return words
+
+
+# Backwards-compatible alias used by older call sites / exports
+amount_in_words = dollars_in_words
 
 
 def form_getlist(form: Any, key: str) -> list[str]:
@@ -341,7 +352,10 @@ def _finalize_ci_save(
     totals = calculate_ci_totals(line_items, _float(data.get("vat_percent")))
     out = dict(data)
     out["notice_date"] = out.get("invoice_date", "")
-    out["amount_in_words"] = dollars_in_words(totals["total_commission"])
+    out["amount_in_words"] = dollars_in_words(
+        totals["total_commission"],
+        out.get("value_currency") or out.get("fob_currency") or "USD",
+    )
     return out, totals["line_items"]
 
 
@@ -787,9 +801,20 @@ def create_ci_from_deals(
         f"Commission for supply of {', '.join(products)} to {', '.join(companies)}"
     )
     ci["line_items"] = [_deal_to_ci_line(dict(r)) for r in rows]
+    # Prefer deal commercial currency; fall back to USD.
+    from app.database import normalize_deal_currency
+
+    deal_cur = normalize_deal_currency(first.get("fob_currency") or "USD")
+    # If multiple deals disagree, keep first but leave editable on CI.
+    for r in rows[1:]:
+        other = normalize_deal_currency(dict(r).get("fob_currency") or deal_cur)
+        if other != deal_cur:
+            break
+    ci["fob_currency"] = deal_cur
+    ci["value_currency"] = deal_cur
     totals = calculate_ci_totals(ci["line_items"], 0)
     ci["line_items"] = totals["line_items"]
-    ci["amount_in_words"] = dollars_in_words(totals["total_commission"])
+    ci["amount_in_words"] = dollars_in_words(totals["total_commission"], deal_cur)
     enrich_ci(ci)
 
     ci["_field_hints"] = {

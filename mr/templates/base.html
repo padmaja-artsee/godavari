@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}GBInc Management Report{% endblock %}</title>
+  <link rel="stylesheet" href="{{ _base }}/static/mr.css?v=1.12.0"/>
+</head>
+<body>
+<div class="app-switch no-print" aria-label="App switcher">
+  <a href="/" class="app-switch-btn">Leads</a>
+  <a href="/finance/" class="app-switch-btn">Finance</a>
+  <a href="{{ _base }}/" class="app-switch-btn active">MR</a>
+</div>
+<nav class="mr-sidebar">
+  <div class="mr-brand">
+    <img src="{{ _base }}/leads-static/logo.png" alt="GBInc" class="mr-logo" onerror="this.style.display='none'"/>
+    <div class="mr-brand-text">
+      <span class="mr-brand-name">GBInc</span>
+      <span class="mr-brand-sub">Management Report</span>
+    </div>
+  </div>
+
+  <div class="mr-nav-section">
+    <span class="mr-nav-label">Overview</span>
+    <a href="{{ _base }}/" class="mr-nav-link {% if page=='dashboard' %}active{% endif %}">Dashboard</a>
+    <a href="{{ _base }}/sales-projections" class="mr-nav-link {% if page=='sales_projections' %}active{% endif %}">Sales Projections</a>
+    <a href="{{ _base }}/actual-vs-projection" class="mr-nav-link {% if page=='actual_vs_projection' %}active{% endif %}">Actual vs Projection</a>
+  </div>
+
+  <div class="mr-nav-section">
+    <span class="mr-nav-label">Commission</span>
+    <a href="{{ _base }}/gbl-cs-input" class="mr-nav-link {% if page=='gbl_cs_input' %}active{% endif %}">GBL CS Input</a>
+    <a href="{{ _base }}/gbl-cs-register" class="mr-nav-link {% if page=='gbl_cs_register' %}active{% endif %}">GBL CS Register</a>
+  </div>
+</nav>
+
+<main class="mr-main">
+  {% block content %}{% endblock %}
+</main>
+
+<div id="mr-confirm-overlay" class="mr-modal-overlay" style="display:none" aria-hidden="true">
+  <div class="mr-modal" role="dialog" aria-modal="true">
+    <p id="mr-confirm-msg" class="mr-modal-msg"></p>
+    <div class="mr-modal-actions">
+      <button type="button" id="mr-confirm-cancel" class="mr-btn mr-btn-outline">Cancel</button>
+      <button type="button" id="mr-confirm-ok" class="mr-btn mr-btn-danger">Delete</button>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var overlay = document.getElementById('mr-confirm-overlay');
+  var msgEl = document.getElementById('mr-confirm-msg');
+  var okBtn = document.getElementById('mr-confirm-ok');
+  var cancelBtn = document.getElementById('mr-confirm-cancel');
+  var pendingForm = null;
+
+  function closeModal() {
+    overlay.style.display = 'none';
+    overlay.setAttribute('aria-hidden', 'true');
+    pendingForm = null;
+  }
+
+  function openModal(msg, form) {
+    msgEl.textContent = msg;
+    pendingForm = form;
+    overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
+  }
+
+  okBtn.addEventListener('click', function () {
+    var form = pendingForm;
+    closeModal();
+    if (form) form.submit();
+  });
+  cancelBtn.addEventListener('click', closeModal);
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) closeModal();
+  });
+
+  document.addEventListener('submit', function (e) {
+    var form = e.target;
+    if (!(form instanceof HTMLFormElement)) return;
+    var msg = form.getAttribute('data-confirm');
+    if (!msg) return;
+    e.preventDefault();
+    openModal(msg, form);
+  }, true);
+})();
+</script>
+</body>
+</html>

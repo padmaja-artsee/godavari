@@ -120,11 +120,14 @@ def _build_rows(grid: dict, items: list[dict], opening_balance: float = 0.0) -> 
 
 
 def _combined_actuals(fiscal_year: int, items: list[dict], opening_balance: float = 0.0) -> dict:
+    from finance.app.commission_income import get_commission_invoice_rollup
+
     rollup = get_transaction_rollup(fiscal_year)
     manual = get_actuals_manual(fiscal_year)
+    ci_rollup = get_commission_invoice_rollup(fiscal_year, items)
     combined = {}
-    for k in set(list(rollup.keys()) + list(manual.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    for k in set(list(rollup.keys()) + list(manual.keys()) + list(ci_rollup.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0) + ci_rollup.get(k, 0)
     return compute_grid(combined, items, opening_balance)
 
 
@@ -321,14 +324,17 @@ async def budget_delete_line(fy: int = Form(...), lid: int = Form(...)):
 
 @app.get("/actuals", response_class=HTMLResponse)
 async def actuals_page(request: Request, fy: int = Query(0), saved: int = Query(0)):
+    from finance.app.commission_income import get_commission_invoice_rollup
+
     fys = get_fiscal_years()
     if not fy: fy = fys[0]
     items   = list_line_items()
     rollup  = get_transaction_rollup(fy)
     manual  = get_actuals_manual(fy)
+    ci_rollup = get_commission_invoice_rollup(fy, items)
     combined = {}
-    for k in set(list(rollup.keys()) + list(manual.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
+    for k in set(list(rollup.keys()) + list(manual.keys()) + list(ci_rollup.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0) + ci_rollup.get(k, 0)
     opening_balance = get_opening_balance(fy)
     full = compute_grid(combined, items, opening_balance)
     by_name = {i["name"]: i["id"] for i in items}
@@ -337,10 +343,12 @@ async def actuals_page(request: Request, fy: int = Query(0), saved: int = Query(
     for item in items:
         lid = item["id"]
         monthly_r = {m: rollup.get((lid, m), 0.0)  for m in FY_MONTHS}
+        monthly_ci = {m: ci_rollup.get((lid, m), 0.0) for m in FY_MONTHS}
         monthly_m = {m: manual.get((lid, m), 0.0)  for m in FY_MONTHS}
         monthly_t = {m: full.get((lid, m), 0.0)    for m in FY_MONTHS}
         rows.append({
             "item": item, "monthly_r": monthly_r,
+            "monthly_ci": monthly_ci,
             "monthly_m": monthly_m, "monthly_t": monthly_t,
             "total": _row_total(item, lid, full, by_name),
             "style": SECTION_STYLES.get(item["name"], ""),
@@ -412,13 +420,48 @@ async def variances_page(request: Request, fy: int = Query(0)):
 # Expenses Analysis (summary)
 # ---------------------------------------------------------------------------
 
+def _fy_month_slice(from_month: int, to_month: int) -> list[int]:
+    """Inclusive subsequence of FY_MONTHS (Apr→Mar order)."""
+    fm = from_month if from_month in FY_MONTHS else FY_MONTHS[0]
+    tm = to_month if to_month in FY_MONTHS else FY_MONTHS[-1]
+    i0, i1 = FY_MONTHS.index(fm), FY_MONTHS.index(tm)
+    if i0 > i1:
+        i0, i1 = i1, i0
+    return FY_MONTHS[i0 : i1 + 1]
+
+
+def _analysis_period_label(months: list[int], fy: int) -> str:
+    if not months or months == list(FY_MONTHS):
+        return f"FY{fy}"
+    a, b = months[0], months[-1]
+    ya = fy - 1 if a >= 4 else fy
+    yb = fy - 1 if b >= 4 else fy
+    if a == b:
+        return f"{MONTH_LABELS[a]} {ya}"
+    if ya == yb:
+        return f"{MONTH_LABELS[a]}–{MONTH_LABELS[b]} {ya}"
+    return f"{MONTH_LABELS[a]} {ya} – {MONTH_LABELS[b]} {yb}"
+
+
 @app.get("/analysis", response_class=HTMLResponse)
-async def analysis_page(request: Request, fy: int = Query(0)):
+async def analysis_page(
+    request: Request,
+    fy: int = Query(0),
+    from_month: int = Query(0),
+    to_month: int = Query(0),
+):
     import json
 
     fys = get_fiscal_years()
     if not fy:
         fy = fys[0]
+    months = _fy_month_slice(
+        from_month or FY_MONTHS[0],
+        to_month or FY_MONTHS[-1],
+    )
+    from_m, to_m = months[0], months[-1]
+    period_label = _analysis_period_label(months, fy)
+
     items = list_line_items()
     ob = get_opening_balance(fy)
     b_grid = compute_grid(get_budget_grid(fy), items, ob)
@@ -435,8 +478,8 @@ async def analysis_page(request: Request, fy: int = Query(0)):
     summary = []
     for sec, label in SUMMARY_LINES:
         sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
-        planned = sum(b_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
-        actual = sum(a_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
+        planned = sum(b_grid.get((i["id"], m), 0) for i in sec_items for m in months)
+        actual = sum(a_grid.get((i["id"], m), 0) for i in sec_items for m in months)
         var = planned - actual if sec != "income" else actual - planned
         var_pct = (var / planned * 100) if planned else None
         summary.append({
@@ -444,7 +487,7 @@ async def analysis_page(request: Request, fy: int = Query(0)):
             "variance": var, "var_pct": var_pct, "section": sec,
         })
 
-    chart_months = [MONTH_LABELS[m] for m in FY_MONTHS]
+    chart_months = [MONTH_LABELS[m] for m in months]
     line_data = {}
     for i in items:
         if i["is_calculated"]:
@@ -452,8 +495,8 @@ async def analysis_page(request: Request, fy: int = Query(0)):
         line_data[i["id"]] = {
             "name": i["name"],
             "section": i["section"],
-            "budget": [b_grid.get((i["id"], m), 0) for m in FY_MONTHS],
-            "actual": [a_grid.get((i["id"], m), 0) for m in FY_MONTHS],
+            "budget": [b_grid.get((i["id"], m), 0) for m in months],
+            "actual": [a_grid.get((i["id"], m), 0) for m in months],
         }
 
     section_totals = {}
@@ -461,14 +504,19 @@ async def analysis_page(request: Request, fy: int = Query(0)):
         sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
         section_totals[sec] = {
             "label": label,
-            "budget": [sum(b_grid.get((it["id"], m), 0) for it in sec_items) for m in FY_MONTHS],
-            "actual": [sum(a_grid.get((it["id"], m), 0) for it in sec_items) for m in FY_MONTHS],
+            "budget": [sum(b_grid.get((it["id"], m), 0) for it in sec_items) for m in months],
+            "actual": [sum(a_grid.get((it["id"], m), 0) for it in sec_items) for m in months],
         }
 
     return templates.TemplateResponse("analysis.html", _ctx(
         request,
         fy=fy,
         fiscal_years=fys,
+        from_month=from_m,
+        to_month=to_m,
+        months=FY_MONTHS,
+        month_labels=MONTH_LABELS,
+        period_label=period_label,
         summary=summary,
         chart_months=chart_months,
         line_data_json=json.dumps(line_data),
@@ -689,6 +737,146 @@ async def report_page(
 
 
 # ---------------------------------------------------------------------------
+# Bank CSV import
+# ---------------------------------------------------------------------------
+
+@app.get("/bank-import", response_class=HTMLResponse)
+async def bank_import_form(request: Request, error: str = Query(""), imported: int = Query(0), warnings: int = Query(0)):
+    from datetime import date
+    today = date.today()
+    default_from = today.replace(day=1).isoformat()
+    pay_accounts = list_payment_accounts()
+    default_pay = next((p["id"] for p in pay_accounts if "GBInc Bank" in p["name"]), None)
+    return templates.TemplateResponse("bank_import.html", _ctx(
+        request,
+        page="bank_import",
+        preview=False,
+        error=error,
+        imported=imported,
+        warnings=warnings,
+        import_errors=[],
+        already_submitted=False,
+        from_date=default_from,
+        to_date=today.isoformat(),
+        payment_accounts=pay_accounts,
+        default_payment_account_id=default_pay,
+    ))
+
+
+@app.post("/bank-import/preview", response_class=HTMLResponse)
+async def bank_import_preview(
+    request: Request,
+    file: UploadFile = File(...),
+    from_date: str = Form(""),
+    to_date: str = Form(""),
+    payment_account_id: int = Form(...),
+):
+    from finance.app.bank_import import build_import_preview
+
+    try:
+        data = await file.read()
+        if not data:
+            raise ValueError("Empty file")
+        batch_id, rows, summary = build_import_preview(
+            data,
+            from_date=from_date,
+            to_date=to_date,
+            payment_account_id=payment_account_id,
+        )
+    except Exception as exc:
+        return templates.TemplateResponse("bank_import.html", _ctx(
+            request,
+            page="bank_import",
+            preview=False,
+            error=str(exc)[:200],
+            from_date=from_date,
+            to_date=to_date,
+            payment_accounts=list_payment_accounts(),
+            default_payment_account_id=payment_account_id,
+        ))
+
+    income_accounts = [a for a in list_accounts() if a["section"] == "income"]
+    expense_accounts = [a for a in list_accounts() if a["section"] != "income"]
+    return templates.TemplateResponse("bank_import.html", _ctx(
+        request,
+        page="bank_import",
+        preview=True,
+        batch_id=batch_id,
+        rows=rows,
+        summary=summary,
+        from_date=from_date,
+        to_date=to_date,
+        payment_account_id=payment_account_id,
+        income_accounts=income_accounts,
+        expense_accounts=expense_accounts,
+        vendors=list_vendors(),
+        error="",
+    ))
+
+
+@app.post("/bank-import/commit", response_class=HTMLResponse)
+async def bank_import_commit(request: Request):
+    from datetime import date
+    from finance.app.bank_import import commit_import_batch
+
+    form = await request.form()
+    batch_id = str(form.get("batch_id") or "")
+    payment_account_id = int(form.get("payment_account_id") or 0)
+    selected_raw = form.getlist("selected")
+    today = date.today()
+    default_from = today.replace(day=1).isoformat()
+    pay_accounts = list_payment_accounts()
+
+    if not batch_id or not payment_account_id:
+        return templates.TemplateResponse("bank_import.html", _ctx(
+            request,
+            page="bank_import",
+            preview=False,
+            error="Missing batch or payment account.",
+            imported=0,
+            warnings=0,
+            import_errors=[],
+            already_submitted=False,
+            from_date=default_from,
+            to_date=today.isoformat(),
+            payment_accounts=pay_accounts,
+            default_payment_account_id=payment_account_id or None,
+        ))
+
+    selected_indices = [int(s) for s in selected_raw]
+    account_overrides: dict[int, int] = {}
+    vendor_overrides: dict[int, int | None] = {}
+    for idx in dict.fromkeys(selected_indices):
+        ak = form.get(f"account_id_{idx}")
+        vk = form.get(f"vendor_id_{idx}")
+        if ak:
+            account_overrides[idx] = int(ak)
+        vendor_overrides[idx] = int(vk) if vk else None
+
+    count, errors, already = commit_import_batch(
+        batch_id,
+        selected_indices,
+        account_overrides,
+        vendor_overrides,
+        payment_account_id,
+    )
+    return templates.TemplateResponse("bank_import.html", _ctx(
+        request,
+        page="bank_import",
+        preview=False,
+        error="",
+        imported=count,
+        warnings=len(errors),
+        import_errors=errors[:8],
+        already_submitted=already,
+        from_date=default_from,
+        to_date=today.isoformat(),
+        payment_accounts=pay_accounts,
+        default_payment_account_id=payment_account_id,
+    ))
+
+
+# ---------------------------------------------------------------------------
 # Transactions (expenses + income)
 # ---------------------------------------------------------------------------
 
@@ -697,17 +885,19 @@ async def expenses_list(
     request: Request, fy: int = Query(0),
     account_id: int = Query(0), vendor_id: int = Query(0),
     tx_type: str = Query("expense"),
+    error: str = Query(""),
 ):
     fys = get_fiscal_years()
     if not fy: fy = fys[0]
     txs   = list_transactions(fiscal_year=fy, transaction_type=tx_type,
                                account_id=account_id or None, vendor_id=vendor_id or None)
-    total = sum(t["amount"] for t in txs)
+    total = sum(float(t.get("amount") or 0) for t in txs)
     return templates.TemplateResponse("expenses.html", _ctx(
         request, fy=fy, fiscal_years=fys,
         transactions=txs, total=total, tx_type=tx_type,
         accounts=list_accounts(), vendors=list_vendors(),
         filter_account=account_id, filter_vendor=vendor_id,
+        error=error,
     ))
 
 
@@ -805,7 +995,15 @@ async def expense_edit_save(
 
 @app.post("/expenses/{tx_id}/delete")
 async def expense_delete(tx_id: int, fy: int = Form(0), tx_type: str = Form("expense")):
-    delete_transaction(tx_id)
+    from urllib.parse import quote
+    try:
+        delete_transaction(tx_id)
+    except Exception as exc:
+        msg = quote(str(exc)[:160])
+        return RedirectResponse(
+            f"{FINANCE_BASE}/expenses?fy={fy}&tx_type={tx_type}&error={msg}",
+            status_code=303,
+        )
     return RedirectResponse(f"{FINANCE_BASE}/expenses?fy={fy}&tx_type={tx_type}", status_code=303)
 
 
@@ -958,10 +1156,15 @@ async def export_report(
 
 
 @app.get("/export/analysis.xlsx")
-async def export_analysis(fy: int = Query(0)):
+async def export_analysis(
+    fy: int = Query(0),
+    from_month: int = Query(0),
+    to_month: int = Query(0),
+):
     from finance.app.exports import export_analysis_xlsx
     fys = get_fiscal_years()
     if not fy: fy = fys[0] if fys else 2027
+    months = _fy_month_slice(from_month or FY_MONTHS[0], to_month or FY_MONTHS[-1])
     items  = list_line_items()
     ob     = get_opening_balance(fy)
     b_grid = compute_grid(get_budget_grid(fy), items, ob)
@@ -978,18 +1181,18 @@ async def export_analysis(fy: int = Query(0)):
     summary = []
     for sec, label in SUMMARY_LINES:
         sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
-        planned = sum(b_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
-        actual  = sum(a_grid.get((i["id"], m), 0) for i in sec_items for m in FY_MONTHS)
+        planned = sum(b_grid.get((i["id"], m), 0) for i in sec_items for m in months)
+        actual  = sum(a_grid.get((i["id"], m), 0) for i in sec_items for m in months)
         var     = planned - actual if sec != "income" else actual - planned
         var_pct = (var / planned * 100) if planned else None
         summary.append({"label": label, "planned": planned, "actual": actual,
                          "variance": var, "var_pct": var_pct})
 
     by_name = {i["name"]: i["id"] for i in items}
-    chart_months  = [MONTH_LABELS[m] for m in FY_MONTHS]
-    exp_budget    = [b_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
-    exp_actual    = [a_grid.get((by_name.get("Total Expenses"), m), 0) for m in FY_MONTHS]
-    income_actual = [a_grid.get((by_name.get("Total Income"),   m), 0) for m in FY_MONTHS]
+    chart_months  = [MONTH_LABELS[m] for m in months]
+    exp_budget    = [b_grid.get((by_name.get("Total Expenses"), m), 0) for m in months]
+    exp_actual    = [a_grid.get((by_name.get("Total Expenses"), m), 0) for m in months]
+    income_actual = [a_grid.get((by_name.get("Total Income"),   m), 0) for m in months]
 
     content, fname = export_analysis_xlsx(summary, chart_months,
                                            exp_budget, exp_actual, income_actual, fy)

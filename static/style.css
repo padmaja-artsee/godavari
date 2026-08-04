@@ -98,6 +98,7 @@ body {
   gap: 1rem;
   margin-bottom: 1.5rem;
   flex-wrap: wrap;
+  padding-right: 14rem; /* clear fixed Leads/Finance/MR switcher */
 }
 
 .page-header h1 {
@@ -935,6 +936,48 @@ tr:hover td { background: #f8fafc; }
   transition: background .15s;
 }
 .nav-finance-btn:hover { background: #1C5631; }
+
+/* Fixed Leads / Finance switcher (top right) */
+.app-switch {
+  position: fixed;
+  top: 0.75rem;
+  right: 1rem;
+  z-index: 200;
+  display: inline-flex;
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.1);
+}
+.app-switch-btn {
+  padding: 0.4rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-decoration: none;
+  color: #475569;
+  background: #fff;
+  border: none;
+  transition: background 0.15s, color 0.15s;
+}
+.app-switch-btn + .app-switch-btn {
+  border-left: 1px solid #d0d5dd;
+}
+.app-switch-btn:hover {
+  background: #f1f5f9;
+  color: #1C5631;
+}
+.app-switch-btn.active {
+  background: #1C5631;
+  color: #fff;
+}
+.app-switch-btn.active:hover {
+  background: #134023;
+  color: #fff;
+}
 
 .field-label {
   font-size: 0.75rem;

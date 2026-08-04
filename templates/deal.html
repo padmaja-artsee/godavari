@@ -92,6 +92,14 @@
       <input name="price" id="deal-commercial-price" value="{{ d.price or '' }}" placeholder="e.g. 150" />
     </div>
     <div>
+      <label>Currency</label>
+      <select name="fob_currency" id="deal-commercial-currency">
+        {% for c in deal_currencies|default(['Euro','USD','GBP','JPY','CHF','CAD','AUD','CNY','INR','SGD']) %}
+        <option value="{{ c }}" {% if (d.fob_currency or 'USD') == c %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
       <label>Price unit</label>
       <select name="price_unit" class="deal-commercial-price-unit">
         {% for u in price_units %}

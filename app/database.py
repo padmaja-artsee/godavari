@@ -142,6 +142,61 @@ COMMERCIAL_CURRENCIES = (
     ("USD", "$ Dollar"),
 )
 
+# Deal price / FOB / commission currency (also used when prefilling CIs).
+# Labels match Sales Invoice / PO currency selects.
+DEAL_CURRENCIES = (
+    "Euro",
+    "USD",
+    "GBP",
+    "JPY",
+    "CHF",
+    "CAD",
+    "AUD",
+    "CNY",
+    "INR",
+    "SGD",
+)
+
+_CURRENCY_ALIASES = {
+    "EUR": "Euro",
+    "EURO": "Euro",
+    "US$": "USD",
+    "DOLLAR": "USD",
+    "DOLLARS": "USD",
+}
+
+
+def normalize_deal_currency(raw: str, default: str = "USD") -> str:
+    """Map free-text / legacy codes onto DEAL_CURRENCIES labels."""
+    s = (raw or "").strip()
+    if not s:
+        return default
+    upper = s.upper()
+    if upper in _CURRENCY_ALIASES:
+        return _CURRENCY_ALIASES[upper]
+    for c in DEAL_CURRENCIES:
+        if c.upper() == upper or c == s:
+            return c
+    return default
+
+
+def currency_unit_words(currency: str) -> tuple[str, str]:
+    """Major/minor unit names for amount-in-words."""
+    cur = normalize_deal_currency(currency)
+    mapping = {
+        "USD": ("Dollar", "Cent"),
+        "Euro": ("Euro", "Cent"),
+        "GBP": ("Pound", "Pence"),
+        "INR": ("Rupee", "Paisa"),
+        "JPY": ("Yen", "Sen"),
+        "CHF": ("Franc", "Rappen"),
+        "CAD": ("Dollar", "Cent"),
+        "AUD": ("Dollar", "Cent"),
+        "CNY": ("Yuan", "Fen"),
+        "SGD": ("Dollar", "Cent"),
+    }
+    return mapping.get(cur, (cur, "Cent"))
+
 
 def format_deal_value(
     quantity: str = "",
@@ -1323,9 +1378,7 @@ def update_deal_fields(
         freight_cur = "USD"
     fob_val = compute_fob_value(commercial_total, insurance_amount, ocean_freight_amount)
     comm_amt = compute_commission_amount(fob_val, commission_rate)
-    fob_cur = (fob_currency or freight_cur or "USD").strip().upper()
-    if fob_cur not in ("INR", "USD"):
-        fob_cur = "USD"
+    fob_cur = normalize_deal_currency(fob_currency or freight_cur or "USD")
     psn = (product_short_name or "").strip()
     shipping_vals = {
         "po_date": po_date.strip(),
