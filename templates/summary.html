@@ -4,7 +4,7 @@
 <div class="page-header">
   <div>
     <h1>Summary</h1>
-    <p class="subtitle">Roll-up by product or customer for the selected period</p>
+    <p class="subtitle">Commission (CI when selected, otherwise activity) · activity roll-up · shipping</p>
   </div>
   <div class="page-header-actions">
     <a href="/summary/export.xlsx?period={{ period }}&group={{ group }}&sheet=all" class="btn btn-ghost btn-sm">Download all (XLS)</a>
@@ -33,9 +33,98 @@
   <div class="stat-card"><div class="label">Products</div><div class="value">{{ stats.products }}</div></div>
 </div>
 
+<div class="card" style="margin-bottom:1.25rem">
+  <div class="card-header">
+    <h2>Commission summary</h2>
+    <div class="export-links">
+      <a class="btn btn-ghost btn-sm" href="/summary/export.csv?period={{ period }}&sheet=commission">CSV</a>
+      <a class="btn btn-ghost btn-sm" href="/summary/export.xlsx?period={{ period }}&sheet=commission">XLS</a>
+    </div>
+  </div>
+  <div class="card-body" style="overflow-x:auto">
+    <p class="subtitle" style="margin:0 0 .75rem">
+      Selected commission invoices are the source of truth for that PO (no duplicate activity row).
+      POs without a CI on Summary use open-deal activity. Discrepancy = CI commission − deal commission.
+      Add invoices from <a class="link" href="/generate/commission-invoices">Commission Invoices</a>.
+    </p>
+    {% if commission_rows %}
+    <table>
+      <thead>
+        <tr>
+          <th>Company</th>
+          <th>Product</th>
+          <th>PO #</th>
+          <th>Source</th>
+          <th>CI #</th>
+          <th>Commission</th>
+          <th>Deal amt</th>
+          <th>Discrepancy</th>
+          <th>Date</th>
+          <th>Notes</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in commission_rows %}
+      <tr>
+        <td><strong>{{ r.company }}</strong></td>
+        <td>{{ r.product }}</td>
+        <td>
+          {% if r.deal_id %}
+          <a class="link" href="/deal/{{ r.deal_id }}">{{ r.po_number }}</a>
+          {% else %}
+          {{ r.po_number }}
+          {% endif %}
+        </td>
+        <td>
+          {% if r.source == 'ci' %}
+          <span class="badge" style="background:#ecfdf5;color:#166534">{{ r.source_label }}</span>
+          {% else %}
+          <span class="badge">{{ r.source_label }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if r.ci_id %}
+          <a class="link" href="{{ r.ci_base }}/{{ r.ci_id }}">{{ r.ci_number or ('CI #' ~ r.ci_id) }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>{% if r.commission %}{{ r.commission|money }} {{ r.currency }}{% else %}—{% endif %}</td>
+        <td>
+          {% if r.source == 'ci' and r.deal_commission is not none %}
+          {{ r.deal_commission|money }}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if r.discrepancy is not none and r.discrepancy != 0 %}
+          <span style="color:{% if r.discrepancy > 0 %}#166534{% else %}#b91c1c{% endif %};font-weight:600">
+            {% if r.discrepancy > 0 %}+{% endif %}{{ r.discrepancy|money }}
+          </span>
+          {% elif r.source == 'ci' and r.deal_commission is not none %}
+          <span style="color:#6b7280">0</span>
+          {% else %}—{% endif %}
+        </td>
+        <td>{{ r.last_activity or '—' }}</td>
+        <td title="{{ r.notes or '' }}">{{ (r.notes or '—')[:40] }}{% if (r.notes or '')|length > 40 %}…{% endif %}</td>
+        <td>
+          {% if r.ci_id %}
+          <a class="link" href="{{ r.ci_base }}/{{ r.ci_id }}">CI</a>
+          {% elif r.deal_id %}
+          <a class="link" href="/deal/{{ r.deal_id }}">Deal</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No commission or activity rows for this period. Mark a CI with <strong>Add to Summary</strong>, or log activity on open deals.</div>
+    {% endif %}
+  </div>
+</div>
+
 <div class="card">
   <div class="card-header">
-    <h2>{% if group == 'product' %}Product summary{% else %}Customer summary{% endif %}</h2>
+    <h2>{% if group == 'product' %}Activity roll-up by product{% else %}Activity roll-up by customer{% endif %}</h2>
     <div class="export-links">
       <a class="btn btn-ghost btn-sm" href="/summary/export.csv?period={{ period }}&group={{ group }}&sheet=rollup">CSV</a>
       <a class="btn btn-ghost btn-sm" href="/summary/export.xlsx?period={{ period }}&group={{ group }}&sheet=rollup">XLS</a>
@@ -89,15 +178,22 @@
     <div class="export-links">
       <a class="btn btn-ghost btn-sm" href="/summary/export.csv?period={{ period }}&sheet=shipping">CSV</a>
       <a class="btn btn-ghost btn-sm" href="/summary/export.xlsx?period={{ period }}&sheet=shipping">XLS</a>
+      <a class="btn btn-ghost btn-sm" href="/shipping">Full table →</a>
     </div>
   </div>
   <div class="card-body shipping-table-scroll">
+    <p class="subtitle" style="margin:0 0 .75rem">
+      Deal rows by default; CIs marked <strong>Add to Summary</strong> replace the matching PO (no doubles). Discrepancy = CI − deal commission.
+    </p>
     {% if shipping_rows %}
     <table class="deals-table shipping-table">
       <thead>
         <tr>
           <th>Company</th>
           <th>Product</th>
+          <th>Stage</th>
+          <th>Source</th>
+          <th>CI #</th>
           <th>PO #</th>
           <th>PO Date</th>
           <th>Quantity</th>
@@ -110,6 +206,8 @@
           <th>Transit</th>
           <th>Destination</th>
           <th>ETA</th>
+          <th>Commission</th>
+          <th>Discrepancy</th>
           <th></th>
         </tr>
       </thead>
@@ -118,7 +216,24 @@
       <tr>
         <td><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></td>
         <td>{{ row.product }}</td>
-        <td><a class="link" href="/deal/{{ row.deal_id }}?from=shipping">{{ row.po_number or '—' }}</a></td>
+        <td><span class="badge">{{ row.stage_label or 'First contact' }}</span></td>
+        <td>
+          {% if row.source == 'ci' %}
+          <span class="badge" style="background:#ecfdf5;color:#166534">{{ row.source_label or 'Commission invoice' }}</span>
+          {% else %}
+          <span class="badge">{{ row.source_label or 'Deal' }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.ci_id %}
+          <a class="link" href="{{ row.ci_base }}/{{ row.ci_id }}">{{ row.ci_number or ('CI #' ~ row.ci_id) }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if row.deal_id %}
+          <a class="link" href="/deal/{{ row.deal_id }}?from=shipping">{{ row.po_number or '—' }}</a>
+          {% else %}{{ row.po_number or '—' }}{% endif %}
+        </td>
         <td>{{ row.po_date or '—' }}</td>
         <td>{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</td>
         <td>{{ row.packing or '—' }}</td>
@@ -130,7 +245,20 @@
         <td>{{ row.transit_time or '—' }}</td>
         <td>{{ row.destination or '—' }}</td>
         <td>{{ row.eta or '—' }}</td>
-        <td class="col-quick"><a class="link" href="/deal/{{ row.deal_id }}?from=shipping">Edit</a></td>
+        <td>{% if row.commission %}{{ row.commission|money }}{% else %}—{% endif %}</td>
+        <td>
+          {% if row.source == 'ci' and row.discrepancy is not none and row.discrepancy != 0 %}
+          <span style="color:{% if row.discrepancy > 0 %}#166534{% else %}#b91c1c{% endif %};font-weight:600">
+            {% if row.discrepancy > 0 %}+{% endif %}{{ row.discrepancy|money }}
+          </span>
+          {% elif row.source == 'ci' and row.discrepancy is not none %}
+          <span style="color:#6b7280">0</span>
+          {% else %}—{% endif %}
+        </td>
+        <td class="col-quick">
+          {% if row.ci_id %}<a class="link" href="{{ row.ci_base }}/{{ row.ci_id }}">CI</a>{% endif %}
+          {% if row.deal_id %}<a class="link" href="/deal/{{ row.deal_id }}?from=shipping">Edit</a>{% endif %}
+        </td>
       </tr>
       {% endfor %}
       </tbody>

@@ -30,6 +30,9 @@ ROLLUP_CUSTOMER_COLUMNS = [
 SHIPPING_COLUMNS = [
     ("Company", "company"),
     ("Product", "product"),
+    ("Pipeline stage", "stage_label"),
+    ("Source", "source_label"),
+    ("CI #", "ci_number"),
     ("Status", "status"),
     ("PO #", "po_number"),
     ("PO date", "po_date"),
@@ -43,7 +46,25 @@ SHIPPING_COLUMNS = [
     ("Transit time", "transit_time"),
     ("Destination", "destination"),
     ("ETA", "eta"),
+    ("Commission", "commission"),
+    ("Deal commission", "deal_commission"),
+    ("Discrepancy", "discrepancy"),
+    ("Currency", "currency"),
     ("Deal ID", "deal_id"),
+]
+
+COMMISSION_SUMMARY_COLUMNS = [
+    ("Company", "company"),
+    ("Product", "product"),
+    ("PO #", "po_number"),
+    ("Source", "source_label"),
+    ("CI #", "ci_number"),
+    ("Commission", "commission"),
+    ("Deal commission", "deal_commission"),
+    ("Discrepancy", "discrepancy"),
+    ("Currency", "currency"),
+    ("Last activity / invoice", "last_activity"),
+    ("Notes", "notes"),
 ]
 
 

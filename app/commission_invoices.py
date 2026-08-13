@@ -11,7 +11,13 @@ from copy import deepcopy
 from datetime import date
 from typing import Any
 
-from app.database import compute_commission_amount, compute_fob_value, get_db, now_iso
+from app.database import (
+    compute_commission_amount,
+    compute_fob_value,
+    get_db,
+    now_iso,
+    period_start,
+)
 from app.product_labels import deal_document_product
 
 
@@ -293,6 +299,12 @@ def _upgrade_ci_extra_columns(conn) -> None:
         "UPDATE commission_invoices SET variant = ? WHERE variant IS NULL OR variant = ''",
         (VARIANT_GBINC,),
     )
+    # Refresh column set after possible ALTER above
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(commission_invoices)").fetchall()}
+    if "show_on_summary" not in cols:
+        conn.execute(
+            "ALTER TABLE commission_invoices ADD COLUMN show_on_summary INTEGER NOT NULL DEFAULT 0"
+        )
     # Migrate line-items table
     li_cols = {r[1] for r in conn.execute("PRAGMA table_info(commission_invoice_line_items)").fetchall()}
     for col, ddl in [
@@ -662,6 +674,234 @@ def update_commission_invoice_dates(
 
     refresh_consolidated_commission_workbook()
     return True
+
+
+def _po_key(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+
+
+def set_ci_show_on_summary(ci_id: int, show: bool) -> bool:
+    """Opt a CI into Summary. Clears other CIs for the same deal/PO to avoid doubles."""
+    now = now_iso()
+    with get_db() as conn:
+        row = conn.execute(
+            "SELECT id, deal_id, customer_order_no FROM commission_invoices WHERE id = ?",
+            (ci_id,),
+        ).fetchone()
+        if not row:
+            return False
+        if show:
+            deal_id = row["deal_id"]
+            po = (row["customer_order_no"] or "").strip()
+            if deal_id:
+                conn.execute(
+                    """
+                    UPDATE commission_invoices
+                    SET show_on_summary = 0, updated_at = ?
+                    WHERE deal_id = ? AND id != ? AND COALESCE(show_on_summary, 0) = 1
+                    """,
+                    (now, deal_id, ci_id),
+                )
+            if po:
+                conn.execute(
+                    """
+                    UPDATE commission_invoices
+                    SET show_on_summary = 0, updated_at = ?
+                    WHERE TRIM(COALESCE(customer_order_no, '')) = ?
+                      AND id != ?
+                      AND COALESCE(show_on_summary, 0) = 1
+                    """,
+                    (now, po, ci_id),
+                )
+        conn.execute(
+            """
+            UPDATE commission_invoices
+            SET show_on_summary = ?, updated_at = ?
+            WHERE id = ?
+            """,
+            (1 if show else 0, now, ci_id),
+        )
+    return True
+
+
+def summary_commission_rows(period: str = "all") -> list[dict[str, Any]]:
+    """PO-level Summary rows: selected CIs win; otherwise activity/deal fallback.
+
+    No double entries for the same deal_id or PO. When source is a CI, discrepancy
+    is CI commission minus the linked deal's commission_amount.
+    """
+    start = period_start(period)
+    rows: list[dict[str, Any]] = []
+    covered_deal_ids: set[int] = set()
+    covered_pos: set[str] = set()
+
+    with get_db() as conn:
+        ci_sql = """
+            SELECT ci.*,
+                   COALESCE((
+                       SELECT ROUND(SUM(COALESCE(li.commission_value, 0)), 2)
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                   ), 0) AS total_commission,
+                   (
+                       SELECT li.product_description
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                       ORDER BY li.sort_order, li.id
+                       LIMIT 1
+                   ) AS product,
+                   (
+                       SELECT li.end_customer
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                       ORDER BY li.sort_order, li.id
+                       LIMIT 1
+                   ) AS end_customer,
+                   c.name AS customer_name,
+                   d.po_number AS deal_po_number,
+                   d.commission_amount AS deal_commission_amount,
+                   d.fob_value AS deal_fob_value,
+                   p.name AS deal_product,
+                   cust.name AS deal_company
+            FROM commission_invoices ci
+            LEFT JOIN customers c ON c.id = ci.customer_id
+            LEFT JOIN deals d ON d.id = ci.deal_id AND d.deleted_at IS NULL
+            LEFT JOIN products p ON p.id = d.product_id
+            LEFT JOIN customers cust ON cust.id = d.customer_id
+            WHERE COALESCE(ci.show_on_summary, 0) = 1
+        """
+        ci_params: list[Any] = []
+        if start:
+            ci_sql += """
+              AND (
+                    (ci.invoice_date IS NOT NULL AND TRIM(ci.invoice_date) != ''
+                     AND substr(ci.invoice_date, 1, 10) >= ?)
+                 OR (ci.invoice_date IS NULL OR TRIM(ci.invoice_date) = '')
+              )
+            """
+            ci_params.append(start)
+        ci_sql += " ORDER BY COALESCE(NULLIF(ci.invoice_date, ''), ci.updated_at) DESC, ci.id DESC"
+        ci_rows = [dict(r) for r in conn.execute(ci_sql, ci_params).fetchall()]
+
+        for ci in ci_rows:
+            deal_id = ci.get("deal_id")
+            po = (ci.get("customer_order_no") or ci.get("deal_po_number") or "").strip()
+            po_norm = _po_key(po)
+            if deal_id:
+                covered_deal_ids.add(int(deal_id))
+            if po_norm:
+                covered_pos.add(po_norm)
+
+            ci_amt = _float(ci.get("total_commission"))
+            deal_amt = _float(ci.get("deal_commission_amount"))
+            discrepancy = None
+            if deal_id is not None and (ci_amt or deal_amt):
+                discrepancy = round(ci_amt - deal_amt, 2)
+
+            company = (
+                (ci.get("end_customer") or "").strip()
+                or (ci.get("deal_company") or "").strip()
+                or (ci.get("customer_name") or "").strip()
+                or (ci.get("bill_to_name") or "").strip()
+                or "—"
+            )
+            product = (
+                (ci.get("product") or "").strip()
+                or (ci.get("deal_product") or "").strip()
+                or "—"
+            )
+            rows.append(
+                {
+                    "source": "ci",
+                    "source_label": "Commission invoice",
+                    "company": company,
+                    "product": product,
+                    "po_number": po or "—",
+                    "ci_id": ci.get("id"),
+                    "ci_number": ci.get("invoice_number") or "",
+                    "ci_base": get_ci_variant_meta(ci.get("variant") or VARIANT_GBINC)["url_prefix"],
+                    "deal_id": deal_id,
+                    "invoice_date": (ci.get("invoice_date") or "")[:10],
+                    "commission": ci_amt,
+                    "deal_commission": deal_amt if deal_id is not None else None,
+                    "discrepancy": discrepancy,
+                    "currency": ci.get("value_currency") or ci.get("fob_currency") or "USD",
+                    "notes": (ci.get("internal_notes") or "").strip(),
+                    "last_activity": (ci.get("invoice_date") or ci.get("updated_at") or "")[:10],
+                    "status": ci.get("status") or "",
+                }
+            )
+
+        act_sql = """
+            SELECT d.id AS deal_id,
+                   c.name AS company,
+                   p.name AS product,
+                   d.po_number,
+                   d.commission_amount,
+                   d.fob_value,
+                   d.commission_rate,
+                   d.status,
+                   d.notes,
+                   d.fob_currency,
+                   MAX(a.activity_date) AS last_activity,
+                   COUNT(a.id) AS activities
+            FROM deals d
+            JOIN customers c ON c.id = d.customer_id
+            JOIN products p ON p.id = d.product_id
+            JOIN activities a ON a.deal_id = d.id
+            WHERE d.deleted_at IS NULL
+              AND d.archived = 0
+              AND d.status = 'open'
+        """
+        act_params: list[Any] = []
+        if start:
+            act_sql += " AND a.activity_date >= ?"
+            act_params.append(start)
+        act_sql += """
+            GROUP BY d.id
+            ORDER BY MAX(a.activity_date) DESC, d.id DESC
+        """
+        for deal in conn.execute(act_sql, act_params).fetchall():
+            d = dict(deal)
+            deal_id = int(d["deal_id"])
+            po = (d.get("po_number") or "").strip()
+            po_norm = _po_key(po)
+            if deal_id in covered_deal_ids:
+                continue
+            if po_norm and po_norm in covered_pos:
+                continue
+            rows.append(
+                {
+                    "source": "activity",
+                    "source_label": "Activity",
+                    "company": d.get("company") or "—",
+                    "product": d.get("product") or "—",
+                    "po_number": po or "—",
+                    "ci_id": None,
+                    "ci_number": "",
+                    "ci_base": "",
+                    "deal_id": deal_id,
+                    "invoice_date": "",
+                    "commission": _float(d.get("commission_amount")),
+                    "deal_commission": _float(d.get("commission_amount")),
+                    "discrepancy": None,
+                    "currency": d.get("fob_currency") or "USD",
+                    "notes": (d.get("notes") or "").strip(),
+                    "last_activity": (d.get("last_activity") or "")[:10],
+                    "status": d.get("status") or "",
+                    "activities": d.get("activities") or 0,
+                }
+            )
+
+    rows.sort(
+        key=lambda r: (
+            r.get("last_activity") or "",
+            0 if r["source"] == "ci" else 1,
+            r.get("company") or "",
+        ),
+        reverse=True,
+    )
+    return rows
 
 
 def delete_commission_invoice(ci_id: int) -> bool:

@@ -4,7 +4,10 @@
 <div class="page-header">
   <div>
     <h1>Shipping summary</h1>
-    <p class="subtitle">Tracking template — one row per deal with company, product, and logistics fields.</p>
+    <p class="subtitle">
+      Deal logistics by default. Selected commission invoices become source of truth for that PO
+      (no duplicate row). Discrepancy = CI commission − deal commission.
+    </p>
   </div>
   <div class="page-header-actions">
     <a href="/summary" class="btn btn-ghost btn-sm">Product Summary</a>
@@ -45,6 +48,9 @@
         <tr>
           <th>Company</th>
           <th>Product</th>
+          <th>Stage</th>
+          <th>Source</th>
+          <th>CI #</th>
           <th>PO #</th>
           <th>PO date</th>
           <th>Quantity</th>
@@ -57,6 +63,8 @@
           <th>Transit</th>
           <th>Destination</th>
           <th>ETA</th>
+          <th>Commission</th>
+          <th>Discrepancy</th>
           <th></th>
         </tr>
       </thead>
@@ -65,8 +73,25 @@
       <tr>
         <td><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></td>
         <td>{{ row.product }}</td>
+        <td><span class="badge">{{ row.stage_label or 'First contact' }}</span></td>
         <td>
+          {% if row.source == 'ci' %}
+          <span class="badge" style="background:#ecfdf5;color:#166534">{{ row.source_label or 'Commission invoice' }}</span>
+          {% else %}
+          <span class="badge">{{ row.source_label or 'Deal' }}</span>
+          {% endif %}
+        </td>
+        <td>
+          {% if row.ci_id %}
+          <a class="link" href="{{ row.ci_base }}/{{ row.ci_id }}">{{ row.ci_number or ('CI #' ~ row.ci_id) }}</a>
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if row.deal_id %}
           <a class="link" href="/deal/{{ row.deal_id }}?from=shipping">{{ row.po_number or '—' }}</a>
+          {% else %}
+          {{ row.po_number or '—' }}
+          {% endif %}
         </td>
         <td>{{ row.po_date or '—' }}</td>
         <td>{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</td>
@@ -79,7 +104,23 @@
         <td>{{ row.transit_time or '—' }}</td>
         <td>{{ row.destination or '—' }}</td>
         <td>{{ row.eta or '—' }}</td>
-        <td class="col-quick"><a class="link" href="/deal/{{ row.deal_id }}?from=shipping">Edit</a></td>
+        <td>
+          {% if row.commission %}{{ row.commission|money }}{% if row.currency %} {{ row.currency }}{% endif %}
+          {% else %}—{% endif %}
+        </td>
+        <td>
+          {% if row.source == 'ci' and row.discrepancy is not none and row.discrepancy != 0 %}
+          <span style="color:{% if row.discrepancy > 0 %}#166534{% else %}#b91c1c{% endif %};font-weight:600">
+            {% if row.discrepancy > 0 %}+{% endif %}{{ row.discrepancy|money }}
+          </span>
+          {% elif row.source == 'ci' and row.discrepancy is not none %}
+          <span style="color:#6b7280">0</span>
+          {% else %}—{% endif %}
+        </td>
+        <td class="col-quick">
+          {% if row.ci_id %}<a class="link" href="{{ row.ci_base }}/{{ row.ci_id }}">CI</a>{% endif %}
+          {% if row.deal_id %}<a class="link" href="/deal/{{ row.deal_id }}?from=shipping">Edit</a>{% endif %}
+        </td>
       </tr>
       {% endfor %}
       </tbody>

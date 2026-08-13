@@ -7,12 +7,20 @@ from typing import Any
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from reportlab.lib import colors
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
-from reportlab.lib.pagesizes import landscape, letter
-from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.lib.units import inch
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+try:
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from reportlab.lib.pagesizes import landscape, letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    _HAS_REPORTLAB = True
+except ImportError:  # pragma: no cover
+    colors = TA_CENTER = TA_LEFT = TA_RIGHT = None  # type: ignore
+    landscape = letter = ParagraphStyle = getSampleStyleSheet = None  # type: ignore
+    inch = Paragraph = SimpleDocTemplate = Spacer = Table = TableStyle = None  # type: ignore
+    _HAS_REPORTLAB = False
 
 try:
     from PIL import Image, ImageDraw, ImageFont
@@ -188,6 +196,8 @@ def export_avp_xlsx(report: dict[str, Any]) -> tuple[bytes, str]:
 
 
 def export_avp_pdf(report: dict[str, Any]) -> tuple[bytes, str]:
+    if not _HAS_REPORTLAB:
+        raise RuntimeError("reportlab is required for PDF export — pip install reportlab")
     buf = BytesIO()
     doc = SimpleDocTemplate(
         buf,

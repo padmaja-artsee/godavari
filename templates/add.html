@@ -6,8 +6,8 @@
 {% block content %}
 <div class="page-header">
   <div>
-    <h1>Add or update</h1>
-    <p class="subtitle">Log activity, edit deals, or manage company details.</p>
+    <h1>Add / Upload</h1>
+    <p class="subtitle">One form for new deals, stage updates, and optional PDF attach.</p>
   </div>
 </div>
 
@@ -22,7 +22,7 @@
 {% if tab != 'lead' %}
 <div class="card log-portal">
   <div class="card-header"><h2>Deals &amp; Activity</h2></div>
-  <form method="post" action="/add/log{% if return_to %}?return_to={{ return_to | urlencode }}{% endif %}" class="form-grid" id="log-form">
+  <form method="post" action="/add/log{% if return_to %}?return_to={{ return_to | urlencode }}{% endif %}" class="form-grid" id="log-form" enctype="multipart/form-data">
 
     {# ── Attach-to mode ── #}
     <div class="full link-mode-row">
@@ -193,6 +193,15 @@
     {# ── What happened (always visible) ── #}
     <div class="full section-divider"><h3>What happened</h3></div>
     <div>
+      <label>Pipeline stage *</label>
+      <select name="pipeline_stage" id="log-pipeline-stage">
+        <option value="first_contact">First contact</option>
+        <option value="rfq">RFQ</option>
+        <option value="rfs">RFS (sample)</option>
+        <option value="conversion">Conversion</option>
+      </select>
+    </div>
+    <div>
       <label>Date *</label>
       <input name="activity_date" type="date" required />
     </div>
@@ -211,6 +220,10 @@
     <div>
       <label>Amount / qty (optional)</label>
       <input name="value" placeholder="Quoted price, volume" />
+    </div>
+    <div>
+      <label>Attach PDF (optional)</label>
+      <input type="file" name="pdf_file" accept="application/pdf,.pdf" />
     </div>
     <div class="full">
       <button type="submit" class="btn btn-primary">Save</button>

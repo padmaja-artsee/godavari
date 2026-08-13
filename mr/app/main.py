@@ -1,9 +1,12 @@
 """Management Report (MR) FastAPI application — mounted at /mr inside the Leads app.
 Set MR_BASE_PATH=/mr before importing this module when mounting.
+
+NOTE: Do not use PEP604 unions (int | None) in FastAPI route signatures — the
+desktop bundle runs Python 3.9 and FastAPI cannot evaluate those annotations.
 """
-from __future__ import annotations
 import os
 from pathlib import Path
+from typing import Optional
 
 MR_BASE = os.environ.get("MR_BASE_PATH", "")
 
@@ -250,7 +253,7 @@ async def gbl_cs_register_delete(
 
 
 @app.get("/sales-projections", response_class=HTMLResponse)
-async def sales_projections(request: Request, fy: int | None = Query(None)):
+async def sales_projections(request: Request, fy: Optional[int] = Query(None)):
     years = list_projection_years()
     if not years:
         init_projections()
@@ -324,9 +327,9 @@ async def sales_projections_save(request: Request):
 @app.get("/actual-vs-projection", response_class=HTMLResponse)
 async def actual_vs_projection(
     request: Request,
-    fy: int | None = Query(None),
+    fy: Optional[int] = Query(None),
     month: str = Query("APRIL"),
-    notice: str | None = Query(None),
+    notice: Optional[str] = Query(None),
 ):
     years = list_projection_years()
     if not years:
@@ -371,7 +374,7 @@ async def actual_vs_projection_map_product(
 
 @app.get("/actual-vs-projection/export.xlsx")
 async def actual_vs_projection_xlsx(
-    fy: int | None = Query(None),
+    fy: Optional[int] = Query(None),
     month: str = Query("APRIL"),
 ):
     years = list_projection_years() or [2027]
@@ -387,7 +390,7 @@ async def actual_vs_projection_xlsx(
 
 @app.get("/actual-vs-projection/export.pdf")
 async def actual_vs_projection_pdf(
-    fy: int | None = Query(None),
+    fy: Optional[int] = Query(None),
     month: str = Query("APRIL"),
 ):
     years = list_projection_years() or [2027]
@@ -403,7 +406,7 @@ async def actual_vs_projection_pdf(
 
 @app.get("/actual-vs-projection/export.png")
 async def actual_vs_projection_png(
-    fy: int | None = Query(None),
+    fy: Optional[int] = Query(None),
     month: str = Query("APRIL"),
 ):
     years = list_projection_years() or [2027]

@@ -100,7 +100,10 @@ def list_quantity_unit_options() -> list[str]:
 
 
 def format_quantity_display(quantity: str = "", quantity_unit: str = "MT") -> str:
-    q = (quantity or "").strip()
+    if quantity is None:
+        q = ""
+    else:
+        q = str(quantity).strip()
     u = (quantity_unit or "MT").strip() or "MT"
     if not q:
         return ""
@@ -583,6 +586,23 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
            OR LOWER(TRIM(product_short_name)) = 'none'
         """
     )
+    pipeline_cols = {
+        "pipeline_stage": "TEXT NOT NULL DEFAULT 'first_contact'",
+        "first_contact_at": "TEXT",
+        "rfq_at": "TEXT",
+        "rfs_at": "TEXT",
+        "conversion_at": "TEXT",
+    }
+    need_pipeline_backfill = False
+    for col, typ in pipeline_cols.items():
+        if col not in cols:
+            conn.execute(f"ALTER TABLE deals ADD COLUMN {col} {typ}")
+            need_pipeline_backfill = True
+    if need_pipeline_backfill:
+        _backfill_pipeline_stages(conn)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_deals_pipeline ON deals(pipeline_stage)"
+    )
     conn.execute(
         """
         CREATE TABLE IF NOT EXISTS contacts (
@@ -622,6 +642,134 @@ def _upgrade_schema(conn: sqlite3.Connection) -> None:
         WHERE deal_id IS NOT NULL
         """
     )
+
+
+def _backfill_pipeline_stages(conn: sqlite3.Connection) -> None:
+    """Seed pipeline milestones from deal date + activity channels."""
+    from app.pipeline import DATE_COLUMNS, normalize_stage, stage_from_channel, stage_rank
+
+    conn.execute(
+        """
+        UPDATE deals
+        SET pipeline_stage = COALESCE(NULLIF(TRIM(pipeline_stage), ''), 'first_contact'),
+            first_contact_at = COALESCE(NULLIF(TRIM(first_contact_at), ''), deal_date)
+        WHERE deleted_at IS NULL
+        """
+    )
+    rows = conn.execute(
+        """
+        SELECT d.id AS deal_id, a.activity_date, a.channel, a.activity
+        FROM deals d
+        JOIN activities a ON a.deal_id = d.id
+        WHERE d.deleted_at IS NULL
+        ORDER BY d.id, a.activity_date ASC, a.id ASC
+        """
+    ).fetchall()
+    by_deal: dict[int, dict] = {}
+    for r in rows:
+        did = r["deal_id"]
+        state = by_deal.setdefault(
+            did,
+            {
+                "pipeline_stage": "first_contact",
+                "first_contact_at": None,
+                "rfq_at": None,
+                "rfs_at": None,
+                "conversion_at": None,
+            },
+        )
+        date = r["activity_date"]
+        if not state["first_contact_at"] and date:
+            state["first_contact_at"] = date
+        ch = (r["channel"] or r["activity"] or "").strip()
+        stage = stage_from_channel(ch)
+        col = DATE_COLUMNS[stage]
+        if date and not state[col]:
+            state[col] = date
+        if stage_rank(stage) > stage_rank(state["pipeline_stage"]):
+            state["pipeline_stage"] = stage
+    for did, state in by_deal.items():
+        conn.execute(
+            """
+            UPDATE deals SET
+                pipeline_stage = ?,
+                first_contact_at = COALESCE(first_contact_at, ?),
+                rfq_at = COALESCE(rfq_at, ?),
+                rfs_at = COALESCE(rfs_at, ?),
+                conversion_at = COALESCE(conversion_at, ?)
+            WHERE id = ?
+            """,
+            (
+                normalize_stage(state["pipeline_stage"]),
+                state["first_contact_at"],
+                state["rfq_at"],
+                state["rfs_at"],
+                state["conversion_at"],
+                did,
+            ),
+        )
+    # PO number implies conversion milestone
+    conn.execute(
+        """
+        UPDATE deals
+        SET conversion_at = COALESCE(conversion_at, po_date, deal_date),
+            pipeline_stage = 'conversion'
+        WHERE deleted_at IS NULL
+          AND po_number IS NOT NULL AND TRIM(po_number) != ''
+          AND (pipeline_stage IS NULL OR pipeline_stage != 'conversion')
+        """
+    )
+
+
+def apply_pipeline_progress(
+    conn: sqlite3.Connection,
+    deal_id: int,
+    stage: Optional[str],
+    activity_date: Optional[str] = None,
+) -> None:
+    """Advance deal stage and stamp milestone date (never move backwards)."""
+    from app.pipeline import DATE_COLUMNS, normalize_stage, stage_rank
+
+    target = normalize_stage(stage)
+    date = (activity_date or "").strip() or None
+    row = conn.execute(
+        """
+        SELECT pipeline_stage, first_contact_at, rfq_at, rfs_at, conversion_at, deal_date
+        FROM deals WHERE id = ? AND deleted_at IS NULL
+        """,
+        (deal_id,),
+    ).fetchone()
+    if not row:
+        return
+    current = normalize_stage(row["pipeline_stage"])
+    new_stage = target if stage_rank(target) >= stage_rank(current) else current
+    updates = {"pipeline_stage": new_stage, "updated_at": now_iso()}
+    # Always ensure first contact has a date
+    if not row["first_contact_at"]:
+        updates["first_contact_at"] = date or row["deal_date"]
+    col = DATE_COLUMNS[target]
+    if date and not row[col]:
+        updates[col] = date
+    # Stamp intermediate empty milestones with this date when jumping ahead
+    if date:
+        for key in ("first_contact", "rfq", "rfs", "conversion"):
+            if stage_rank(key) > stage_rank(target):
+                break
+            c = DATE_COLUMNS[key]
+            if not row[c] and c not in updates:
+                if key == "first_contact" or stage_rank(key) <= stage_rank(target):
+                    if key == target or key == "first_contact":
+                        updates.setdefault(c, date)
+    sets = ", ".join(f"{k} = ?" for k in updates)
+    conn.execute(
+        f"UPDATE deals SET {sets} WHERE id = ?",
+        (*updates.values(), deal_id),
+    )
+
+
+def set_deal_pipeline_stage(deal_id: int, stage: str, at_date: str = "") -> None:
+    with get_db() as conn:
+        apply_pipeline_progress(conn, deal_id, stage, at_date or None)
 
 
 def _migrate_activity_deal_links(conn: sqlite3.Connection) -> None:
@@ -1292,13 +1440,18 @@ def create_deal(data: dict[str, Any]) -> int:
         psn = initial_deal_product_short_name(conn, pid) or None
         ts = now_iso()
         qref = default_quote_ref(conn, cid, pid, data.get("quote_ref", ""))
+        from app.pipeline import normalize_stage
+
+        stage = normalize_stage(data.get("pipeline_stage") or "first_contact")
+        start = data["deal_date"]
         cur = conn.execute(
             """
             INSERT INTO deals (
                 lead_id, customer_id, product_id, product_short_name, po_number, quote_ref,
                 quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
+                pipeline_stage, first_contact_at, rfq_at, rfs_at, conversion_at,
                 created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 lead_id,
@@ -1314,7 +1467,7 @@ def create_deal(data: dict[str, Any]) -> int:
                 ),
                 data.get("price", "").strip(),
                 (data.get("price_unit") or "/MT").strip(),
-                data["deal_date"],
+                start,
                 format_deal_value(
                     data.get("quantity", ""),
                     data.get("price", ""),
@@ -1326,6 +1479,11 @@ def create_deal(data: dict[str, Any]) -> int:
                 )
                 or data.get("value", ""),
                 data.get("notes", ""),
+                stage,
+                start,
+                start if stage in ("rfq", "rfs", "conversion") else None,
+                start if stage in ("rfs", "conversion") else None,
+                start if stage == "conversion" else None,
                 ts,
                 ts,
             ),
@@ -1462,13 +1620,35 @@ def update_deal_fields(
         )
 
 
+def _shipping_po_key(value: Any) -> str:
+    return re.sub(r"\s+", " ", str(value or "").strip()).casefold()
+
+
+def _ci_shipping_base(variant: Any) -> str:
+    if str(variant or "").strip().lower() == "gbbv":
+        return "/generate/gbbv-commission-invoices"
+    return "/generate/commission-invoices"
+
+
+def _float_ship(val: Any, default: float = 0.0) -> float:
+    if val is None or val == "":
+        return default
+    try:
+        return float(str(val).replace(",", "").strip())
+    except (TypeError, ValueError):
+        return default
+
+
 def list_shipping_summary(
     company: str = "",
     product: str = "",
     status: str = "all",
     q: str = "",
 ) -> list[dict]:
-    """Deals with tracking-template columns for the shipping summary sheet."""
+    """Deal shipping rows; selected CIs become source of truth for the same PO/deal.
+
+    No double entries. Discrepancy = CI commission − deal commission when CI is linked.
+    """
     clauses = ["d.deleted_at IS NULL"]
     params: list[Any] = []
     if status == "archived":
@@ -1500,10 +1680,14 @@ def list_shipping_summary(
         )
         params.extend([f"%{q}%"] * 13)
 
+    from app.pipeline import infer_stage_from_row, stage_label
+
     sql = f"""
         SELECT d.id AS deal_id, d.status, d.po_number, d.po_date, d.quantity, d.quantity_unit, d.packing,
                d.gbl_invoice, d.gbl_invoice_date, d.container_number, d.vessel_name,
                d.etd_india, d.transit_time, d.destination, d.eta,
+               d.commission_amount, d.fob_currency,
+               d.pipeline_stage, d.first_contact_at, d.rfq_at, d.rfs_at, d.conversion_at,
                c.name AS company, p.name AS product, p.id AS product_id
         FROM deals d
         JOIN customers c ON c.id = d.customer_id
@@ -1512,7 +1696,289 @@ def list_shipping_summary(
         ORDER BY c.name COLLATE NOCASE ASC, p.name COLLATE NOCASE ASC, d.id ASC
     """
     with get_db() as conn:
-        return [dict(r) for r in conn.execute(sql, params).fetchall()]
+        deal_rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
+
+        for row in deal_rows:
+            row["source"] = "deal"
+            row["source_label"] = "Deal"
+            row["ci_id"] = None
+            row["ci_number"] = ""
+            row["ci_base"] = ""
+            row["commission"] = _float_ship(row.get("commission_amount"))
+            row["deal_commission"] = _float_ship(row.get("commission_amount"))
+            row["discrepancy"] = None
+            row["currency"] = row.get("fob_currency") or "USD"
+            stage = infer_stage_from_row(row)
+            row["pipeline_stage"] = stage
+            row["stage_label"] = stage_label(stage)
+
+        by_deal: dict[int, dict] = {}
+        by_po: dict[str, dict] = {}
+        for row in deal_rows:
+            by_deal[int(row["deal_id"])] = row
+            po_k = _shipping_po_key(row.get("po_number"))
+            if po_k and po_k not in by_po:
+                by_po[po_k] = row
+
+        # Table may not exist yet on fresh DBs before CI schema upgrade
+        try:
+            ci_exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='commission_invoices'"
+            ).fetchone()
+        except Exception:
+            ci_exists = None
+        if not ci_exists:
+            return deal_rows
+
+        ci_sql = """
+            SELECT ci.id, ci.deal_id, ci.customer_order_no, ci.invoice_number, ci.invoice_date,
+                   ci.variant, ci.container_numbers, ci.shipment_date, ci.port_of_loading,
+                   ci.qty_unit, ci.value_currency, ci.fob_currency, ci.bill_to_name,
+                   COALESCE((
+                       SELECT ROUND(SUM(COALESCE(li.commission_value, 0)), 2)
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                   ), 0) AS total_commission,
+                   COALESCE((
+                       SELECT ROUND(SUM(COALESCE(li.quantity, 0)), 4)
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                   ), 0) AS ci_quantity,
+                   (
+                       SELECT li.product_description
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                       ORDER BY li.sort_order, li.id LIMIT 1
+                   ) AS ci_product,
+                   (
+                       SELECT li.end_customer
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                       ORDER BY li.sort_order, li.id LIMIT 1
+                   ) AS ci_end_customer,
+                   (
+                       SELECT li.gbl_invoice_number
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                       ORDER BY li.sort_order, li.id LIMIT 1
+                   ) AS ci_gbl_invoice,
+                   (
+                       SELECT li.shipment_date
+                       FROM commission_invoice_line_items li
+                       WHERE li.commission_invoice_id = ci.id
+                       ORDER BY li.sort_order, li.id LIMIT 1
+                   ) AS ci_line_shipment,
+                   c.name AS customer_name,
+                   d.po_number AS deal_po_number,
+                   d.commission_amount AS deal_commission_amount,
+                   d.status AS deal_status,
+                   d.po_date AS deal_po_date,
+                   d.quantity AS deal_quantity,
+                   d.quantity_unit AS deal_quantity_unit,
+                   d.packing AS deal_packing,
+                   d.gbl_invoice AS deal_gbl_invoice,
+                   d.gbl_invoice_date AS deal_gbl_invoice_date,
+                   d.container_number AS deal_container,
+                   d.vessel_name AS deal_vessel,
+                   d.etd_india AS deal_etd,
+                   d.transit_time AS deal_transit,
+                   d.destination AS deal_destination,
+                   d.eta AS deal_eta,
+                   d.fob_currency AS deal_fob_currency,
+                   d.pipeline_stage AS deal_pipeline_stage,
+                   d.first_contact_at AS deal_first_contact_at,
+                   d.rfq_at AS deal_rfq_at,
+                   d.rfs_at AS deal_rfs_at,
+                   d.conversion_at AS deal_conversion_at,
+                   p.name AS deal_product,
+                   cust.name AS deal_company
+            FROM commission_invoices ci
+            LEFT JOIN customers c ON c.id = ci.customer_id
+            LEFT JOIN deals d ON d.id = ci.deal_id AND d.deleted_at IS NULL
+            LEFT JOIN products p ON p.id = d.product_id
+            LEFT JOIN customers cust ON cust.id = d.customer_id
+            WHERE COALESCE(ci.show_on_summary, 0) = 1
+            ORDER BY ci.updated_at DESC, ci.id DESC
+        """
+        try:
+            ci_rows = [dict(r) for r in conn.execute(ci_sql).fetchall()]
+        except Exception:
+            # show_on_summary column may be missing until upgrade runs
+            return deal_rows
+
+    claimed: set[int] = set()  # deal_ids claimed by a CI
+    claimed_pos: set[str] = set()
+    out: list[dict] = []
+    company_f = (company or "").strip().casefold()
+    product_f = (product or "").strip().casefold()
+    q_f = (q or "").strip().casefold()
+
+    def _passes_filters(company_name: str, product_name: str, haystack: str) -> bool:
+        if company_f and company_f not in (company_name or "").casefold():
+            return False
+        if product_f and product_f not in (product_name or "").casefold():
+            return False
+        if q_f and q_f not in (haystack or "").casefold():
+            return False
+        return True
+
+    for ci in ci_rows:
+        deal_id = ci.get("deal_id")
+        po = (ci.get("customer_order_no") or ci.get("deal_po_number") or "").strip()
+        po_k = _shipping_po_key(po)
+        match = None
+        if deal_id and int(deal_id) in by_deal:
+            match = by_deal[int(deal_id)]
+        elif po_k and po_k in by_po:
+            match = by_po[po_k]
+
+        ci_amt = _float_ship(ci.get("total_commission"))
+        deal_amt = _float_ship(
+            (match or {}).get("commission_amount")
+            if match
+            else ci.get("deal_commission_amount")
+        )
+        discrepancy = round(ci_amt - deal_amt, 2) if (ci_amt or deal_amt) else None
+
+        company_name = (
+            (ci.get("ci_end_customer") or "").strip()
+            or (match or {}).get("company")
+            or (ci.get("deal_company") or "").strip()
+            or (ci.get("customer_name") or "").strip()
+            or (ci.get("bill_to_name") or "").strip()
+            or "—"
+        )
+        product_name = (
+            (ci.get("ci_product") or "").strip()
+            or (match or {}).get("product")
+            or (ci.get("deal_product") or "").strip()
+            or "—"
+        )
+        qty = ci.get("ci_quantity") or None
+        if qty is not None and _float_ship(qty) == 0:
+            qty = (match or {}).get("quantity") or ci.get("deal_quantity")
+        qty_unit = (
+            (ci.get("qty_unit") or "").strip()
+            or (match or {}).get("quantity_unit")
+            or ci.get("deal_quantity_unit")
+            or "MT"
+        )
+        gbl = (ci.get("ci_gbl_invoice") or "").strip() or (
+            (match or {}).get("gbl_invoice") or ci.get("deal_gbl_invoice") or ""
+        )
+        container = (ci.get("container_numbers") or "").strip() or (
+            (match or {}).get("container_number") or ci.get("deal_container") or ""
+        )
+        ship_date = (
+            (ci.get("ci_line_shipment") or ci.get("shipment_date") or "").strip()[:10]
+        )
+        hay = " ".join(
+            str(x or "")
+            for x in (
+                company_name,
+                product_name,
+                po,
+                gbl,
+                container,
+                ci.get("invoice_number"),
+                ship_date,
+            )
+        )
+        if not _passes_filters(company_name, product_name, hay):
+            continue
+
+        # Status filter: CI-only rows only for all/open; matched deals already filtered
+        if match is None and status not in ("all", "open", ""):
+            continue
+
+        stage_row = {
+            "status": (match or {}).get("status") or ci.get("deal_status") or "open",
+            "pipeline_stage": (match or {}).get("pipeline_stage") or ci.get("deal_pipeline_stage"),
+            "first_contact_at": (match or {}).get("first_contact_at") or ci.get("deal_first_contact_at"),
+            "rfq_at": (match or {}).get("rfq_at") or ci.get("deal_rfq_at"),
+            "rfs_at": (match or {}).get("rfs_at") or ci.get("deal_rfs_at"),
+            "conversion_at": (match or {}).get("conversion_at") or ci.get("deal_conversion_at"),
+        }
+        stage = infer_stage_from_row(stage_row) if (
+            stage_row.get("pipeline_stage")
+            or stage_row.get("first_contact_at")
+            or stage_row.get("rfq_at")
+            or stage_row.get("rfs_at")
+            or stage_row.get("conversion_at")
+            or stage_row.get("status") in ("shipped", "lost")
+        ) else "conversion"  # CI on summary implies commercial conversion track
+        row = {
+            "deal_id": int(deal_id) if deal_id else ((match or {}).get("deal_id")),
+            "status": stage_row["status"],
+            "pipeline_stage": stage,
+            "stage_label": stage_label(stage),
+            "po_number": po or (match or {}).get("po_number") or "",
+            "po_date": (match or {}).get("po_date") or ci.get("deal_po_date") or "",
+            "quantity": qty if qty not in (None, "") else ((match or {}).get("quantity") or ci.get("deal_quantity")),
+            "quantity_unit": qty_unit,
+            "packing": (match or {}).get("packing") or ci.get("deal_packing") or "",
+            "gbl_invoice": gbl,
+            "gbl_invoice_date": (match or {}).get("gbl_invoice_date")
+            or ci.get("deal_gbl_invoice_date")
+            or ship_date
+            or "",
+            "container_number": container,
+            "vessel_name": (match or {}).get("vessel_name") or ci.get("deal_vessel") or "",
+            "etd_india": (match or {}).get("etd_india")
+            or ci.get("deal_etd")
+            or ship_date
+            or "",
+            "transit_time": (match or {}).get("transit_time") or ci.get("deal_transit") or "",
+            "destination": (match or {}).get("destination")
+            or ci.get("deal_destination")
+            or (ci.get("port_of_loading") or ""),
+            "eta": (match or {}).get("eta") or ci.get("deal_eta") or "",
+            "company": company_name,
+            "product": product_name,
+            "product_id": (match or {}).get("product_id"),
+            "source": "ci",
+            "source_label": "Commission invoice",
+            "ci_id": ci.get("id"),
+            "ci_number": ci.get("invoice_number") or "",
+            "ci_base": _ci_shipping_base(ci.get("variant")),
+            "commission": ci_amt,
+            "deal_commission": deal_amt,
+            "discrepancy": discrepancy,
+            "currency": ci.get("value_currency")
+            or ci.get("fob_currency")
+            or (match or {}).get("fob_currency")
+            or "USD",
+        }
+
+        if match is not None:
+            claimed.add(int(match["deal_id"]))
+            po_claim = _shipping_po_key(match.get("po_number"))
+            if po_claim:
+                claimed_pos.add(po_claim)
+        if deal_id:
+            claimed.add(int(deal_id))
+        if po_k:
+            claimed_pos.add(po_k)
+        out.append(row)
+
+    for row in deal_rows:
+        did = int(row["deal_id"])
+        po_k = _shipping_po_key(row.get("po_number"))
+        if did in claimed:
+            continue
+        if po_k and po_k in claimed_pos:
+            continue
+        out.append(row)
+
+    out.sort(
+        key=lambda r: (
+            (r.get("company") or "").casefold(),
+            (r.get("product") or "").casefold(),
+            int(r.get("deal_id") or 0),
+            int(r.get("ci_id") or 0),
+        )
+    )
+    return out
 
 
 def archive_deal(deal_id: int) -> None:
@@ -1589,10 +2055,25 @@ def list_active_leads(
     product: str = "",
     po: str = "",
     q: str = "",
+    stage: str = "all",
+    sort: str = "stage",
+    direction: str = "asc",
+    attention_days: int | None = None,
 ) -> list[dict]:
     """One row per deal (or lead-only product) with activity in the period."""
+    from app.pipeline import infer_stage_from_row, normalize_stage, sort_active_leads
+
     start = period_start(period)
     result: list[dict] = []
+    stage_filter = (stage or "all").strip().lower()
+    if stage_filter not in ("all", ""):
+        stage_filter = normalize_stage(stage_filter)
+    else:
+        stage_filter = "all"
+
+    # Needs-attention preset: focus on open work
+    if attention_days is not None and status in ("all", ""):
+        status = "open"
 
     deal_clauses = ["d.deleted_at IS NULL"]
     deal_params: list[Any] = []
@@ -1639,7 +2120,9 @@ def list_active_leads(
     deal_sql = f"""
         SELECT d.id AS deal_id, d.deal_date, d.status, d.archived, d.po_number, d.quote_ref,
                d.quantity, d.quantity_unit, d.price, d.price_unit, d.value, d.notes, d.closed_date,
+               d.pipeline_stage, d.first_contact_at, d.rfq_at, d.rfs_at, d.conversion_at,
                c.name AS company, p.name AS product, d.customer_id, d.product_id,
+               COALESCE(l.contact, '') AS contact,
                COALESCE(
                    (
                        SELECT MAX(a.activity_date) FROM activities a
@@ -1660,15 +2143,18 @@ def list_active_leads(
         FROM deals d
         JOIN customers c ON c.id = d.customer_id
         JOIN products p ON p.id = d.product_id
+        LEFT JOIN leads l ON l.customer_id = d.customer_id
         WHERE {' AND '.join(deal_clauses)}
         ORDER BY company COLLATE NOCASE ASC, product COLLATE NOCASE ASC, d.id ASC
     """
     with get_db() as conn:
         deal_query_params = act_params * 3 + deal_params
         for row in conn.execute(deal_sql, deal_query_params).fetchall():
-            result.append(dict(row))
+            item = dict(row)
+            item["pipeline_stage"] = infer_stage_from_row(item)
+            result.append(item)
 
-        if status in ("all", "open"):
+        if status in ("all", "open") and stage_filter in ("all", "first_contact"):
             lead_clauses = [
                 "a.deal_id IS NULL",
                 """NOT EXISTS (
@@ -1698,13 +2184,13 @@ def list_active_leads(
                     )"""
                 )
                 lead_params.extend([f"%{q}%"] * 4)
-            if po:
-                pass
             date_filter = " AND a2.activity_date >= ?" if start else ""
             lead_sql = f"""
                 SELECT c.name AS company, p.name AS product, a.customer_id,
                        a.product_id,
+                       COALESCE(l.contact, '') AS contact,
                        MAX(a.activity_date) AS last_activity_date,
+                       MIN(a.activity_date) AS first_contact_at,
                        COUNT(*) AS activity_count,
                        (
                            SELECT COALESCE(a2.comment, a2.description, '')
@@ -1717,6 +2203,7 @@ def list_active_leads(
                 FROM activities a
                 JOIN customers c ON c.id = a.customer_id
                 JOIN products p ON p.id = a.product_id
+                LEFT JOIN leads l ON l.customer_id = a.customer_id
                 WHERE {' AND '.join(lead_clauses)}
                 GROUP BY a.customer_id, a.product_id
             """
@@ -1725,6 +2212,10 @@ def list_active_leads(
                 item = dict(row)
                 item["deal_id"] = None
                 item["status"] = "lead"
+                item["pipeline_stage"] = "first_contact"
+                item["rfq_at"] = None
+                item["rfs_at"] = None
+                item["conversion_at"] = None
                 item["quote_ref"] = ""
                 item["po_number"] = None
                 item["quantity"] = ""
@@ -1735,7 +2226,31 @@ def list_active_leads(
                 item["deal_date"] = item["last_activity_date"]
                 result.append(item)
 
-    return result
+    if stage_filter != "all":
+        result = [
+            r for r in result
+            if normalize_stage(r.get("pipeline_stage")) == stage_filter
+        ]
+
+    if attention_days is not None:
+        cutoff = (datetime.utcnow().date() - timedelta(days=int(attention_days))).isoformat()
+        filtered: list[dict] = []
+        for r in result:
+            if r.get("status") in ("shipped", "lost"):
+                continue
+            last = r.get("last_activity_date") or r.get("deal_date") or ""
+            # Stale touch, or still early in funnel
+            stale = (not last) or last <= cutoff
+            early = normalize_stage(r.get("pipeline_stage")) in (
+                "first_contact",
+                "rfq",
+            )
+            if stale or early:
+                filtered.append(r)
+        result = filtered
+
+    return sort_active_leads(result, sort=sort, direction=direction)
+
 
 
 def group_active_leads(rows: list[dict], view: str = "company") -> list[dict]:
@@ -2055,6 +2570,7 @@ def list_deals_for_company(company: str, active_only: bool = True) -> list[dict]
             f"""
             SELECT d.id, d.deal_date, d.status, d.po_number, d.quote_ref, d.closed_date,
                    d.quantity, d.quantity_unit, d.price, d.price_unit, d.notes,
+                   d.pipeline_stage, d.first_contact_at, d.rfq_at, d.rfs_at, d.conversion_at,
                    d.po_date, d.packing, d.gbl_invoice, d.gbl_invoice_date,
                    d.container_number, d.vessel_name, d.etd_india, d.transit_time,
                    d.destination, d.eta,
@@ -2256,13 +2772,21 @@ def log_update(data: dict[str, Any]) -> dict:
             qref = default_quote_ref(
                 conn, cid, pid, data.get("quote_ref", "")
             )
+            from app.pipeline import normalize_stage, stage_from_channel
+
+            stage = normalize_stage(
+                data.get("pipeline_stage")
+                or stage_from_channel(data.get("channel"))
+            )
+            start = data["deal_date"]
             cur = conn.execute(
                 """
                 INSERT INTO deals (
                     lead_id, customer_id, product_id, product_short_name, po_number, quote_ref,
                     quantity, quantity_unit, price, price_unit, deal_date, status, value, notes,
+                    pipeline_stage, first_contact_at, rfq_at, rfs_at, conversion_at,
                     created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     lead_id,
@@ -2275,9 +2799,14 @@ def log_update(data: dict[str, Any]) -> dict:
                     comm["quantity_unit"],
                     comm["price"],
                     comm["price_unit"],
-                    data["deal_date"],
+                    start,
                     comm["value"],
                     data.get("deal_notes", ""),
+                    stage,
+                    start,
+                    start if stage in ("rfq", "rfs", "conversion") else None,
+                    start if stage in ("rfs", "conversion") else None,
+                    start if stage == "conversion" else None,
                     ts,
                     ts,
                 ),
@@ -2311,6 +2840,17 @@ def log_update(data: dict[str, Any]) -> dict:
                 "source": "portal",
             },
         )
+
+        if deal_id:
+            from app.pipeline import normalize_stage, stage_from_channel
+
+            stage = normalize_stage(
+                data.get("pipeline_stage")
+                or stage_from_channel(data.get("channel"))
+            )
+            apply_pipeline_progress(
+                conn, deal_id, stage, data.get("activity_date") or data.get("deal_date")
+            )
 
         return {
             "activity_id": activity_id,

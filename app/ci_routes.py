@@ -23,6 +23,7 @@ from app.commission_invoices import (
     get_ci_variant_meta,
     list_commission_invoices,
     parse_ci_form,
+    set_ci_show_on_summary,
     update_commission_invoice,
     update_commission_invoice_dates,
 )
@@ -363,6 +364,17 @@ def register_commission_invoice_routes(
             return RedirectResponse(base, status_code=303)
         delete_commission_invoice(ci_id)
         return RedirectResponse(base, status_code=303)
+
+    @app.post(f"{base}/{{ci_id}}/summary")
+    async def ci_toggle_summary(request: Request, ci_id: int, show: str = Query("1")):
+        ci = get_commission_invoice(ci_id)
+        if not ci or ci.get("variant", VARIANT_GBINC) != variant:
+            return RedirectResponse(base, status_code=303)
+        set_ci_show_on_summary(ci_id, show in ("1", "true", "yes", "on"))
+        referer = (request.headers.get("referer") or "").strip()
+        if referer and base in referer:
+            return RedirectResponse(referer, status_code=303)
+        return RedirectResponse(f"{base}/{ci_id}", status_code=303)
 
     @app.get(f"{base}/{{ci_id}}/print", response_class=HTMLResponse)
     async def ci_print_page(request: Request, ci_id: int):

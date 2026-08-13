@@ -1,32 +1,59 @@
 {% extends "base.html" %}
 {% block title %}Active leads{% endblock %}
 {% block content %}
+{% set sort = sort|default('stage') %}
+{% set direction = direction|default('asc') %}
+{% set stage = stage|default('all') %}
+{% set attention = attention|default(false) %}
+{% set qs_base = 'status=' ~ status ~ '&period=' ~ period ~ '&company=' ~ (company|urlencode) ~ '&product=' ~ (product|urlencode) ~ '&po=' ~ (po|urlencode) ~ '&q=' ~ (q|urlencode) ~ '&stage=' ~ stage ~ ('&attention=1' if attention else '') %}
+{% macro sort_link(col, label) -%}
+  {% set next_dir = 'desc' if sort == col and direction != 'desc' else 'asc' %}
+  <a class="sheet-sort {% if sort == col %}is-active{% endif %}"
+     href="/deals?{{ qs_base }}&sort={{ col }}&direction={{ next_dir }}">
+    {{ label }}{% if sort == col %}{% if direction == 'desc' %} ↓{% else %} ↑{% endif %}{% endif %}
+  </a>
+{%- endmacro %}
+
 <div class="page-header deals-page-header">
   <div>
     <h1>Active leads</h1>
-    <p class="subtitle">One line per deal (or lead-only product). Grouped {% if view == 'product' %}by <strong>product</strong>{% else %}by <strong>company</strong>{% endif %}.</p>
+    <p class="subtitle">One form for new deals, stage updates, and optional PDF attach. Row click opens the deal; <strong>Update</strong> logs the next step.</p>
   </div>
-  <div style="display:flex;gap:.5rem;align-items:center">
-    <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&company={{ company }}&product={{ product }}&q={{ q }}"
+  <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+    <button type="button" class="btn btn-ghost btn-sm" id="toggle-cols" aria-pressed="false" title="Show or hide extra columns">Columns: Review</button>
+    <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&company={{ company }}&product={{ product }}&q={{ q }}&stage={{ stage }}"
        class="btn btn-ghost btn-sm">↓ Export Excel</a>
-    <a href="/add?tab=log&return_to=/deals" class="btn btn-primary">+ Add or update</a>
+    <button type="button" class="btn btn-primary" id="open-master-dialog">+ Add / Upload</button>
   </div>
 </div>
 
 <div class="card deals-card">
+  <div class="deals-presets">
+    <a class="filter-pill {% if not attention %}active{% endif %}"
+       href="/deals?status=all&period={{ period }}&stage=all&sort=stage&direction=asc">All</a>
+    <a class="filter-pill {% if attention %}active{% endif %}"
+       href="/deals?attention=1&status=open&period=all&stage=all&sort=last_touch&direction=asc"
+       title="Open deals stale {{ attention_days|default(14) }}+ days, or still in First contact / RFQ">Needs attention</a>
+  </div>
   <form class="deals-toolbar" method="get" action="/deals">
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="direction" value="{{ direction }}" />
+    {% if attention %}<input type="hidden" name="attention" value="1" />{% endif %}
     <div class="toolbar-filters">
       <div>
-        <label class="field-label">View by</label>
-        <select name="view" onchange="this.form.submit()">
-          <option value="company" {% if view == 'company' %}selected{% endif %}>Company</option>
-          <option value="product" {% if view == 'product' %}selected{% endif %}>Product</option>
+        <label class="field-label">Stage</label>
+        <select name="stage" onchange="this.form.submit()">
+          <option value="all" {% if stage == 'all' %}selected{% endif %}>All stages</option>
+          <option value="first_contact" {% if stage == 'first_contact' %}selected{% endif %}>First contact</option>
+          <option value="rfq" {% if stage == 'rfq' %}selected{% endif %}>RFQ</option>
+          <option value="rfs" {% if stage == 'rfs' %}selected{% endif %}>RFS (sample)</option>
+          <option value="conversion" {% if stage == 'conversion' %}selected{% endif %}>Conversion</option>
         </select>
       </div>
       <div>
-        <label class="field-label">Status</label>
+        <label class="field-label">Outcome</label>
         <select name="status" onchange="this.form.submit()">
-          <option value="all" {% if status == 'all' %}selected{% endif %}>All statuses</option>
+          <option value="all" {% if status == 'all' %}selected{% endif %}>All outcomes</option>
           <option value="open" {% if status == 'open' %}selected{% endif %}>Open</option>
           <option value="shipped" {% if status == 'shipped' %}selected{% endif %}>Shipped</option>
           <option value="lost" {% if status == 'lost' %}selected{% endif %}>Lost</option>
@@ -50,124 +77,127 @@
       <input name="po" value="{{ po }}" placeholder="PO #" />
       <input name="q" value="{{ q }}" placeholder="Search" />
       <button type="submit" class="btn btn-primary">Apply</button>
-      <a href="/deals?status=all&period=month&view={{ view }}" class="btn btn-ghost">Clear</a>
+      <a href="/deals?status=all&period=month&stage=all&sort=stage&direction=asc" class="btn btn-ghost">Clear</a>
     </div>
   </form>
 
   <datalist id="filter-companies">
-    {% for g in lead_groups if view == 'company' %}
-    <option value="{{ g.label }}"></option>
-    {% endfor %}
-    {% for row in leads if view != 'company' %}
+    {% for row in leads %}
     <option value="{{ row.company }}"></option>
     {% endfor %}
   </datalist>
   <datalist id="filter-products">
-    {% for g in lead_groups if view == 'product' %}
-    <option value="{{ g.label }}"></option>
-    {% endfor %}
-    {% for row in leads if view != 'product' %}
+    {% for row in leads %}
     <option value="{{ row.product }}"></option>
     {% endfor %}
   </datalist>
 
   <div class="deals-table-scroll">
-    {% if lead_groups %}
-    <table class="deals-table">
+    {% if leads %}
+    <table class="deals-table sheet-table" id="leads-sheet" data-cols="review">
       <thead>
         <tr>
-          <th class="col-toggle" aria-label="Details"></th>
-          <th>ID#</th>
-          <th>PO #</th>
-          <th>Date</th>
-          {% if view == 'product' %}<th>Company</th>{% else %}<th>Product</th>{% endif %}
-          <th>Status</th>
-          <th>Last activity</th>
-          <th>Notes</th>
+          <th>{{ sort_link('company', 'Company') }}</th>
+          <th class="col-extra">Contact</th>
+          <th>{{ sort_link('product', 'Product') }}</th>
+          <th>{{ sort_link('stage', 'Stage') }}</th>
+          <th>{{ sort_link('stage', 'Progress') }}</th>
+          <th class="col-extra">Qty</th>
+          <th class="col-extra">Price</th>
+          <th class="col-extra">Outcome</th>
+          <th>{{ sort_link('last_touch', 'Last touch') }}</th>
+          <th>Next / notes</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-      {% for group in lead_groups %}
-      <tr class="deals-group-row">
-        <td colspan="9">
-          {% if view == 'company' %}
-          <a class="link" href="/customer?name={{ group.label | urlencode }}"><strong>{{ group.label }}</strong></a>
-          {% elif group.product_id %}
-          <a class="link" href="/products/{{ group.product_id }}"><strong>{{ group.label }}</strong></a>
-          {% else %}
-          <strong>{{ group.label }}</strong>
-          {% endif %}
-          <span class="muted"> · {{ group.rows|length }} row{{ 's' if group.rows|length != 1 else '' }}</span>
+      {% for row in leads %}
+      {% set st = row.pipeline_stage or 'first_contact' %}
+      {% set tip = 'First contact: ' ~ (row.first_contact_at or '—') ~ ' · RFQ: ' ~ (row.rfq_at or '—') ~ ' · RFS: ' ~ (row.rfs_at or '—') ~ ' · Conversion: ' ~ (row.conversion_at or '—') %}
+      <tr class="sheet-row" data-href="{% if row.deal_id %}/deal/{{ row.deal_id }}{% else %}/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% endif %}">
+        <td class="col-sticky">
+          <a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a>
         </td>
-      </tr>
-      {% for row in group.rows %}
-      <tr class="deals-summary">
-        <td class="col-toggle">
-          <button type="button" class="icon-btn row-toggle" aria-expanded="false" aria-label="Show details" title="Show details">
-            <svg class="icon-chevron icon-chevron-right" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            <svg class="icon-chevron icon-chevron-down" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </button>
-        </td>
-        <td>{{ row.deal_id or '—' }}</td>
-        <td>{{ row.po_number or '—' }}</td>
-        <td>{{ row.last_activity_date or row.deal_date or '—' }}</td>
-        {% if view == 'product' %}
-        <td><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></td>
-        {% else %}
+        <td class="col-extra">{{ row.contact or '—' }}</td>
         <td>{{ row.product }}</td>
-        {% endif %}
         <td>
+          <span class="badge badge-stage badge-stage-{{ st }}">
+            {% if st == 'rfq' %}RFQ
+            {% elif st == 'rfs' %}RFS
+            {% elif st == 'conversion' %}Conversion
+            {% else %}First contact{% endif %}
+          </span>
+        </td>
+        <td class="col-progress">
+          <div class="pipe-progress" title="{{ tip }}" aria-label="{{ tip }}">
+            <span class="pipe-step {% if row.first_contact_at or st %}is-done{% endif %} {% if st == 'first_contact' %}is-current{% endif %}" data-label="Contact">●</span>
+            <span class="pipe-line {% if row.rfq_at or st in ['rfq','rfs','conversion'] %}is-done{% endif %}"></span>
+            <span class="pipe-step {% if row.rfq_at or st in ['rfq','rfs','conversion'] %}is-done{% endif %} {% if st == 'rfq' %}is-current{% endif %}" data-label="RFQ">●</span>
+            <span class="pipe-line {% if row.rfs_at or st in ['rfs','conversion'] %}is-done{% endif %}"></span>
+            <span class="pipe-step {% if row.rfs_at or st in ['rfs','conversion'] %}is-done{% endif %} {% if st == 'rfs' %}is-current{% endif %}" data-label="RFS">●</span>
+            <span class="pipe-line {% if row.conversion_at or st == 'conversion' %}is-done{% endif %}"></span>
+            <span class="pipe-step {% if row.conversion_at or st == 'conversion' %}is-done{% endif %} {% if st == 'conversion' %}is-current{% endif %}" data-label="Conv">●</span>
+          </div>
+          <div class="pipe-progress-labels" title="{{ tip }}">
+            <span>C</span><span>Q</span><span>S</span><span>V</span>
+          </div>
+        </td>
+        <td class="col-extra">{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</td>
+        <td class="col-extra">{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</td>
+        <td class="col-extra">
           {% if row.status == 'shipped' %}<span class="badge">Shipped</span>
           {% elif row.status == 'lost' %}<span class="badge badge-lost">Lost</span>
           {% elif row.status == 'lead' %}<span class="badge badge-muted">Lead</span>
           {% else %}<span class="badge badge-open">Open</span>{% endif %}
         </td>
-        <td class="col-notes">
-          {% if row.activity_count and row.activity_count > 1 %}
-          <span class="muted">{{ row.activity_count }} updates · </span>
-          {% endif %}
-          {{ (row.last_activity or '')[:60] }}{% if (row.last_activity or '')|length > 60 %}…{% endif %}
+        <td class="col-date">{{ row.last_activity_date or '—' }}</td>
+        <td class="col-notes" title="{{ row.last_activity or row.notes or '' }}">
+          {{ (row.last_activity or row.notes or '')[:48] }}{% if (row.last_activity or row.notes or '')|length > 48 %}…{% endif %}
         </td>
-        <td class="col-notes">{{ (row.notes or '')[:50] }}{% if (row.notes or '')|length > 50 %}…{% endif %}</td>
-        <td class="col-quick col-actions">
-          <a class="btn btn-primary btn-sm" href="/add?tab=log&company={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% if row.deal_id %}&deal_id={{ row.deal_id }}{% endif %}&return_to=/deals">Log</a>
-          {% if row.deal_id %}
-          <a class="link" href="/deal/{{ row.deal_id }}">View</a>
-          {% if row.status in ('shipped', 'lost') %}
-          <form method="post" action="/deals/{{ row.deal_id }}/reopen" class="inline-form"
-                data-confirm="Reopen this deal? It will be moved back to Open status."
-                data-confirm-ok="Yes, Reopen">
-            <input type="hidden" name="next_url" value="/deals?status={{ status }}" />
-            <button type="submit" class="btn btn-ghost btn-sm">↩ Reopen</button>
-          </form>
-          {% endif %}
-          {% else %}
-          <a class="link" href="/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}">View</a>
-          {% endif %}
+        <td class="col-actions" onclick="event.stopPropagation()">
+          <button type="button" class="btn btn-primary btn-sm open-master-row"
+                  data-company="{{ row.company }}"
+                  data-product="{{ row.product }}"
+                  data-deal-id="{{ row.deal_id or '' }}"
+                  data-stage="{{ row.pipeline_stage or 'first_contact' }}">Update</button>
         </td>
       </tr>
-      <tr class="deals-detail" hidden>
-        <td colspan="9">
-          <dl class="deals-detail-grid">
-            {% if view == 'company' %}
-            <div><dt>Company</dt><dd><a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a></dd></div>
-            {% else %}
-            <div><dt>Product</dt><dd>{{ row.product }}</dd></div>
-            {% endif %}
-            <div><dt>Quantity</dt><dd>{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</dd></div>
-            <div><dt>Price</dt><dd>{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</dd></div>
-          </dl>
-        </td>
-      </tr>
-      {% endfor %}
       {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="empty">No leads with activity in this period. Try a wider date range or log an update.</div>
+    <div class="empty">No leads in this view. Try a wider date range or add an update.</div>
     {% endif %}
   </div>
 </div>
-<script src="/static/deals-rows.js"></script>
+
+{% include "_master_update_dialog.html" %}
+<script src="/static/master_update.js"></script>
+<script>
+document.querySelectorAll('.sheet-row[data-href]').forEach(function (row) {
+  row.addEventListener('click', function (e) {
+    if (e.target.closest('a, button')) return;
+    window.location = row.getAttribute('data-href');
+  });
+});
+(function () {
+  var sheet = document.getElementById('leads-sheet');
+  var btn = document.getElementById('toggle-cols');
+  if (!sheet || !btn) return;
+  var KEY = 'leads.sheet.cols';
+  function apply(mode) {
+    mode = mode === 'full' ? 'full' : 'review';
+    sheet.setAttribute('data-cols', mode);
+    btn.textContent = mode === 'full' ? 'Columns: Full' : 'Columns: Review';
+    btn.setAttribute('aria-pressed', mode === 'full' ? 'true' : 'false');
+    try { localStorage.setItem(KEY, mode); } catch (e) {}
+  }
+  var saved = 'review';
+  try { saved = localStorage.getItem(KEY) || 'review'; } catch (e) {}
+  apply(saved);
+  btn.addEventListener('click', function () {
+    apply(sheet.getAttribute('data-cols') === 'full' ? 'review' : 'full');
+  });
+})();
+</script>
 {% endblock %}

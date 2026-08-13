@@ -44,6 +44,8 @@ fi
 echo ""
 echo "▶ Step 1: Build Python bundle with PyInstaller (clean build)..."
 command -v pyinstaller >/dev/null 2>&1 || die "pyinstaller not found — pip install pyinstaller"
+python3 -c "import reportlab" 2>/dev/null || die "reportlab not found — pip install -r requirements.txt (needed for MR PDF export)"
+python3 -c "import mr.app.main" 2>/dev/null || die "MR app failed to import — fix import errors before building"
 pkill -9 -f "dist/leads/leads" 2>/dev/null || true
 _rm_tree build
 _rm_tree dist

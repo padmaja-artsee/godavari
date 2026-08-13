@@ -731,19 +731,44 @@ def list_register_rows(
     """
     with _connect() as conn:
         rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
-        # Duplicate counts are global (across the full register), not just the filter.
+        # Duplicate counts are by exact invoice # (normalized), across the full register.
+        # AA vs IAA are different keys — each is only a duplicate of itself.
         counts: dict[str, int] = {}
-        for r in conn.execute("SELECT invoice_no FROM gbl_cs_lines").fetchall():
+        occur_months: dict[str, list[str]] = {}
+        for r in conn.execute(
+            "SELECT invoice_no, sail_month, source_original FROM gbl_cs_lines"
+        ).fetchall():
             key = _normalize_invoice(r["invoice_no"])
-            if key:
-                counts[key] = counts.get(key, 0) + 1
+            if not key:
+                continue
+            counts[key] = counts.get(key, 0) + 1
+            month_label = (r["sail_month"] or "").strip().upper() or "?"
+            src = (r["source_original"] or "").strip()
+            tip = f"{month_label}" + (f" ({src})" if src else "")
+            occur_months.setdefault(key, []).append(tip)
 
     for row in rows:
         key = _normalize_invoice(row.get("invoice_no") or "")
         n = counts.get(key, 0)
         row["duplicate_count"] = n
         row["is_duplicate"] = n > 1
-        row["duplicate_flag"] = f"DUPLICATE ({n})" if n > 1 else ""
+        if n > 1:
+            places = occur_months.get(key) or []
+            # Dedupe while preserving order
+            seen: set[str] = set()
+            uniq_places: list[str] = []
+            for p in places:
+                if p not in seen:
+                    seen.add(p)
+                    uniq_places.append(p)
+            inv = (row.get("invoice_no") or "").strip()
+            row["duplicate_flag"] = f"DUPLICATE ({n})"
+            row["duplicate_detail"] = (
+                f"Exact invoice {inv} appears {n} times: " + "; ".join(uniq_places)
+            )
+        else:
+            row["duplicate_flag"] = ""
+            row["duplicate_detail"] = ""
     return rows
 
 

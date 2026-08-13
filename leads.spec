@@ -14,10 +14,16 @@ ROOT = Path(SPECPATH)  # noqa: F821  (PyInstaller injects SPECPATH)
 
 block_cipher = None
 
+try:
+    from PyInstaller.utils.hooks import collect_all
+    _rl_datas, _rl_binaries, _rl_hidden = collect_all("reportlab")
+except Exception:
+    _rl_datas, _rl_binaries, _rl_hidden = [], [], []
+
 a = Analysis(
     [str(ROOT / "launcher.py")],
     pathex=[str(ROOT)],
-    binaries=[],
+    binaries=_rl_binaries,
     datas=[
         # ── Leads ──────────────────────────────────────────────────────────
         (str(ROOT / "templates"),              "templates"),
@@ -32,7 +38,7 @@ a = Analysis(
         (str(ROOT / "mr" / "templates"),       "mr/templates"),
         (str(ROOT / "mr" / "static"),          "mr/static"),
         # finance/__init__.py and app/__init__.py are picked up via hiddenimports
-    ],
+    ] + list(_rl_datas),
 
     hiddenimports=[
         # FastAPI / Starlette internals not always auto-detected.
@@ -55,6 +61,19 @@ a = Analysis(
         "openpyxl",
         "openpyxl.styles",
         "openpyxl.utils",
+        "reportlab",
+        "reportlab.lib",
+        "reportlab.lib.colors",
+        "reportlab.lib.enums",
+        "reportlab.lib.pagesizes",
+        "reportlab.lib.styles",
+        "reportlab.lib.units",
+        "reportlab.platypus",
+        "eval_type_backport",
+        "PIL",
+        "PIL.Image",
+        "PIL.ImageDraw",
+        "PIL.ImageFont",
         # ── Leads modules ──────────────────────────────────────────────────
         "app.main",
         "app.database",
@@ -95,7 +114,7 @@ a = Analysis(
         "mr.app.projections",
         "mr.app.actual_vs_projection",
         "mr.app.avp_exports",
-    ],
+    ] + list(_rl_hidden),
     hookspath=[],
     runtime_hooks=[],
     excludes=[

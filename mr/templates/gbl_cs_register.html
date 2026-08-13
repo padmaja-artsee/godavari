@@ -123,7 +123,7 @@
         <td>{{ row.display_sr }}</td>
         <td>{{ row.sail_month }}</td>
         <td class="mr-wrap mr-wrap-md">{{ row.invoice_no }}</td>
-        <td class="mr-dup-cell">{% if row.is_duplicate %}<span class="mr-dup-flag">{{ row.duplicate_flag }}</span>{% else %}—{% endif %}</td>
+        <td class="mr-dup-cell">{% if row.is_duplicate %}<span class="mr-dup-flag" title="{{ row.duplicate_detail }}">{{ row.duplicate_flag }}</span>{% else %}—{% endif %}</td>
         <td class="mr-col-hl mr-wrap mr-wrap-lg">{{ row.vessel_sail_date }}</td>
         <td class="mr-col-hl mr-po-cell">{{ row.po_no }}</td>
         <td>{{ row.po_date }}</td>

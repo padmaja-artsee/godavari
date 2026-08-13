@@ -205,4 +205,19 @@
 
   if (companyInput.value) scheduleLoadDeals();
   if (linkHidden) setLinkMode(linkHidden.value);
+
+  const stageSelect = document.getElementById("log-pipeline-stage");
+  const channelSelect = document.getElementById("log-channel");
+  const CHANNEL_FOR_STAGE = {
+    first_contact: "Email",
+    rfq: "Quote",
+    rfs: "Sample",
+    conversion: "PO",
+  };
+  if (stageSelect && channelSelect) {
+    stageSelect.addEventListener("change", function () {
+      const suggested = CHANNEL_FOR_STAGE[stageSelect.value];
+      if (suggested) channelSelect.value = suggested;
+    });
+  }
 })();

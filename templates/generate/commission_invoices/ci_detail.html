@@ -19,6 +19,15 @@
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
     <a href="{{ _base }}/{{ ci.id }}/edit" class="btn btn-primary">Edit</a>
+    {% if ci.show_on_summary %}
+    <form method="post" action="{{ _base }}/{{ ci.id }}/summary?show=0" style="display:inline">
+      <button type="submit" class="btn btn-ghost" title="Remove from Summary tab">On Summary ✓</button>
+    </form>
+    {% else %}
+    <form method="post" action="{{ _base }}/{{ ci.id }}/summary?show=1" style="display:inline">
+      <button type="submit" class="btn btn-ghost" title="CI becomes source of truth on Summary for this PO">Add to Summary</button>
+    </form>
+    {% endif %}
     <form method="post" action="{{ _base }}/{{ ci.id }}/duplicate" style="display:inline">
       <button type="submit" class="btn btn-ghost">Duplicate</button>
     </form>

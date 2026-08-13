@@ -1,0 +1,117 @@
+{# Master Add / Upload dialog — one form with dropdowns for any stage #}
+<dialog id="master-update-dialog" class="master-dialog">
+  <form method="post" action="/add/log?return_to=/deals" enctype="multipart/form-data" class="master-dialog-form" id="master-update-form">
+    <div class="master-dialog-header">
+      <div>
+        <h2>Add / Upload</h2>
+        <p class="subtitle" style="margin:0">One form for new deals, updates, and PDF attach — any stage.</p>
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="close-master-dialog" aria-label="Close">✕</button>
+    </div>
+
+    <div class="master-dialog-body form-grid">
+      <div class="full">
+        <label>I want to</label>
+        <select name="link_mode" id="master-link-mode">
+          <option value="existing">Update existing deal</option>
+          <option value="new">Start new deal</option>
+          <option value="none">Company only (no deal yet)</option>
+        </select>
+      </div>
+
+      <div class="full">
+        <label>Company *</label>
+        <input name="company" id="master-company" required list="master-customers"
+               placeholder="Start typing company…" autocomplete="off" />
+      </div>
+
+      <div class="full" id="master-deal-wrap">
+        <label>Which deal?</label>
+        <select name="deal_id" id="master-deal-id">
+          <option value="">— Enter company first —</option>
+        </select>
+      </div>
+
+      <div class="full" id="master-product-wrap" hidden>
+        <label>Product *</label>
+        <input name="product_new" id="master-product-new" list="master-products" placeholder="e.g. Ethyl Acetate" />
+        <input type="hidden" name="product_none" id="master-product-none" />
+        <input type="hidden" name="product" id="master-product" />
+      </div>
+
+      <div>
+        <label>Pipeline stage *</label>
+        <select name="pipeline_stage" id="master-stage">
+          <option value="first_contact">First contact</option>
+          <option value="rfq">RFQ</option>
+          <option value="rfs">RFS (sample)</option>
+          <option value="conversion">Conversion</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Date *</label>
+        <input name="activity_date" id="master-activity-date" type="date" required />
+        <input type="hidden" name="deal_date" id="master-deal-date" />
+      </div>
+
+      <div>
+        <label>Channel</label>
+        <select name="channel" id="master-channel">
+          <option>Email</option>
+          <option>Phone</option>
+          <option>Meeting</option>
+          <option>Quote</option>
+          <option>Sample</option>
+          <option>PO</option>
+          <option>Issue</option>
+          <option>Follow-up</option>
+          <option>Note</option>
+        </select>
+      </div>
+
+      <div>
+        <label>Doc type (if attaching)</label>
+        <select name="doc_type" id="master-doc-type">
+          <option value="">— Optional —</option>
+          <option value="rfq">RFQ</option>
+          <option value="quote">Quote</option>
+          <option value="sample">Sample / RFS</option>
+          <option value="po">PO</option>
+          <option value="shipping">Shipping</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+
+      <div class="full">
+        <label>What happened *</label>
+        <textarea name="comment" id="master-comment" required rows="3"
+                  placeholder="Email summary, call notes, quote update…"></textarea>
+      </div>
+
+      <div class="full">
+        <label>Attach PDF (optional)</label>
+        <input type="file" name="pdf_file" id="master-pdf" accept="application/pdf,.pdf" />
+      </div>
+    </div>
+
+    <div class="master-dialog-footer">
+      <a class="link" href="/add?tab=log&return_to=/deals" id="master-full-form-link">Open full form →</a>
+      <div style="display:flex;gap:.5rem">
+        <button type="button" class="btn btn-ghost" id="cancel-master-dialog">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save update</button>
+      </div>
+    </div>
+  </form>
+</dialog>
+
+<datalist id="master-customers">
+  {% for c in customers|default([]) %}
+  <option value="{{ c.name }}"></option>
+  {% endfor %}
+</datalist>
+<datalist id="master-products">
+  {% for p in products|default([]) %}
+  <option value="{{ p.name }}"></option>
+  {% endfor %}
+</datalist>

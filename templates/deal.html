@@ -6,6 +6,7 @@
 {% block title %}Deal · {{ detail.deal.product }}{% endblock %}
 {% block content %}
 {% set d = detail.deal %}
+{% set st = d.pipeline_stage or 'first_contact' %}
 <div class="page-header">
   <div>
     <h1>{{ d.company }} — <a class="link" href="/products/{{ d.product_id }}">{{ d.product }}</a></h1>
@@ -23,9 +24,46 @@
     <a href="/generate/purchase-orders/new?deal_id={{ d.id }}" class="btn btn-ghost">Generate Purchase Order</a>
     <a href="/generate/commission-invoices/new?deal_id={{ d.id }}" class="btn btn-ghost">Commission Invoice (GBL)</a>
     <a href="/generate/gbbv-commission-invoices/new?deal_id={{ d.id }}" class="btn btn-ghost">GBBV Commission Invoice</a>
-    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary">+ Log update</a>
-    <a href="/add?tab=deal&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}" class="btn btn-ghost">+ Create deal</a>
+    <a href="/add?tab=log&company={{ d.company | urlencode }}&product={{ d.product | urlencode }}&deal_id={{ d.id }}&return_to=/deal/{{ d.id }}" class="btn btn-primary">+ Add / Upload</a>
   </div>
+</div>
+
+<div class="card deal-sheet-strip">
+  <div class="deal-stage-progress" aria-label="Pipeline progress">
+    {% for key, label in [('first_contact','First contact'),('rfq','RFQ'),('rfs','RFS'),('conversion','Conversion')] %}
+    <div class="deal-stage-step {% if st == key %}is-current{% endif %} {% if (st == 'rfq' and key == 'first_contact') or (st == 'rfs' and key in ['first_contact','rfq']) or (st == 'conversion' and key != 'conversion') or (st == key) %}is-done{% endif %}">
+      <span class="deal-stage-dot"></span>
+      <span class="deal-stage-label">{{ label }}</span>
+      <span class="deal-stage-date">
+        {% if key == 'first_contact' %}{{ d.first_contact_at or '—' }}
+        {% elif key == 'rfq' %}{{ d.rfq_at or '—' }}
+        {% elif key == 'rfs' %}{{ d.rfs_at or '—' }}
+        {% else %}{{ d.conversion_at or '—' }}{% endif %}
+      </span>
+    </div>
+    {% if not loop.last %}<div class="deal-stage-line"></div>{% endif %}
+    {% endfor %}
+  </div>
+  <table class="deal-context-sheet">
+    <thead>
+      <tr>
+        <th>Company</th><th>Product</th><th>Stage</th><th>PO #</th><th>Qty</th><th>Price</th><th>Last touch</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>{{ d.company }}</td>
+        <td>{{ d.product }}</td>
+        <td><span class="badge badge-stage badge-stage-{{ st }}">
+          {% if st == 'rfq' %}RFQ{% elif st == 'rfs' %}RFS{% elif st == 'conversion' %}Conversion{% else %}First contact{% endif %}
+        </span></td>
+        <td>{{ d.po_number or '—' }}</td>
+        <td>{{ (d.quantity|qty_display(d.quantity_unit or 'MT')) if d.quantity else '—' }}</td>
+        <td>{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% else %}—{% endif %}</td>
+        <td>{{ detail.activities[0].activity_date if detail.activities else d.deal_date }}</td>
+      </tr>
+    </tbody>
+  </table>
 </div>
 
 {% if product_record and (product_record.cas_number or product_record.certifications) %}

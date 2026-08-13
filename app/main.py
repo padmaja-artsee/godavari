@@ -65,6 +65,7 @@ from app.database import (
     delete_contact,
 )
 from app.exports import (
+    COMMISSION_SUMMARY_COLUMNS,
     SHIPPING_COLUMNS,
     export_filename,
     rollup_columns,
@@ -93,7 +94,7 @@ from app.products import (
 from app.generate import GENERATE_DOCUMENTS
 from app.po_exports import export_po_pdf, export_po_xlsx
 # ── Commission Invoice (self-contained; remove this block to drop the feature) ──
-from app.commission_invoices import upgrade_commission_invoices_schema
+from app.commission_invoices import summary_commission_rows, upgrade_commission_invoices_schema
 from app.ci_routes import register_all_commission_invoice_routes
 # ── Sales (Commercial) Invoice ──────────────────────────────────────────────
 from app.sales_invoices import (
@@ -239,8 +240,10 @@ try:
     from mr.app.main import app as _mr_app
     app.mount("/mr", _mr_app)
 except Exception as _e:
+    import logging as _logging
     import warnings
     warnings.warn(f"MR sub-app could not be mounted: {_e}")
+    _logging.getLogger("leads").error("MR sub-app could not be mounted: %s", _e)
 
 
 @app.on_event("startup")
@@ -679,10 +682,31 @@ async def active_leads_page(
     product: str = Query(""),
     po: str = Query(""),
     q: str = Query(""),
+    stage: str = Query("all"),
+    sort: str = Query("stage"),
+    direction: str = Query("asc"),
     view: str = Query("company"),
+    attention: str = Query(""),
 ):
     view_mode = "product" if view == "product" else "company"
-    leads = list_active_leads(status, period, company, product, po, q)
+    attention_days = 14 if attention in ("1", "true", "yes", "14") else None
+    if attention_days is not None:
+        if "period" not in request.query_params:
+            period = "all"
+        if status in ("all", ""):
+            status = "open"
+    leads = list_active_leads(
+        status,
+        period,
+        company,
+        product,
+        po,
+        q,
+        stage=stage,
+        sort=sort,
+        direction=direction,
+        attention_days=attention_days,
+    )
     return templates.TemplateResponse(
         "deals.html",
         ctx(
@@ -696,7 +720,14 @@ async def active_leads_page(
             product=product,
             po=po,
             q=q,
+            stage=stage,
+            sort=sort,
+            direction=direction,
             view=view_mode,
+            attention=bool(attention_days),
+            attention_days=attention_days or 14,
+            customers=list_customers(),
+            products=list_products(),
         ),
     )
 
@@ -955,6 +986,9 @@ async def post_log(
     channel: str = Form("Email"),
     comment: str = Form(""),
     value: str = Form(""),
+    pipeline_stage: str = Form("first_contact"),
+    doc_type: str = Form(""),
+    pdf_file: Optional[UploadFile] = File(None),
     # Shipping fields — only used when link_mode == "new"
     po_date: str = Form(""),
     packing: str = Form(""),
@@ -982,6 +1016,9 @@ async def post_log(
         product_val = product_none or product
     else:
         product_val = product
+    note = comment
+    if doc_type and pdf_file and pdf_file.filename:
+        note = f"[{doc_type.upper()} attached] {comment}".strip()
     try:
         result = log_update(
             {
@@ -1007,8 +1044,9 @@ async def post_log(
                 "deal_notes_append": deal_notes_append,
                 "activity_date": activity_date,
                 "channel": channel,
-                "comment": comment,
+                "comment": note,
                 "value": value,
+                "pipeline_stage": pipeline_stage,
             }
         )
     except ValueError as e:
@@ -1063,6 +1101,14 @@ async def post_log(
             commission_rate=commission_rate or cur.get("commission_rate") or "",
             fob_currency=fob_currency or cur.get("fob_currency") or "USD",
         )
+    # Optional PDF from master dialog
+    if result.get("deal_id") and pdf_file and pdf_file.filename:
+        if pdf_file.filename.lower().endswith(".pdf"):
+            content = await pdf_file.read()
+            try:
+                add_deal_file(result["deal_id"], pdf_file.filename, content)
+            except ValueError:
+                pass
     return_to = request.query_params.get("return_to", "")
     if return_to.startswith("/"):
         return RedirectResponse(return_to, status_code=303)
@@ -1327,6 +1373,10 @@ async def summary_export_csv(
         rows = list_shipping_summary(status="open")
         cols = SHIPPING_COLUMNS
         fname = export_filename("gbinc-shipping-summary", period, "csv")
+    elif sheet == "commission":
+        rows = summary_commission_rows(period)
+        cols = COMMISSION_SUMMARY_COLUMNS
+        fname = export_filename("gbinc-commission-summary", period, "csv")
     else:
         rows = (
             summary_by_product(period)
@@ -1354,14 +1404,19 @@ async def summary_export_xlsx(
         else summary_by_customer(period)
     )
     shipping_rows = list_shipping_summary(status="open")
+    commission_rows = summary_commission_rows(period)
     if sheet == "rollup":
         sheets = [(rollup_sheet_name(group), rollup_rows, rollup_columns(group))]
         fname = export_filename("gbinc-summary", period, "xlsx", group)
     elif sheet == "shipping":
         sheets = [("Shipping", shipping_rows, SHIPPING_COLUMNS)]
         fname = export_filename("gbinc-shipping-summary", period, "xlsx")
+    elif sheet == "commission":
+        sheets = [("Commission", commission_rows, COMMISSION_SUMMARY_COLUMNS)]
+        fname = export_filename("gbinc-commission-summary", period, "xlsx")
     else:
         sheets = [
+            ("Commission", commission_rows, COMMISSION_SUMMARY_COLUMNS),
             (rollup_sheet_name(group), rollup_rows, rollup_columns(group)),
             ("Shipping", shipping_rows, SHIPPING_COLUMNS),
         ]
@@ -1472,12 +1527,14 @@ async def summary(
 ):
     rows = summary_by_product(period) if group == "product" else summary_by_customer(period)
     shipping_rows = list_shipping_summary(status="open")[:40]
+    commission_rows = summary_commission_rows(period)
     return templates.TemplateResponse(
         "summary.html",
         ctx(
             request,
             page="summary",
             shipping_rows=shipping_rows,
+            commission_rows=commission_rows,
             period=period,
             group=group,
             rows=rows,
