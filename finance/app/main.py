@@ -120,14 +120,12 @@ def _build_rows(grid: dict, items: list[dict], opening_balance: float = 0.0) -> 
 
 
 def _combined_actuals(fiscal_year: int, items: list[dict], opening_balance: float = 0.0) -> dict:
-    from finance.app.commission_income import get_commission_invoice_rollup
-
+    """Actuals from bank/manual transactions only (no CI invoice autopopulate)."""
     rollup = get_transaction_rollup(fiscal_year)
     manual = get_actuals_manual(fiscal_year)
-    ci_rollup = get_commission_invoice_rollup(fiscal_year, items)
     combined = {}
-    for k in set(list(rollup.keys()) + list(manual.keys()) + list(ci_rollup.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0) + ci_rollup.get(k, 0)
+    for k in set(list(rollup.keys()) + list(manual.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
     return compute_grid(combined, items, opening_balance)
 
 
@@ -324,17 +322,14 @@ async def budget_delete_line(fy: int = Form(...), lid: int = Form(...)):
 
 @app.get("/actuals", response_class=HTMLResponse)
 async def actuals_page(request: Request, fy: int = Query(0), saved: int = Query(0)):
-    from finance.app.commission_income import get_commission_invoice_rollup
-
     fys = get_fiscal_years()
     if not fy: fy = fys[0]
     items   = list_line_items()
     rollup  = get_transaction_rollup(fy)
     manual  = get_actuals_manual(fy)
-    ci_rollup = get_commission_invoice_rollup(fy, items)
     combined = {}
-    for k in set(list(rollup.keys()) + list(manual.keys()) + list(ci_rollup.keys())):
-        combined[k] = rollup.get(k, 0) + manual.get(k, 0) + ci_rollup.get(k, 0)
+    for k in set(list(rollup.keys()) + list(manual.keys())):
+        combined[k] = rollup.get(k, 0) + manual.get(k, 0)
     opening_balance = get_opening_balance(fy)
     full = compute_grid(combined, items, opening_balance)
     by_name = {i["name"]: i["id"] for i in items}
@@ -343,12 +338,10 @@ async def actuals_page(request: Request, fy: int = Query(0), saved: int = Query(
     for item in items:
         lid = item["id"]
         monthly_r = {m: rollup.get((lid, m), 0.0)  for m in FY_MONTHS}
-        monthly_ci = {m: ci_rollup.get((lid, m), 0.0) for m in FY_MONTHS}
         monthly_m = {m: manual.get((lid, m), 0.0)  for m in FY_MONTHS}
         monthly_t = {m: full.get((lid, m), 0.0)    for m in FY_MONTHS}
         rows.append({
             "item": item, "monthly_r": monthly_r,
-            "monthly_ci": monthly_ci,
             "monthly_m": monthly_m, "monthly_t": monthly_t,
             "total": _row_total(item, lid, full, by_name),
             "style": SECTION_STYLES.get(item["name"], ""),

@@ -81,7 +81,7 @@
   <span class="f-badge f-badge-red">{{ summary.review }} needs review</span>
   <span class="f-text-muted">{{ summary.total }} rows in range ({{ from_date }} → {{ to_date }})</span>
   <span style="flex:1"></span>
-  <button type="button" class="f-btn-sm f-btn-outline" id="bi-select-new">Select new (high confidence)</button>
+  <button type="button" class="f-btn-sm f-btn-outline" id="bi-select-new">Select all importable</button>
   <button type="button" class="f-btn-sm f-btn-outline" id="bi-select-none">Clear all</button>
 </div>
 
@@ -110,7 +110,7 @@
       <td>
         {% if row.status != 'duplicate' %}
         <input type="checkbox" name="selected" value="{{ row.row_index }}" class="bi-cb"
-               {% if row.precheck %}checked{% endif %} />
+               {% if row.status in ['new', 'review', 'fuzzy'] %}checked{% endif %} />
         {% endif %}
       </td>
       <td>{{ row.posted_date | fmtdate }}</td>
@@ -207,7 +207,7 @@
     document.querySelectorAll(".bi-row").forEach(function (tr) {
       const cb = tr.querySelector(".bi-cb");
       if (!cb) return;
-      cb.checked = tr.dataset.precheck === "1";
+      cb.checked = tr.dataset.importable === "1";
     });
     syncCount();
   });

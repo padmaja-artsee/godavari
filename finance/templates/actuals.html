@@ -5,7 +5,7 @@
 <div class="f-page-header">
   <div>
     <h1 class="f-title">Actuals — FY{{ fy }}</h1>
-    <p class="f-subtitle">From transactions &amp; saved commission invoices (Jul 2026+). Manual additions below are editable and roll into totals.</p>
+    <p class="f-subtitle">From bank/transactions only. Commission Income appears when categorized from bank import. Manual additions below are editable and roll into totals.</p>
   </div>
   <div class="f-header-controls">
     <form method="get" action="{{ _base }}/actuals">
@@ -39,8 +39,7 @@
 </div>
 
 <div class="f-legend-bar">
-  <span class="f-rollup-badge">$0</span> From transactions &nbsp;
-  <span class="f-ci-badge">$0</span> From commission invoices &nbsp;
+  <span class="f-rollup-badge">$0</span> From bank / transactions &nbsp;
   <span class="f-manual-badge">+$0</span> Manual addition (editable)
 </div>
 
@@ -73,13 +72,10 @@
             {% if row.monthly_r[m] %}
             <span class="f-rollup-badge">${{ "{:,.2f}".format(row.monthly_r[m]) }}</span>
             {% endif %}
-            {% if row.monthly_ci is defined and row.monthly_ci[m] %}
-            <span class="f-ci-badge" title="From saved commission invoices">${{ "{:,.2f}".format(row.monthly_ci[m]) }}</span>
-            {% endif %}
             {% if row.monthly_m[m] %}
             <span class="f-manual-badge">+${{ "{:,.2f}".format(row.monthly_m[m]) }}</span>
             {% endif %}
-            {% if not row.monthly_r[m] and not row.monthly_m[m] and not (row.monthly_ci is defined and row.monthly_ci[m]) %}
+            {% if not row.monthly_r[m] and not row.monthly_m[m] %}
             <span class="f-text-muted">—</span>
             {% endif %}
           {% endif %}
