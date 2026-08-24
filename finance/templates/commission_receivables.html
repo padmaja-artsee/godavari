@@ -11,16 +11,44 @@
   </div>
 </div>
 
-<form method="get" action="{{ _base }}/commission-receivables" class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem">
+{% set start_y = (start[:4]|int) if start and start|length >= 7 else 2026 %}
+{% set start_m = (start[5:7]|int) if start and start|length >= 7 else 4 %}
+{% set end_y = (end[:4]|int) if end and end|length >= 7 else 2027 %}
+{% set end_m = (end[5:7]|int) if end and end|length >= 7 else 3 %}
+<form method="get" action="{{ _base }}/commission-receivables" class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem" id="crRangeForm">
+  <input type="hidden" name="start" id="crStart" value="{{ start }}">
+  <input type="hidden" name="end" id="crEnd" value="{{ end }}">
   <div class="f-filter-bar" style="background:transparent;border:none;padding:0;margin:0">
     <div class="f-filter-group">
-      <label class="f-filter-label">From month</label>
-      <input type="month" name="start" class="f-select-sm" value="{{ start }}" style="min-width:10rem">
+      <label class="f-filter-label">From</label>
+      <div style="display:flex;gap:.35rem;align-items:center">
+        <select id="crStartMonth" class="f-select-sm" aria-label="From month">
+          {% for m in range(1, 13) %}
+          <option value="{{ '%02d'|format(m) }}" {% if m == start_m %}selected{% endif %}>{{ month_labels.get(m, m) }}</option>
+          {% endfor %}
+        </select>
+        <select id="crStartYear" class="f-select-sm" aria-label="From year">
+          {% for y in year_options %}
+          <option value="{{ y }}" {% if y == start_y %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
     <div class="f-filter-group">
-      <label class="f-filter-label">To month</label>
-      <input type="month" name="end" class="f-select-sm" value="{{ end }}" style="min-width:10rem">
+      <label class="f-filter-label">To</label>
+      <div style="display:flex;gap:.35rem;align-items:center">
+        <select id="crEndMonth" class="f-select-sm" aria-label="To month">
+          {% for m in range(1, 13) %}
+          <option value="{{ '%02d'|format(m) }}" {% if m == end_m %}selected{% endif %}>{{ month_labels.get(m, m) }}</option>
+          {% endfor %}
+        </select>
+        <select id="crEndYear" class="f-select-sm" aria-label="To year">
+          {% for y in year_options %}
+          <option value="{{ y }}" {% if y == end_y %}selected{% endif %}>{{ y }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
 
     <div class="f-filter-group">
@@ -38,6 +66,24 @@
     </div>
   </div>
 </form>
+<script>
+(function () {
+  var form = document.getElementById('crRangeForm');
+  if (!form) return;
+  function sync() {
+    var sm = document.getElementById('crStartMonth').value;
+    var sy = document.getElementById('crStartYear').value;
+    var em = document.getElementById('crEndMonth').value;
+    var ey = document.getElementById('crEndYear').value;
+    document.getElementById('crStart').value = sy + '-' + sm;
+    document.getElementById('crEnd').value = ey + '-' + em;
+  }
+  ['crStartMonth','crStartYear','crEndMonth','crEndYear'].forEach(function (id) {
+    document.getElementById(id).addEventListener('change', sync);
+  });
+  form.addEventListener('submit', sync);
+})();
+</script>
 
 <div class="f-summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));margin-bottom:1.25rem">
   {% if view != 'received' %}

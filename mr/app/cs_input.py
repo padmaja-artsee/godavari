@@ -499,11 +499,23 @@ def _normalize_invoice(invoice: str) -> str:
 
 
 def _workbook_key(name: str) -> str:
-    """Stable key for a workbook so file.xlsx and file_2.xlsx replace each other."""
-    stem = Path(name or "").stem
-    stem = re.sub(r"_\d+$", "", stem)
-    stem = re.sub(r"\s+", " ", stem).strip().upper()
-    return stem
+    """Stable key for a workbook so file.xlsx and file_2.xlsx replace each other.
+
+    Normalize whitespace before stripping a trailing ``_N`` upload suffix so
+    names like ``OCTOBER_2025 .xlsx`` (space before extension) still match.
+    """
+    raw = (name or "").strip()
+    if not raw:
+        return ""
+    # Prefer stem when a path/filename is given; bare keys (no suffix) keep as-is
+    stem = Path(raw).stem if ("." in Path(raw).name and Path(raw).suffix) else raw
+    stem = re.sub(r"\s+", " ", stem).strip()
+    # Only strip trailing _digits upload copies (file_2), not year tokens mid-name.
+    # Apply after whitespace normalize so "FOO_2025 " → "FOO_2025" then year stays.
+    # Upload copies look like stem_2 where the whole stem already ends with _N;
+    # keep years (4-digit) — only strip 1–2 digit suffixes used by save_cs_upload.
+    stem = re.sub(r"_(\d{1,2})$", "", stem)
+    return stem.upper()
 
 
 def list_input_files() -> list[dict[str, Any]]:

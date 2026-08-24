@@ -889,6 +889,11 @@ async def commission_receivables_page(
     chart_invoiced = [r["invoiced"] for r in rows]
     chart_received = [r["received"] for r in rows]
 
+    # Year dropdowns for desktop WebView (type=month has no picker on macOS WKWebView)
+    year_lo = min([sy, ey] + ([min(fys) - 1] if fys else [2024]))
+    year_hi = max([sy, ey] + ([max(fys) + 1] if fys else [2030]))
+    year_options = list(range(int(year_lo), int(year_hi) + 1))
+
     return templates.TemplateResponse("commission_receivables.html", _ctx(
         request,
         page="commission_receivables",
@@ -903,6 +908,8 @@ async def commission_receivables_page(
         chart_labels=chart_labels,
         chart_invoiced=chart_invoiced,
         chart_received=chart_received,
+        month_labels=MONTH_LABELS,
+        year_options=year_options,
     ))
 
 

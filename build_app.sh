@@ -120,9 +120,11 @@ echo ""
 echo "▶ Step 5: Package DMG..."
 rm -f "$SCRIPT_DIR/$DMG_NAME"
 RW_DMG="$SCRIPT_DIR/godavari_rw.dmg"
-DMG_STAGING=$(mktemp -d)
+DMG_STAGING="$SCRIPT_DIR/.dmg_staging"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
 trap 'rm -rf "$DMG_STAGING"' EXIT
-cp -r "$TAURI_APP" "$DMG_STAGING/GodavariLeads.app"
+cp -R "$TAURI_APP" "$DMG_STAGING/GodavariLeads.app"
 codesign --force --deep --sign - "$DMG_STAGING/GodavariLeads.app" 2>&1 | head -2 || true
 ln -sf /Applications "$DMG_STAGING/Applications"
 
@@ -133,7 +135,7 @@ fi
 
 rm -f "$RW_DMG"
 hdiutil create -srcfolder "$DMG_STAGING" -volname "Godavari Leads" \
-    -fs HFS+ -format UDRW -size 160m "$RW_DMG" >/dev/null
+    -fs HFS+ -format UDRW -size 200m "$RW_DMG" >/dev/null
 DEVICE=$(hdiutil attach -readwrite -noverify "$RW_DMG" 2>&1 | awk '/\/dev\// {print $1; exit}')
 sleep 2
 if [ -f "$DMG_STAGING/.background/bg.png" ]; then
@@ -163,6 +165,8 @@ hdiutil detach "$DEVICE" >/dev/null
 hdiutil convert "$RW_DMG" -format UDZO -imagekey zlib-level=9 \
     -o "$SCRIPT_DIR/$DMG_NAME" >/dev/null
 rm -f "$RW_DMG"
+rm -rf "$DMG_STAGING"
+trap - EXIT
 
 echo ""
 echo "✅ Build complete"
