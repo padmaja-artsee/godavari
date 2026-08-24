@@ -917,6 +917,7 @@ def _commissions_cs_imports():
         delete_register_row,
         list_input_files,
         list_register_rows,
+        list_register_rows_for_workbook_keys,
         merge_rows_into_register,
         parse_gbl_cs_xlsx,
         register_filter_options,
@@ -929,6 +930,7 @@ def _commissions_cs_imports():
         "delete_register_row": delete_register_row,
         "list_input_files": list_input_files,
         "list_register_rows": list_register_rows,
+        "list_register_rows_for_workbook_keys": list_register_rows_for_workbook_keys,
         "merge_rows_into_register": merge_rows_into_register,
         "parse_gbl_cs_xlsx": parse_gbl_cs_xlsx,
         "register_filter_options": register_filter_options,
@@ -937,12 +939,56 @@ def _commissions_cs_imports():
     }
 
 
+def _enrich_input_files_ci_status(files: list[dict]) -> list[dict]:
+    """Annotate uploaded workbooks with how many invoice #s already have CIs."""
+    from app.ci_excel_import import _normalize_invoice_key, existing_ci_invoice_keys
+    from mr.app.cs_input import _workbook_key, list_register_rows
+
+    existing = existing_ci_invoice_keys()
+    by_key: dict[str, list[dict]] = {}
+    for row in list_register_rows():
+        key = _workbook_key(row.get("source_original") or row.get("source_file") or "")
+        if key:
+            by_key.setdefault(key, []).append(row)
+
+    out = []
+    for f in files:
+        item = dict(f)
+        rows = by_key.get(item.get("key") or "", [])
+        inv_keys = []
+        for r in rows:
+            nk = _normalize_invoice_key(r.get("invoice_no") or "")
+            if nk:
+                inv_keys.append(nk)
+        total = len(inv_keys)
+        matched = sum(1 for k in inv_keys if k in existing)
+        item["invoice_count"] = total
+        item["ci_matched"] = matched
+        item["already_generated"] = total > 0 and matched >= total
+        item["partially_generated"] = matched > 0 and matched < total
+        if total == 0:
+            item["ci_status"] = "empty"
+            item["ci_status_label"] = "No invoice lines"
+        elif matched == 0:
+            item["ci_status"] = "new"
+            item["ci_status_label"] = "Not generated yet"
+        elif matched >= total:
+            item["ci_status"] = "done"
+            item["ci_status_label"] = f"Already generated ({matched}/{total})"
+        else:
+            item["ci_status"] = "partial"
+            item["ci_status_label"] = f"Partially generated ({matched}/{total})"
+        out.append(item)
+    return out
+
+
 @app.get("/commissions", response_class=HTMLResponse)
 async def commissions_hub(request: Request):
     """Single place to upload GBL CS Excel and generate draft CIs."""
     cs = _commissions_cs_imports()
     options = cs["register_filter_options"]()
     stats = cs["register_stats"]()
+    input_files = _enrich_input_files_ci_status(cs["list_input_files"]())
     return templates.TemplateResponse("commissions.html", _ctx(
         request,
         page="commissions",
@@ -950,12 +996,11 @@ async def commissions_hub(request: Request):
         error=None,
         merge=None,
         saved_as=None,
-        input_files=cs["list_input_files"](),
+        input_files=input_files,
         notice=request.query_params.get("notice") or None,
         months=options.get("months") or [],
         stats=stats,
         display_columns=cs["DISPLAY_COLUMNS"],
-        generate_month=request.query_params.get("month") or "",
         generate_error=request.query_params.get("generate_error") or None,
     ))
 
@@ -996,11 +1041,10 @@ async def commissions_upload(request: Request, file: UploadFile = File(...)):
         saved_as=saved_as,
         uploaded_name=raw_name,
         display_columns=cs["DISPLAY_COLUMNS"],
-        input_files=cs["list_input_files"](),
+        input_files=_enrich_input_files_ci_status(cs["list_input_files"]()),
         notice=None,
         months=options.get("months") or [],
         stats=stats,
-        generate_month="",
         generate_error=None,
     ))
 
@@ -1084,11 +1128,8 @@ async def commissions_register_delete(
 
 
 @app.post("/commissions/generate", response_class=HTMLResponse)
-async def commissions_generate(
-    request: Request,
-    month: str = Form(""),
-):
-    """Build draft CIs from the cumulative CS register for a sail month."""
+async def commissions_generate(request: Request):
+    """Build draft CIs from selected uploaded workbook(s) in the CS register."""
     from app.ci_excel_import import (
         drafts_from_register_rows,
         preview_rows,
@@ -1096,33 +1137,65 @@ async def commissions_generate(
     )
 
     cs = _commissions_cs_imports()
-    month = (month or "").strip().upper()
-    if not month:
+    form = await request.form()
+    raw_keys = form.getlist("keys") if hasattr(form, "getlist") else []
+    keys = [str(k).strip() for k in raw_keys if str(k).strip()]
+    # Optional confirm when regenerating already-generated files
+    force = str(form.get("force") or "") in ("1", "true", "yes")
+
+    if not keys:
         return RedirectResponse(
-            url=f"{FINANCE_BASE}/commissions?generate_error={quote('Pick a sail month to generate.')}",
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('Select at least one uploaded file.')}",
             status_code=303,
         )
-    rows = cs["list_register_rows"](month=month)
+
+    files = {f["key"]: f for f in _enrich_input_files_ci_status(cs["list_input_files"]())}
+    selected_meta = [files[k] for k in keys if k in files]
+    if not selected_meta:
+        return RedirectResponse(
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('Selected files were not found in the register.')}",
+            status_code=303,
+        )
+
+    already = [f for f in selected_meta if f.get("already_generated")]
+    if already and not force:
+        names = ", ".join(f.get("display_name") or f.get("key") for f in already[:4])
+        if len(already) > 4:
+            names += f" (+{len(already) - 4} more)"
+        msg = (
+            f"{len(already)} selected file(s) already have CIs for every invoice "
+            f"({names}). Check again and confirm regenerate, or pick files not yet generated."
+        )
+        return RedirectResponse(
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote(msg)}&need_confirm=1",
+            status_code=303,
+        )
+
+    rows = cs["list_register_rows_for_workbook_keys"](keys)
     if not rows:
         return RedirectResponse(
-            url=f"{FINANCE_BASE}/commissions?generate_error={quote('No register lines for that month.')}&month={quote(month)}",
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('No register lines for the selected file(s).')}",
             status_code=303,
         )
     drafts = drafts_from_register_rows(rows)
     if not drafts:
         return RedirectResponse(
-            url=f"{FINANCE_BASE}/commissions?generate_error={quote('No usable invoice rows in that month.')}&month={quote(month)}",
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('No usable invoice rows in the selected file(s).')}",
             status_code=303,
         )
     token = save_import_batch(drafts)
     preview = preview_rows(drafts)
+    labels = [f.get("display_name") or f.get("key") for f in selected_meta]
+    filename = labels[0] if len(labels) == 1 else f"{len(labels)} workbooks"
     return templates.TemplateResponse("commissions_generate_preview.html", _ctx(
         request,
         page="commissions",
         preview=preview,
         token=token,
-        month=month,
-        filename=f"Register · {month}",
+        month="",
+        filename=filename,
+        source_files=labels,
+        already_warning=bool(already),
     ))
 
 

@@ -66,10 +66,11 @@
 </form>
 
 {% if filter_month %}
-<form method="post" action="{{ _base }}/commissions/generate" style="margin:-0.5rem 0 1.25rem">
-  <input type="hidden" name="month" value="{{ filter_month }}" />
-  <button type="submit" class="f-btn-sm">Generate CIs for {{ filter_month|title }} →</button>
-</form>
+<p class="f-text-muted" style="margin:-0.5rem 0 1.25rem;font-size:.85rem">
+  To generate CIs for these lines, open
+  <a href="{{ _base }}/commissions">Upload &amp; generate</a>
+  and select the source workbook(s).
+</p>
 {% endif %}
 
 {% if not rows %}

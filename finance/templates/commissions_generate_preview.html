@@ -6,8 +6,13 @@
   <div>
     <h1 class="f-title">Generate commission invoices</h1>
     <p class="f-subtitle">
-      From register · Sail month <strong>{{ month|title }}</strong> · One row → one draft CI ·
-      Bill-to: Godavari Biorefineries Ltd
+      {% if source_files and source_files|length > 1 %}
+      From {{ source_files|length }} workbooks ·
+      {% elif filename %}
+      From <strong>{{ filename }}</strong> ·
+      {% endif %}
+      {% if month %}Sail month <strong>{{ month|title }}</strong> · {% endif %}
+      One row → one draft CI · Bill-to: Godavari Biorefineries Ltd
     </p>
   </div>
   <a href="{{ _base }}/commissions" class="f-btn-sm f-btn-outline">← Commissions</a>

@@ -109,47 +109,58 @@
   {% endif %}
 </div>
 
-<div class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem">
-  <h2 class="f-card-title" style="margin-bottom:.35rem">2. Generate commission invoices</h2>
+<div class="f-card" style="padding:1rem 1.1rem">
+  <h2 class="f-card-title" style="margin-bottom:.35rem">2. Select files &amp; generate invoices</h2>
   <p class="f-text-muted" style="font-size:.85rem;margin:0 0 1rem">
-    Create draft CIs from register lines for a sail month. Rows that already have a saved CI are unchecked by default.
+    Check one or more uploaded workbooks, then preview draft CIs. Files already fully generated are marked —
+    regenerating will offer duplicates unless you uncheck those invoice rows on the next screen.
     Edit and print from <a href="/generate/commission-invoices">Generate → Commission Invoices</a>.
   </p>
-  <form method="post" action="{{ _base }}/commissions/generate"
-        style="display:flex;gap:.65rem;flex-wrap:wrap;align-items:flex-end">
-    <div class="f-filter-group">
-      <label class="f-filter-label">Sail month</label>
-      <select name="month" class="f-select-sm" required>
-        <option value="">Select month…</option>
-        {% for m in months %}
-        <option value="{{ m }}" {% if m == generate_month %}selected{% endif %}>{{ m|title }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <button type="submit" class="f-btn-sm" {% if not months %}disabled{% endif %}>Preview &amp; generate drafts</button>
-  </form>
-  {% if not months %}
-  <p class="f-text-muted" style="font-size:.82rem;margin:.75rem 0 0">Upload a commission statement first.</p>
-  {% endif %}
-</div>
 
-<div class="f-card" style="padding:1rem 1.1rem">
-  <h2 class="f-card-title" style="margin-bottom:.35rem">Uploaded input files</h2>
-  <p class="f-text-muted" style="font-size:.85rem;margin:0 0 1rem">Delete removes the file and its lines from the register.</p>
   {% if input_files %}
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin-bottom:.85rem">
+    <button type="submit" form="genFilesForm" class="f-btn-sm" id="genSubmitBtn">Preview &amp; generate drafts</button>
+    <button type="button" class="f-btn-sm f-btn-outline" id="genSelectNew">Select not generated</button>
+    <button type="button" class="f-btn-sm f-btn-outline" id="genSelectAll">Select all</button>
+    <button type="button" class="f-btn-sm f-btn-outline" id="genSelectNone">Clear</button>
+    <label class="f-text-muted" style="font-size:.82rem;display:flex;align-items:center;gap:.35rem;margin-left:.25rem">
+      <input type="checkbox" form="genFilesForm" name="force" value="1" id="genForce" />
+      Allow regenerate of fully generated files
+    </label>
+  </div>
+
+  <form method="post" action="{{ _base }}/commissions/generate" id="genFilesForm" style="display:none" aria-hidden="true"></form>
+
   <ul style="list-style:none;margin:0;padding:0">
     {% for f in input_files %}
-    <li style="display:flex;justify-content:space-between;gap:1rem;align-items:center;padding:.65rem 0;border-bottom:1px solid var(--grey-b,#e5e7eb)">
-      <div>
-        <div style="font-weight:600">{{ f.display_name }}</div>
-        <div class="f-text-muted" style="font-size:.8rem">
-          {{ f.row_count }} line{{ 's' if f.row_count != 1 else '' }}
-          · Sheets: {{ f.sheets }}
-          {% if f.uploaded_at %} · {{ f.uploaded_at[:19].replace('T', ' ') }}{% endif %}
+    <li style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;padding:.75rem 0;border-bottom:1px solid var(--grey-b,#e5e7eb){% if f.already_generated %};background:#fff7ed;margin:0 -.5rem;padding-left:.5rem;padding-right:.5rem;border-radius:4px{% elif f.partially_generated %};background:#fefce8;margin:0 -.5rem;padding-left:.5rem;padding-right:.5rem;border-radius:4px{% endif %}">
+      <label style="display:flex;gap:.65rem;align-items:flex-start;flex:1;cursor:pointer;min-width:0">
+        <input type="checkbox" form="genFilesForm" name="keys" value="{{ f.key }}" class="gen-file-cb"
+               data-status="{{ f.ci_status }}"
+               style="margin-top:.3rem;flex-shrink:0" />
+        <div style="min-width:0">
+          <div style="font-weight:600">{{ f.display_name }}</div>
+          <div class="f-text-muted" style="font-size:.8rem">
+            {{ f.row_count }} line{{ 's' if f.row_count != 1 else '' }}
+            · Sheets: {{ f.sheets }}
+            {% if f.uploaded_at %} · {{ f.uploaded_at[:19].replace('T', ' ') }}{% endif %}
+          </div>
+          {% if f.ci_status == 'done' %}
+          <div style="margin-top:.3rem;font-size:.8rem;color:#c2410c;font-weight:600">
+            ⚠ {{ f.ci_status_label }} — already has CIs for every invoice in this file
+          </div>
+          {% elif f.ci_status == 'partial' %}
+          <div style="margin-top:.3rem;font-size:.8rem;color:#a16207;font-weight:600">
+            {{ f.ci_status_label }} — some invoices already have CIs
+          </div>
+          {% else %}
+          <div style="margin-top:.3rem;font-size:.8rem;color:#15803d">{{ f.ci_status_label }}</div>
+          {% endif %}
         </div>
-      </div>
+      </label>
       <form method="post" action="{{ _base }}/commissions/delete-file"
-            onsubmit="return confirm('Delete “{{ f.display_name }}” and remove its {{ f.row_count }} line(s) from the register?');">
+            onsubmit="return confirm('Delete “{{ f.display_name }}” and remove its {{ f.row_count }} line(s) from the register?');"
+            style="flex-shrink:0">
         <input type="hidden" name="key" value="{{ f.key }}" />
         <button type="submit" class="f-btn-sm" style="color:#b91c1c;border-color:#fecaca">Delete</button>
       </form>
@@ -157,7 +168,55 @@
     {% endfor %}
   </ul>
   {% else %}
-  <p class="f-text-muted" style="margin:0">No input files yet.</p>
+  <p class="f-text-muted" style="margin:0">No input files yet. Upload a commission statement above.</p>
   {% endif %}
 </div>
+
+<script>
+(function () {
+  var form = document.getElementById('genFilesForm');
+  if (!form) return;
+  var boxes = function () {
+    return Array.prototype.slice.call(document.querySelectorAll('.gen-file-cb'));
+  };
+  var btnAll = document.getElementById('genSelectAll');
+  var btnNone = document.getElementById('genSelectNone');
+  var btnNew = document.getElementById('genSelectNew');
+  if (btnAll) btnAll.addEventListener('click', function () {
+    boxes().forEach(function (cb) { cb.checked = true; });
+  });
+  if (btnNone) btnNone.addEventListener('click', function () {
+    boxes().forEach(function (cb) { cb.checked = false; });
+  });
+  if (btnNew) btnNew.addEventListener('click', function () {
+    boxes().forEach(function (cb) {
+      var st = cb.getAttribute('data-status');
+      cb.checked = (st === 'new' || st === 'partial');
+    });
+  });
+  form.addEventListener('submit', function (e) {
+    var selected = boxes().filter(function (cb) { return cb.checked; });
+    if (!selected.length) {
+      e.preventDefault();
+      alert('Select at least one uploaded file.');
+      return;
+    }
+    var done = selected.filter(function (cb) { return cb.getAttribute('data-status') === 'done'; });
+    var forceEl = document.getElementById('genForce');
+    var force = forceEl && forceEl.checked;
+    if (done.length && !force) {
+      e.preventDefault();
+      var ok = confirm(
+        done.length + ' selected file(s) already fully generated invoices.\n\n' +
+        'Continue anyway? (On the next screen, existing invoice rows stay unchecked by default.)\n\n' +
+        'Click OK to allow regenerate, or Cancel to change your selection.'
+      );
+      if (ok && forceEl) {
+        forceEl.checked = true;
+        HTMLFormElement.prototype.submit.call(form);
+      }
+    }
+  });
+})();
+</script>
 {% endblock %}

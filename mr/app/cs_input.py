@@ -772,6 +772,19 @@ def list_register_rows(
     return rows
 
 
+def list_register_rows_for_workbook_keys(keys: list[str]) -> list[dict[str, Any]]:
+    """Register lines belonging to any of the given workbook keys."""
+    wanted = {_workbook_key(k) for k in (keys or []) if (k or "").strip()}
+    if not wanted:
+        return []
+    out = []
+    for row in list_register_rows():
+        src = row.get("source_original") or row.get("source_file") or ""
+        if _workbook_key(src) in wanted:
+            out.append(row)
+    return out
+
+
 def register_filter_options() -> dict[str, list[str]]:
     init_register()
     with _connect() as conn:
