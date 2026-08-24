@@ -4,11 +4,17 @@ from __future__ import annotations
 import calendar
 from typing import Any, Callable, Optional, Union
 
-from fastapi import HTTPException, Query, Request
+from fastapi import File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 
 from app.ci_consolidated import read_consolidated_commission_workbook
 from app.ci_data_template import generate_data_request_template, generate_prefilled_data_request
+from app.ci_excel_import import (
+    create_drafts_from_batch,
+    parse_commission_details_workbook,
+    preview_rows,
+    save_import_batch,
+)
 from app.ci_exports import export_ci_pdf, export_ci_xlsx
 from app.commission_invoices import (
     VARIANT_GBBV,
@@ -21,6 +27,7 @@ from app.commission_invoices import (
     get_commission_invoice_for_export,
     get_default_ci,
     get_ci_variant_meta,
+    list_commission_invoice_products,
     list_commission_invoices,
     parse_ci_form,
     set_ci_show_on_summary,
@@ -122,21 +129,50 @@ def register_commission_invoice_routes(
         company: str = Query(""),
         status: str = Query("open"),
         mode: str = Query("monthly"),
+        deals_run: str = Query(""),
+        sort: str = Query("created"),
+        dir: str = Query("desc"),
+        list_status: str = Query("all"),
+        list_product: str = Query(""),
+        list_q: str = Query(""),
+        list_from: str = Query(""),
+        list_to: str = Query(""),
     ):
-        rows = list_commission_invoices(variant=variant)
+        sort_key = sort if sort in (
+            "invoice_number", "invoice_date", "bill_to", "product",
+            "commission", "status", "created",
+        ) else "created"
+        sort_dir = "asc" if str(dir).lower() == "asc" else "desc"
+        list_st = (list_status or "all").strip() or "all"
+        rows = list_commission_invoices(
+            variant=variant,
+            sort=sort_key,
+            direction=sort_dir,
+            status="" if list_st.lower() == "all" else list_st,
+            product=list_product,
+            q=list_q,
+            date_from=list_from,
+            date_to=list_to,
+        )
+        ci_products = list_commission_invoice_products(variant=variant)
         def_fy, def_month = _ci_commission_defaults()
         fy_i = _qi(fy, def_fy)
         month_i = _qi(month, def_month)
         monthly = mode != "range"
-        preview_deals = _ci_export_deals(
-            mode=mode,
-            fy=fy_i,
-            month=month_i,
-            date_from=date_from,
-            date_to=date_to,
-            product=product,
-            company=company,
-            status=status,
+        deals_preview = deals_run == "1"
+        preview_deals = (
+            _ci_export_deals(
+                mode=mode,
+                fy=fy_i,
+                month=month_i,
+                date_from=date_from,
+                date_to=date_to,
+                product=product,
+                company=company,
+                status=status,
+            )
+            if deals_preview
+            else []
         )
         month_labels = {m: calendar.month_name[m] for m in _CI_FY_MONTHS}
         period_label = period_label_from_filters(
@@ -147,6 +183,35 @@ def register_commission_invoice_routes(
         )
         if monthly and not month_i:
             period_label = f"All months FY{fy_i % 100:02d}" if fy_i else "All dates"
+
+        import_msg = None
+        import_error = None
+        qp = request.query_params
+        if qp.get("imported"):
+            n = qp.get("imported")
+            ids = [x for x in (qp.get("ids") or "").split(",") if x.strip()]
+            import_msg = f"Created {n} draft commission invoice(s)."
+            if ids:
+                import_msg += " Open: " + ", ".join(ids[:12])
+                if len(ids) > 12:
+                    import_msg += "…"
+        elif qp.get("import_error") == "none":
+            import_error = "Select at least one row to create."
+        elif qp.get("import_error") == "expired":
+            import_error = "Import session expired — upload the Excel again."
+        elif qp.get("bulk_deleted"):
+            import_msg = f"Deleted {qp.get('bulk_deleted')} commission invoice(s)."
+
+        from urllib.parse import urlencode
+
+        list_filter_qs = urlencode({
+            "list_status": list_st,
+            "list_product": list_product or "",
+            "list_q": list_q or "",
+            "list_from": list_from or "",
+            "list_to": list_to or "",
+        })
+
         return templates.TemplateResponse(
             "generate/commission_invoices/ci_list.html",
             _ci_ctx(
@@ -162,6 +227,15 @@ def register_commission_invoice_routes(
                 company=company,
                 status=status,
                 mode=mode,
+                sort=sort_key,
+                sort_dir=sort_dir,
+                list_status=list_st,
+                list_product=list_product,
+                list_q=list_q,
+                list_from=list_from,
+                list_to=list_to,
+                list_filter_qs=list_filter_qs,
+                ci_products=ci_products,
                 fiscal_years=_ci_fiscal_years(),
                 months=_CI_FY_MONTHS,
                 month_labels=month_labels,
@@ -169,7 +243,9 @@ def register_commission_invoice_routes(
                 companies=list_commission_companies(),
                 preview_deals=preview_deals,
                 period_label=period_label,
-                filters_applied=bool(request.query_params),
+                filters_applied=deals_preview,
+                import_msg=import_msg,
+                import_error=import_error,
             ),
         )
 
@@ -247,6 +323,100 @@ def register_commission_invoice_routes(
                 fname,
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
+        @app.post(f"{base}/import-excel", response_class=HTMLResponse)
+        async def ci_import_excel_post(request: Request, file: UploadFile = File(...)):
+            raw = await file.read()
+            if not raw:
+                return templates.TemplateResponse(
+                    "generate/commission_invoices/ci_list.html",
+                    _ci_ctx(
+                        ctx,
+                        request,
+                        variant,
+                        rows=list_commission_invoices(variant=variant),
+                        fy=_ci_commission_defaults()[0],
+                        month=_ci_commission_defaults()[1],
+                        date_from="",
+                        date_to="",
+                        product="",
+                        company="",
+                        status="open",
+                        mode="monthly",
+                        fiscal_years=_ci_fiscal_years(),
+                        months=_CI_FY_MONTHS,
+                        month_labels={m: calendar.month_name[m] for m in _CI_FY_MONTHS},
+                        products=list_commission_products(),
+                        companies=list_commission_companies(),
+                        preview_deals=[],
+                        period_label="",
+                        filters_applied=False,
+                        import_error="Upload a non-empty .xlsx file.",
+                    ),
+                    status_code=400,
+                )
+            try:
+                drafts = parse_commission_details_workbook(raw, variant=variant)
+            except Exception as exc:
+                return templates.TemplateResponse(
+                    "generate/commission_invoices/ci_import_preview.html",
+                    _ci_ctx(
+                        ctx,
+                        request,
+                        variant,
+                        import_error=f"Could not read Excel: {exc}",
+                        preview=[],
+                        token="",
+                        filename=file.filename or "",
+                    ),
+                    status_code=400,
+                )
+            if not drafts:
+                return templates.TemplateResponse(
+                    "generate/commission_invoices/ci_import_preview.html",
+                    _ci_ctx(
+                        ctx,
+                        request,
+                        variant,
+                        import_error="No commission rows found. Use the monthly product-tabbed sheet (Invoice No, Qty, Rate, …).",
+                        preview=[],
+                        token="",
+                        filename=file.filename or "",
+                    ),
+                    status_code=400,
+                )
+            token = save_import_batch(drafts)
+            return templates.TemplateResponse(
+                "generate/commission_invoices/ci_import_preview.html",
+                _ci_ctx(
+                    ctx,
+                    request,
+                    variant,
+                    import_error=None,
+                    preview=preview_rows(drafts),
+                    token=token,
+                    filename=file.filename or "upload.xlsx",
+                ),
+            )
+
+        @app.post(f"{base}/import-excel/create")
+        async def ci_import_excel_create(request: Request):
+            form = await request.form()
+            token = str(form.get("token") or "")
+            raw_sel = form.getlist("selected") if hasattr(form, "getlist") else []
+            indices: list[int] = []
+            for v in raw_sel:
+                try:
+                    indices.append(int(v))
+                except (TypeError, ValueError):
+                    continue
+            if not indices:
+                return RedirectResponse(f"{base}?import_error=none", status_code=303)
+            ids = create_drafts_from_batch(token, indices, variant=variant)
+            if not ids:
+                return RedirectResponse(f"{base}?import_error=expired", status_code=303)
+            q = ",".join(str(i) for i in ids)
+            return RedirectResponse(f"{base}?imported={len(ids)}&ids={q}", status_code=303)
 
     @app.get(f"{base}/new", response_class=HTMLResponse)
     async def ci_new_page(
@@ -364,6 +534,145 @@ def register_commission_invoice_routes(
             return RedirectResponse(base, status_code=303)
         delete_commission_invoice(ci_id)
         return RedirectResponse(base, status_code=303)
+
+    def _parse_ci_ids(form) -> list[int]:
+        raw = form.getlist("ids") if hasattr(form, "getlist") else []
+        if not raw and form.get("ids"):
+            raw = str(form.get("ids")).split(",")
+        out: list[int] = []
+        for v in raw:
+            try:
+                out.append(int(v))
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    def _cis_for_ids(ids: list[int]) -> list[dict]:
+        rows = []
+        for cid in ids:
+            ci = get_commission_invoice(cid)
+            if ci and ci.get("variant", VARIANT_GBINC) == variant:
+                rows.append(ci)
+        return rows
+
+    @app.post(f"{base}/bulk-delete")
+    async def ci_bulk_delete(request: Request):
+        form = await request.form()
+        ids = _parse_ci_ids(form)
+        deleted = 0
+        for cid in ids:
+            ci = get_commission_invoice(cid)
+            if ci and ci.get("variant", VARIANT_GBINC) == variant:
+                delete_commission_invoice(cid)
+                deleted += 1
+        return RedirectResponse(f"{base}?bulk_deleted={deleted}", status_code=303)
+
+    @app.get(f"{base}/bulk-print", response_class=HTMLResponse)
+    async def ci_bulk_print(request: Request, ids: str = Query("")):
+        id_list = []
+        for part in ids.split(","):
+            part = part.strip()
+            if part.isdigit():
+                id_list.append(int(part))
+        cis = _cis_for_ids(id_list)
+        if not cis:
+            return RedirectResponse(base, status_code=303)
+        return templates.TemplateResponse(
+            "generate/commission_invoices/ci_bulk_print.html",
+            _ci_ctx(
+                ctx,
+                request,
+                variant,
+                cis=cis,
+                authorized_signature_src=authorized_signature_file_uri(),
+            ),
+        )
+
+    @app.get(f"{base}/bulk-export.xlsx")
+    async def ci_bulk_export_xlsx(ids: str = Query("")):
+        import io
+        import zipfile
+
+        id_list = [int(p) for p in ids.split(",") if p.strip().isdigit()]
+        cis = []
+        for cid in id_list:
+            ci = get_commission_invoice_for_export(cid)
+            if ci and ci.get("variant", VARIANT_GBINC) == variant:
+                cis.append(ci)
+        if not cis:
+            return RedirectResponse(base, status_code=303)
+        if len(cis) == 1:
+            content, fname = export_ci_xlsx(cis[0])
+            return download_response(
+                content,
+                fname,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            used: set[str] = set()
+            for ci in cis:
+                content, fname = export_ci_xlsx(ci)
+                name = fname
+                n = 1
+                while name in used:
+                    stem = fname.rsplit(".", 1)[0]
+                    name = f"{stem}_{n}.xlsx"
+                    n += 1
+                used.add(name)
+                zf.writestr(name, content)
+        return download_response(
+            buf.getvalue(),
+            f"Commission_Invoices_{len(cis)}.zip",
+            "application/zip",
+        )
+
+    @app.get(f"{base}/bulk-export.pdf")
+    async def ci_bulk_export_pdf(request: Request, ids: str = Query("")):
+        import io
+        import zipfile
+
+        id_list = [int(p) for p in ids.split(",") if p.strip().isdigit()]
+        if not id_list:
+            return RedirectResponse(base, status_code=303)
+        # Prefer combined print when PDF engine unavailable / multi-select
+        files: list[tuple[str, bytes]] = []
+        for cid in id_list:
+            ci = get_commission_invoice_for_export(cid)
+            if not ci or ci.get("variant", VARIANT_GBINC) != variant:
+                continue
+            html = templates.get_template("generate/commission_invoices/ci_pdf.html").render(
+                ci=ci,
+                authorized_signature_src=authorized_signature_file_uri(),
+            )
+            result = export_ci_pdf(ci, html)
+            if result:
+                content, fname = result
+                files.append((fname, content))
+        if not files:
+            return RedirectResponse(
+                f"{base}/bulk-print?ids={','.join(str(i) for i in id_list)}",
+                status_code=303,
+            )
+        if len(files) == 1:
+            return download_response(files[0][1], files[0][0], "application/pdf")
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            used: set[str] = set()
+            for fname, content in files:
+                name = fname
+                n = 1
+                while name in used:
+                    stem = fname.rsplit(".", 1)[0]
+                    name = f"{stem}_{n}.pdf"
+                    n += 1
+                used.add(name)
+                zf.writestr(name, content)
+        return download_response(
+            buf.getvalue(),
+            f"Commission_Invoices_{len(files)}.zip",
+            "application/zip",
+        )
 
     @app.post(f"{base}/{{ci_id}}/summary")
     async def ci_toggle_summary(request: Request, ci_id: int, show: str = Query("1")):

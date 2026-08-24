@@ -4,17 +4,22 @@
   {% if editing %}
   {% set hints = ci.get('_field_hints') or {} %}
   {% if hints.get(name) == 'deal' %}<span class="ci-src ci-src-ok no-print" title="From deal">✓</span>
-  {% elif hints.get(name) == 'missing' %}<span class="ci-src ci-src-warn no-print" title="Not in system">⚠</span>
+  {% elif hints.get(name) == 'missing' %}<span class="ci-src ci-src-miss no-print" title="Needs input">⚠</span>
   {% endif %}
   {% endif %}
 {%- endmacro %}
 
+{% macro ci_miss(ci, name, value) -%}
+{%- if value is none or value == '' -%}ci-field-missing{%- endif -%}
+{%- endmacro %}
+
 {% macro ci_date_input(name, value, extra_class='', form_id='') -%}
-<div class="ci-date-wrap">
+<div class="ci-date-wrap" title="Click to change date" role="button" tabindex="0">
   <input type="text" class="ci-date-show ci-inline {{ extra_class }}" readonly tabindex="-1"
-         placeholder="22-May-2026" aria-hidden="true" />
+         placeholder="Click to set date" aria-hidden="true" />
   <input type="date" class="ci-date-native" name="{{ name }}" value="{{ value or '' }}"
-         {% if form_id %}form="{{ form_id }}"{% endif %} />
+         {% if form_id %}form="{{ form_id }}"{% endif %}
+         aria-label="{{ name|replace('_', ' ') }}" />
 </div>
 {%- endmacro %}
 
@@ -47,12 +52,22 @@
         {{ ci_date_input('invoice_date', ci.invoice_date, 'ci-field-yellow', dates_form_id) }}
         {% endif %}
       </div>
+      {% set sail_val = ci.shipment_date or ((ci.line_items[0].shipment_date if ci.line_items else '') or '') %}
+      <div class="ci-meta-line">
+        <span class="ci-meta-label">Sail date:</span>
+        {% if readonly and not editable_dates %}
+        <span class="ci-meta-val">{{ sail_val|ci_date }}</span>
+        {% else %}
+        {{ ci_date_input('shipment_date', sail_val, 'ci-field-yellow ci-header-sail-date', dates_form_id) }}
+        {% endif %}
+        {{ ci_hint(ci, 'shipment_date', not readonly) }}
+      </div>
       <div class="ci-meta-line">
         <span class="ci-meta-label">GBInc invoice:</span>
         {% if readonly %}
         <span class="ci-meta-val">{{ ci.invoice_number or '—' }}</span>
         {% else %}
-        <input class="ci-inline ci-field-yellow" name="invoice_number" value="{{ ci.invoice_number or '' }}" required placeholder="GBInc invoice #" />
+        <input class="ci-inline {{ ci_miss(ci, 'invoice_number', ci.invoice_number) }}" name="invoice_number" value="{{ ci.invoice_number or '' }}" required placeholder="GBInc invoice #" />
         {% endif %}
         {{ ci_hint(ci, 'invoice_number', not readonly) }}
       </div>
@@ -124,20 +139,19 @@
       {% for line in ci.line_items %}
       <tr class="ci-line-row">
         <td>{% if readonly %}{{ line.end_customer or '—' }}{% else %}
-          <input class="ci-cell-input ci-field-yellow" name="end_customer" value="{{ line.end_customer or '' }}" />{% endif %}</td>
+          <input class="ci-cell-input {{ ci_miss(ci, 'end_customer', line.end_customer) }}" name="end_customer" value="{{ line.end_customer or '' }}" />{% endif %}</td>
         <td>{% if readonly %}{{ line.gbl_invoice_number or ci.invoice_number or '—' }}{% else %}
-          <input class="ci-cell-input ci-field-yellow" name="gbl_invoice_number" value="{{ line.gbl_invoice_number or ci.invoice_number or '' }}" />{% endif %}</td>
+          <input class="ci-cell-input {{ ci_miss(ci, 'gbl_invoice_number', line.gbl_invoice_number or ci.invoice_number) }}" name="gbl_invoice_number" value="{{ line.gbl_invoice_number or ci.invoice_number or '' }}" />{% endif %}</td>
         <td class="ci-num">{% if readonly %}{{ line.quantity|num }}{% else %}
-          <input class="ci-cell-num ci-qty ci-field-yellow" name="quantity" value="{{ line.quantity or '' }}" />{% endif %}</td>
+          <input class="ci-cell-num ci-qty {{ ci_miss(ci, 'quantity', line.quantity if line.quantity else '') }}" name="quantity" value="{{ line.quantity or '' }}" />{% endif %}</td>
         <td class="ci-num">{% if readonly %}${{ line.fob_value|money }}{% else %}
-          <output class="ci-fob-out">${{ line.fob_value|money }}</output>
-          <input type="hidden" class="ci-fob" name="fob_value" value="{{ line.fob_value or 0 }}" />{% endif %}</td>
+          <input class="ci-cell-num ci-fob ci-fob-input" name="fob_value" value="{{ line.fob_value or '' }}" title="FOB value (editable)" />{% endif %}</td>
         <td class="ci-num">{% if readonly %}{{ line.commission_rate|num }}%{% else %}
-          <input class="ci-cell-num ci-rate ci-field-yellow" name="commission_rate" value="{{ line.commission_rate or 3 }}" />{% endif %}</td>
+          <input class="ci-cell-num ci-rate" name="commission_rate" value="{{ line.commission_rate or 3 }}" />{% endif %}</td>
         <td class="ci-num ci-val-cell">{% if readonly %}$ {{ line.commission_value|money }}{% else %}
           <output class="ci-line-value">$ {{ line.commission_value|money }}</output>{% endif %}</td>
         <td>{% if readonly %}{{ line.product_description }}{% else %}
-          <input class="ci-cell-input ci-field-yellow" name="product_description" value="{{ line.product_description or '' }}" required />{% endif %}</td>
+          <input class="ci-cell-input {{ ci_miss(ci, 'product_description', line.product_description) }}" name="product_description" value="{{ line.product_description or '' }}" required />{% endif %}</td>
         {% if not readonly %}
         <td class="no-print"><button type="button" class="btn btn-ghost btn-sm ci-rm">×</button></td>
         {% endif %}
@@ -148,7 +162,7 @@
         <td><input class="ci-cell-input" name="end_customer" value="" /></td>
         <td><input class="ci-cell-input" name="gbl_invoice_number" value="" /></td>
         <td class="ci-num"><input class="ci-cell-num ci-qty" name="quantity" value="" /></td>
-        <td class="ci-num"><output class="ci-fob-out">$0.00</output><input type="hidden" class="ci-fob" name="fob_value" value="0" /></td>
+        <td class="ci-num"><input class="ci-cell-num ci-fob ci-fob-input" name="fob_value" value="" /></td>
         <td class="ci-num"><input class="ci-cell-num ci-rate" name="commission_rate" value="3" /></td>
         <td class="ci-num"><output class="ci-line-value">$ 0.00</output></td>
         <td><input class="ci-cell-input" name="product_description" value="" required /></td>
@@ -164,13 +178,13 @@
   </div>
   {% endif %}
 
-  {# Row 27 — amount in words #}
+  {# Amount in words #}
   <div class="ci-words-row">
     {% if readonly %}{{ ci.amount_in_words or '' }}
-    {% else %}<input class="ci-inline ci-words-input ci-field-yellow" name="amount_in_words" value="{{ ci.amount_in_words or '' }}" placeholder="Amount in words (auto on export)" />{% endif %}
+    {% else %}<input class="ci-inline ci-words-input" name="amount_in_words" value="{{ ci.amount_in_words or '' }}" placeholder="Amount in words (auto)" />{% endif %}
   </div>
 
-  {# Row 30 — Total #}
+  {# Total #}
   <div class="ci-total-row-excel">
     <span class="ci-total-label">Total</span>
     <span class="ci-total-amt" id="ci-total-commission">$ {{ (ci.total_commission or 0)|money }}</span>
@@ -245,7 +259,7 @@
         </td>
         <td class="ci-bar-mid">
           {% if readonly %}{{ ci.delivery_port or '—' }}{% else %}
-          <input class="ci-inline ci-field-yellow" name="delivery_port" value="{{ ci.delivery_port or '' }}" placeholder="Savannah, USA" />{% endif %}
+          <input class="ci-inline {{ ci_miss(ci, 'delivery_port', ci.delivery_port) }}" name="delivery_port" value="{{ ci.delivery_port or '' }}" placeholder="Savannah, USA" />{% endif %}
         </td>
       </tr>
     </table>
@@ -267,12 +281,12 @@
           <td>{{ line.end_customer or '—' }}</td>
           <td>{{ line.product_description or '—' }}</td>
           <td class="ci-num">{% if readonly %}{% if line.cif_price %}${{ line.cif_price|money }}{% else %}—{% endif %}{% else %}
-            <input class="ci-cell-num ci-cif ci-field-yellow" name="cif_price" value="{{ line.cif_price or '' }}" />{% endif %}</td>
+            <input class="ci-cell-num ci-cif" name="cif_price" value="{{ line.cif_price or '' }}" />{% endif %}</td>
           <td class="ci-num">{{ line.quantity|num }}</td>
           <td class="ci-num">{% if readonly %}{{ line.commission_rate|num }}%{% else %}
-            <input class="ci-cell-num ci-notice-rate ci-field-yellow" value="{{ line.commission_rate or 3 }}" data-line-index="{{ loop.index0 }}" />{% endif %}</td>
+            <input class="ci-cell-num ci-notice-rate" value="{{ line.commission_rate or 3 }}" data-line-index="{{ loop.index0 }}" />{% endif %}</td>
           <td class="ci-num ci-ship-date-cell">{% if readonly and not editable_dates %}{{ (line.shipment_date or ci.shipment_date)|ci_date }}{% else %}
-            {{ ci_date_input('shipment_date', line.shipment_date or ci.shipment_date, 'ci-field-yellow ci-line-ship-date', dates_form_id) }}{% endif %}</td>
+            {{ ci_date_input('shipment_date', line.shipment_date or ci.shipment_date, ci_miss(ci, 'shipment_date', line.shipment_date or ci.shipment_date) ~ ' ci-line-ship-date', dates_form_id) }}{% endif %}</td>
         </tr>
         {% endfor %}
         {% set notice_pad = (5 if readonly else 7) - (ci.line_items|length) %}
@@ -296,6 +310,26 @@
       <p>Bank Address:&nbsp; 909 Hanshaw Road, Ithaca, NY 14850</p>
       <p>Bank Phone: (607) 257-2194</p>
       <p class="ci-notice-mail-checks">Please mail checks to our address listed at the top of the invoice</p>
+    </div>
+
+    {# PO / additional info — under Notice of Order remit block #}
+    <div class="ci-additional-info" style="margin:0.75rem 0 0.35rem;font-size:0.85rem">
+      <div style="font-weight:600;margin-bottom:0.25rem">Additional information</div>
+      {% if readonly %}
+      <p style="margin:0.15rem 0">PO No: {{ ci.customer_order_no or '—' }}</p>
+      {% if ci.enclosures %}<p style="margin:0.15rem 0;white-space:pre-wrap">{{ ci.enclosures }}</p>{% endif %}
+      {% else %}
+      <div style="display:grid;gap:0.35rem;max-width:36rem">
+        <label style="display:flex;gap:0.5rem;align-items:center">
+          <span style="min-width:4.5rem">PO No</span>
+          <input class="ci-inline {{ ci_miss(ci, 'customer_order_no', ci.customer_order_no) }}" name="customer_order_no" value="{{ ci.customer_order_no or '' }}" placeholder="PO number(s)" style="flex:1" />
+        </label>
+        <label style="display:flex;gap:0.5rem;align-items:flex-start">
+          <span style="min-width:4.5rem;padding-top:0.35rem">Notes</span>
+          <textarea class="ci-inline" name="enclosures" rows="2" placeholder="PO date, sail month, other reference" style="flex:1;resize:vertical">{{ ci.enclosures or '' }}</textarea>
+        </label>
+      </div>
+      {% endif %}
     </div>
 
     <div class="ci-notice-sig-bar"></div>

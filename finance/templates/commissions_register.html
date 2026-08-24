@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% set page = "commissions_register" %}
+{% block title %}Commission Register — GBInc Finance{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Commission register</h1>
+    <p class="f-subtitle">Cumulative GBL CS lines from all uploaded workbooks</p>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <a href="{{ _base }}/commissions" class="f-btn-sm">+ Upload / generate</a>
+    <a href="{{ _base }}/commission-receivables" class="f-btn-sm f-btn-outline">Receivables →</a>
+  </div>
+</div>
+
+<div class="f-summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));margin-bottom:1.25rem">
+  <div class="f-summary-card">
+    <div class="f-summary-label">Lines</div>
+    <div class="f-sum-val" style="font-size:1.25rem">{{ filtered_count }}</div>
+  </div>
+  <div class="f-summary-card">
+    <div class="f-summary-label">Total MT</div>
+    <div class="f-sum-val" style="font-size:1.25rem">{{ stats.qty_total | num }}</div>
+  </div>
+  <div class="f-summary-card">
+    <div class="f-summary-label">Total sale</div>
+    <div class="f-sum-val" style="font-size:1.25rem">${{ stats.sale_total | money }}</div>
+  </div>
+  <div class="f-summary-card f-card-income">
+    <div class="f-summary-label">Total commission</div>
+    <div class="f-sum-val" style="font-size:1.25rem">${{ stats.commission_total | money }}</div>
+  </div>
+</div>
+
+{% if notice %}
+<div class="f-card" style="border-color:#86efac;background:#f0fdf4;margin-bottom:1rem;padding:1rem">{{ notice }}</div>
+{% endif %}
+
+<form method="get" action="{{ _base }}/commissions/register" class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem">
+  <div class="f-filter-bar" style="background:transparent;border:none;padding:0;margin:0">
+    <div class="f-filter-group">
+      <label class="f-filter-label">Sail month</label>
+      <select name="month" class="f-select-sm" onchange="this.form.submit()">
+        <option value="">All months</option>
+        {% for m in months %}
+        <option value="{{ m }}" {% if filter_month == m %}selected{% endif %}>{{ m|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="f-filter-group">
+      <label class="f-filter-label">PO number</label>
+      <select name="po" class="f-select-sm" onchange="this.form.submit()">
+        <option value="">All POs</option>
+        {% for p in po_numbers %}
+        <option value="{{ p }}" {% if filter_po == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% if filter_month or filter_po %}
+    <div class="f-filter-group">
+      <label class="f-filter-label">&nbsp;</label>
+      <a href="{{ _base }}/commissions/register" class="f-btn-sm f-btn-outline">Clear</a>
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+{% if filter_month %}
+<form method="post" action="{{ _base }}/commissions/generate" style="margin:-0.5rem 0 1.25rem">
+  <input type="hidden" name="month" value="{{ filter_month }}" />
+  <button type="submit" class="f-btn-sm">Generate CIs for {{ filter_month|title }} →</button>
+</form>
+{% endif %}
+
+{% if not rows %}
+<div class="f-card" style="padding:1.5rem;text-align:center">
+  <p class="f-text-muted" style="margin:0">
+    No commission lines yet.
+    <a href="{{ _base }}/commissions">Upload a GBL CS Excel sheet</a>.
+  </p>
+</div>
+{% else %}
+<div class="f-card" style="padding:0;overflow:auto">
+  <table class="f-table" style="font-size:.78rem">
+    <thead>
+      <tr>
+        <th></th>
+        <th>SR</th>
+        <th>Month</th>
+        <th>Invoice</th>
+        <th>Dup</th>
+        <th>Sail date</th>
+        <th>PO</th>
+        <th>Ship to</th>
+        <th>Port</th>
+        <th class="num">Qty</th>
+        <th class="num">FOB</th>
+        <th class="num">Commission</th>
+        <th>Source</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in rows %}
+      <tr {% if row.is_duplicate %}style="background:#fff7ed"{% endif %}>
+        <td>
+          <form method="post" action="{{ _base }}/commissions/register/delete"
+                onsubmit="return confirm('Delete invoice {{ row.invoice_no }} from the register?');">
+            <input type="hidden" name="row_id" value="{{ row.id }}" />
+            <input type="hidden" name="month" value="{{ filter_month }}" />
+            <input type="hidden" name="po" value="{{ filter_po }}" />
+            <button type="submit" class="f-btn-sm" style="color:#b91c1c;padding:.15rem .4rem;font-size:.72rem">Del</button>
+          </form>
+        </td>
+        <td>{{ row.display_sr }}</td>
+        <td>{{ row.sail_month }}</td>
+        <td>{{ row.invoice_no }}</td>
+        <td>{% if row.is_duplicate %}<span title="{{ row.duplicate_detail }}" style="color:#c2410c;font-weight:600">{{ row.duplicate_flag }}</span>{% else %}—{% endif %}</td>
+        <td>{{ row.vessel_sail_date }}</td>
+        <td>{{ row.po_no or '—' }}</td>
+        <td>{{ row.ship_to_party }}</td>
+        <td>{{ row.port_of_discharge }}</td>
+        <td class="num">{{ row.qty | num }}</td>
+        <td class="num">{{ row.fob_value | money }}</td>
+        <td class="num">{{ row.commission | money }}</td>
+        <td class="f-text-muted" style="font-size:.72rem">{{ row.source_original or row.source_file or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% set page = "commission_receivables" %}
+{% block title %}Commission Receivables — {{ period_label }}{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Commission Receivables</h1>
+    <p class="f-subtitle">
+      Invoiced from Commission Invoices (CI) · Received from bank CSV / Actuals (Commission Income) · {{ period_label }}
+    </p>
+  </div>
+</div>
+
+<form method="get" action="{{ _base }}/commission-receivables" class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem">
+  <div class="f-filter-bar" style="background:transparent;border:none;padding:0;margin:0">
+    <div class="f-filter-group">
+      <label class="f-filter-label">From month</label>
+      <input type="month" name="start" class="f-select-sm" value="{{ start }}" style="min-width:10rem">
+    </div>
+
+    <div class="f-filter-group">
+      <label class="f-filter-label">To month</label>
+      <input type="month" name="end" class="f-select-sm" value="{{ end }}" style="min-width:10rem">
+    </div>
+
+    <div class="f-filter-group">
+      <label class="f-filter-label">View</label>
+      <div class="f-chart-type-btns">
+        <button type="submit" name="view" value="invoiced" class="f-type-btn {% if view == 'invoiced' %}active{% endif %}">Invoiced</button>
+        <button type="submit" name="view" value="received" class="f-type-btn {% if view == 'received' %}active{% endif %}">Received</button>
+        <button type="submit" name="view" value="compare" class="f-type-btn {% if view == 'compare' %}active{% endif %}">Compare</button>
+      </div>
+    </div>
+
+    <div class="f-filter-group">
+      <label class="f-filter-label">&nbsp;</label>
+      <button type="submit" name="view" value="{{ view }}" class="f-btn-sm">Update</button>
+    </div>
+  </div>
+</form>
+
+<div class="f-summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));margin-bottom:1.25rem">
+  {% if view != 'received' %}
+  <div class="f-summary-card f-card-income">
+    <div class="f-summary-label">Commission invoiced</div>
+    <div class="f-sum-val" style="font-size:1.35rem">${{ "{:,.2f}".format(summary.invoiced) }}</div>
+    <div class="f-text-muted" style="font-size:.75rem;margin-top:.25rem">From saved CIs (invoice date)</div>
+  </div>
+  {% endif %}
+  {% if view != 'invoiced' %}
+  <div class="f-summary-card">
+    <div class="f-summary-label">Commission received</div>
+    <div class="f-sum-val" style="font-size:1.35rem">${{ "{:,.2f}".format(summary.received) }}</div>
+    <div class="f-text-muted" style="font-size:.75rem;margin-top:.25rem">Bank / Actuals · Commission Income</div>
+  </div>
+  {% endif %}
+  {% if view == 'compare' %}
+  <div class="f-summary-card">
+    <div class="f-summary-label">Outstanding</div>
+    <div class="f-sum-val {% if summary.outstanding > 0 %}f-var-neg{% elif summary.outstanding < 0 %}f-var-pos{% endif %}" style="font-size:1.35rem">
+      ${{ "{:,.2f}".format(summary.outstanding) }}
+    </div>
+    <div class="f-text-muted" style="font-size:.75rem;margin-top:.25rem">Invoiced − received</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="f-card" style="margin-bottom:1.25rem;padding:1rem 1.1rem">
+  <h2 class="f-card-title" style="margin-bottom:.75rem">
+    {% if view == 'invoiced' %}Commission invoiced by month
+    {% elif view == 'received' %}Commission received by month
+    {% else %}Invoiced vs received by month{% endif %}
+  </h2>
+  <div style="position:relative;height:320px">
+    <canvas id="crChart"></canvas>
+  </div>
+</div>
+
+<div class="f-card" style="padding:0;overflow:auto">
+  <table class="f-table">
+    <thead>
+      <tr>
+        <th>Month</th>
+        {% if view != 'received' %}<th class="num">Invoiced (CI)</th>{% endif %}
+        {% if view != 'invoiced' %}<th class="num">Received</th>{% endif %}
+        {% if view == 'compare' %}<th class="num">Outstanding</th>{% endif %}
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td>{{ r.label }}</td>
+        {% if view != 'received' %}<td class="num">${{ "{:,.2f}".format(r.invoiced) }}</td>{% endif %}
+        {% if view != 'invoiced' %}<td class="num">${{ "{:,.2f}".format(r.received) }}</td>{% endif %}
+        {% if view == 'compare' %}
+        <td class="num {% if r.outstanding > 0 %}f-var-neg{% elif r.outstanding < 0 %}f-var-pos{% endif %}">
+          ${{ "{:,.2f}".format(r.outstanding) }}
+        </td>
+        {% endif %}
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="f-text-muted" style="text-align:center;padding:1.5rem">No months in range.</td></tr>
+      {% endfor %}
+    </tbody>
+    {% if rows %}
+    <tfoot>
+      <tr>
+        <th>Total</th>
+        {% if view != 'received' %}<th class="num">${{ "{:,.2f}".format(summary.invoiced) }}</th>{% endif %}
+        {% if view != 'invoiced' %}<th class="num">${{ "{:,.2f}".format(summary.received) }}</th>{% endif %}
+        {% if view == 'compare' %}
+        <th class="num {% if summary.outstanding > 0 %}f-var-neg{% elif summary.outstanding < 0 %}f-var-pos{% endif %}">
+          ${{ "{:,.2f}".format(summary.outstanding) }}
+        </th>
+        {% endif %}
+      </tr>
+    </tfoot>
+    {% endif %}
+  </table>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  var view = {{ view|tojson }};
+  var labels = {{ chart_labels|tojson }};
+  var invoiced = {{ chart_invoiced|tojson }};
+  var received = {{ chart_received|tojson }};
+  var datasets = [];
+  if (view !== 'received') {
+    datasets.push({
+      label: 'Invoiced (CI)',
+      data: invoiced,
+      backgroundColor: 'rgba(37, 99, 235, 0.55)',
+      borderColor: 'rgb(37, 99, 235)',
+      borderWidth: 1
+    });
+  }
+  if (view !== 'invoiced') {
+    datasets.push({
+      label: 'Received',
+      data: received,
+      backgroundColor: 'rgba(16, 185, 129, 0.55)',
+      borderColor: 'rgb(16, 185, 129)',
+      borderWidth: 1
+    });
+  }
+  new Chart(document.getElementById('crChart'), {
+    type: 'bar',
+    data: { labels: labels, datasets: datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: datasets.length > 1, position: 'top' },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              var v = ctx.parsed.y || 0;
+              return ctx.dataset.label + ': $' + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function (v) { return '$' + Number(v).toLocaleString(); }
+          }
+        }
+      }
+    }
+  });
+})();
+</script>
+{% endblock %}

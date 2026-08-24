@@ -22,11 +22,18 @@
   </div>
 
   <div class="f-nav-section">
+    <span class="f-nav-label">Commissions</span>
+    <a href="{{ _base }}/commissions" class="f-nav-link {% if page=='commissions' %}active{% endif %}">Upload &amp; generate</a>
+    <a href="{{ _base }}/commissions/register" class="f-nav-link {% if page=='commissions_register' %}active{% endif %}">Register</a>
+    <a href="{{ _base }}/commission-receivables" class="f-nav-link {% if page=='commission_receivables' %}active{% endif %}">Receivables</a>
+    <a href="{{ _base }}/commission" class="f-nav-link {% if page=='commission' %}active{% endif %}">Deals report</a>
+  </div>
+
+  <div class="f-nav-section">
     <span class="f-nav-label">Overview</span>
     <a href="{{ _base }}/" class="f-nav-link {% if page=='dashboard' %}active{% endif %}">Dashboard</a>
     <a href="{{ _base }}/analysis" class="f-nav-link {% if page=='analysis' %}active{% endif %}">Analysis</a>
     <a href="{{ _base }}/report" class="f-nav-link {% if page=='report' %}active{% endif %}">P&amp;L Report</a>
-    <a href="{{ _base }}/commission" class="f-nav-link {% if page=='commission' %}active{% endif %}">Commission Report</a>
   </div>
 
   <div class="f-nav-section">

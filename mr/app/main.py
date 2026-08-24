@@ -18,18 +18,9 @@ from fastapi.templating import Jinja2Templates
 
 from app.jinja_compat import patch_template_response
 from mr.app.cs_input import (
-    DISPLAY_COLUMNS,
-    delete_input_workbook,
-    delete_register_row,
     init_register,
-    list_input_files,
-    list_register_rows,
-    merge_rows_into_register,
-    parse_gbl_cs_xlsx,
     recompute_sail_months_from_dates,
-    register_filter_options,
     register_stats,
-    save_cs_upload,
 )
 from mr.app.actual_vs_projection import build_actual_vs_projection, save_product_map
 from mr.app.avp_exports import export_avp_pdf, export_avp_png, export_avp_xlsx
@@ -106,89 +97,18 @@ async def dashboard(request: Request):
 
 @app.get("/gbl-cs-input", response_class=HTMLResponse)
 async def gbl_cs_input(request: Request):
-    return templates.TemplateResponse(
-        "gbl_cs_input.html",
-        _ctx(
-            request,
-            page="gbl_cs_input",
-            preview=None,
-            error=None,
-            merge=None,
-            saved_as=None,
-            input_files=list_input_files(),
-            notice=request.query_params.get("notice") or None,
-        ),
-    )
+    # Consolidated under Finance → Commissions (same register DB).
+    return RedirectResponse(url="/finance/commissions", status_code=303)
 
 
 @app.post("/gbl-cs-input", response_class=HTMLResponse)
 async def gbl_cs_input_upload(request: Request, file: UploadFile = File(...)):
-    error = None
-    preview = None
-    merge = None
-    saved_as = None
-    raw_name = file.filename or "upload.xlsx"
-    try:
-        data = await file.read()
-        if not data:
-            raise ValueError("Uploaded file is empty.")
-        if not raw_name.lower().endswith((".xlsx", ".xlsm")):
-            raise ValueError("Please upload an Excel file (.xlsx).")
-        preview = parse_gbl_cs_xlsx(data)
-        path = save_cs_upload(raw_name, data)
-        saved_as = path.name
-        merge = merge_rows_into_register(
-            preview["rows"],
-            source_file=saved_as,
-            source_original=raw_name,
-        )
-    except Exception as exc:
-        error = str(exc)
-
-    return templates.TemplateResponse(
-        "gbl_cs_input.html",
-        _ctx(
-            request,
-            page="gbl_cs_input",
-            preview=preview,
-            error=error,
-            merge=merge,
-            saved_as=saved_as,
-            uploaded_name=raw_name,
-            display_columns=DISPLAY_COLUMNS,
-            input_files=list_input_files(),
-            notice=None,
-        ),
-    )
+    return RedirectResponse(url="/finance/commissions", status_code=303)
 
 
 @app.post("/gbl-cs-input/delete", response_class=HTMLResponse)
 async def gbl_cs_input_delete(request: Request, key: str = Form(...)):
-    try:
-        result = delete_input_workbook(key)
-        notice = (
-            f"Removed {result['deleted_rows']} register line(s) "
-            f"and {result['deleted_files']} saved file(s)."
-        )
-        return RedirectResponse(
-            url=f"{MR_BASE}/gbl-cs-input?notice={quote(notice)}",
-            status_code=303,
-        )
-    except Exception as exc:
-        return templates.TemplateResponse(
-            "gbl_cs_input.html",
-            _ctx(
-                request,
-                page="gbl_cs_input",
-                preview=None,
-                error=str(exc),
-                merge=None,
-                saved_as=None,
-                input_files=list_input_files(),
-                notice=None,
-            ),
-            status_code=400,
-        )
+    return RedirectResponse(url="/finance/commissions", status_code=303)
 
 
 @app.get("/gbl-cs-register", response_class=HTMLResponse)
@@ -197,33 +117,13 @@ async def gbl_cs_register(
     month: str = Query(""),
     po: str = Query(""),
 ):
-    month = (month or "").strip()
-    po = (po or "").strip()
-    rows = list_register_rows(month=month or None, po=po or None)
-    options = register_filter_options()
-    stats = register_stats(month=month or None, po=po or None)
-    # Renumber SR.NO for the filtered view (1..n) while keeping original in data-* if needed
-    display_rows = []
-    for i, row in enumerate(rows, start=1):
-        item = dict(row)
-        item["display_sr"] = i
-        display_rows.append(item)
-    return templates.TemplateResponse(
-        "gbl_cs_register.html",
-        _ctx(
-            request,
-            page="gbl_cs_register",
-            rows=display_rows,
-            display_columns=DISPLAY_COLUMNS,
-            filter_month=month,
-            filter_po=po,
-            months=options["months"],
-            po_numbers=options["po_numbers"],
-            stats=stats,
-            filtered_count=len(display_rows),
-            notice=request.query_params.get("notice") or None,
-        ),
-    )
+    qs = []
+    if month:
+        qs.append(f"month={quote(month)}")
+    if po:
+        qs.append(f"po={quote(po)}")
+    suffix = ("?" + "&".join(qs)) if qs else ""
+    return RedirectResponse(url=f"/finance/commissions/register{suffix}", status_code=303)
 
 
 @app.post("/gbl-cs-register/delete", response_class=HTMLResponse)
@@ -233,23 +133,13 @@ async def gbl_cs_register_delete(
     month: str = Form(""),
     po: str = Form(""),
 ):
-    month = (month or "").strip()
-    po = (po or "").strip()
-    try:
-        ok = delete_register_row(row_id)
-        notice = "Line deleted." if ok else "Line was already removed."
-    except Exception as exc:
-        notice = f"Could not delete line: {exc}"
     qs = []
     if month:
         qs.append(f"month={quote(month)}")
     if po:
         qs.append(f"po={quote(po)}")
-    qs.append(f"notice={quote(notice)}")
-    return RedirectResponse(
-        url=f"{MR_BASE}/gbl-cs-register?{'&'.join(qs)}",
-        status_code=303,
-    )
+    suffix = ("?" + "&".join(qs)) if qs else ""
+    return RedirectResponse(url=f"/finance/commissions/register{suffix}", status_code=303)
 
 
 @app.get("/sales-projections", response_class=HTMLResponse)

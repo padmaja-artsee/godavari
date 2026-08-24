@@ -5,29 +5,90 @@
 <div class="f-page-header">
   <div>
     <h1 class="f-title">Analysis — {{ period_label }}</h1>
-    <p class="f-subtitle">Budget vs actuals with interactive charts and filters.</p>
+    <p class="f-subtitle">Pick a fiscal year or a calendar month range, then chart income and expenses.</p>
   </div>
-  <div class="f-header-controls" style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
-    <form method="get" action="{{ _base }}/analysis" class="f-filter-row" style="display:flex;gap:.4rem;align-items:center;flex-wrap:wrap">
-      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
-        {% for y in fiscal_years %}<option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>{% endfor %}
-      </select>
-      <label class="f-text-muted" style="font-size:.78rem">From</label>
-      <select name="from_month" class="f-select-sm" onchange="this.form.submit()">
-        {% for m in months %}
-        <option value="{{ m }}" {% if m==from_month %}selected{% endif %}>{{ month_labels[m] }}</option>
-        {% endfor %}
-      </select>
-      <label class="f-text-muted" style="font-size:.78rem">To</label>
-      <select name="to_month" class="f-select-sm" onchange="this.form.submit()">
-        {% for m in months %}
-        <option value="{{ m }}" {% if m==to_month %}selected{% endif %}>{{ month_labels[m] }}</option>
-        {% endfor %}
-      </select>
-    </form>
-    <a href="{{ _base }}/export/analysis.xlsx?fy={{ fy }}&from_month={{ from_month }}&to_month={{ to_month }}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
-  </div>
+  <a href="{{ _base }}/export/analysis.xlsx?fy={{ fy }}&from_month={{ from_month }}&to_month={{ to_month }}{% if mode == 'fy' and compare_fy %}&compare_fy={{ compare_fy }}{% endif %}{% if expenses_only %}&expenses_only=1{% endif %}" class="f-btn-sm f-btn-outline">↓ Export Excel</a>
 </div>
+
+<form method="get" action="{{ _base }}/analysis" id="analysisPeriodForm" class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem">
+  <div class="f-filter-bar" style="background:transparent;border:none;padding:0;margin:0">
+    <div class="f-filter-group">
+      <label class="f-filter-label">Period</label>
+      <div class="f-chart-type-btns">
+        <button type="button" class="f-type-btn {% if mode == 'fy' %}active{% endif %}" data-mode="fy" onclick="setPeriodMode('fy', this)">Fiscal year</button>
+        <button type="button" class="f-type-btn {% if mode == 'calendar' %}active{% endif %}" data-mode="calendar" onclick="setPeriodMode('calendar', this)">Calendar range</button>
+      </div>
+      <input type="hidden" name="mode" id="periodMode" value="{{ mode }}">
+    </div>
+
+    <div id="fyControls" class="f-filter-group" style="{% if mode != 'fy' %}display:none{% endif %};flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:.75rem">
+      <div class="f-filter-group">
+        <label class="f-filter-label">Fiscal year</label>
+        <select name="fy" class="f-select-sm" id="fySelect">
+          {% for y in fiscal_years %}
+          <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="f-filter-group">
+        <label class="f-filter-label">Compare to</label>
+        <select name="compare_fy" class="f-select-sm" id="compareFySelect">
+          <option value="0" {% if not compare_fy %}selected{% endif %}>None</option>
+          {% for y in fiscal_years %}
+          <option value="{{ y }}" {% if y==compare_fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="f-filter-group">
+        <label class="f-filter-label">Months in FY</label>
+        <div style="display:flex;gap:.35rem;align-items:center">
+          <select name="from_month" class="f-select-sm">
+            {% for m in months %}
+            <option value="{{ m }}" {% if m==from_month %}selected{% endif %}>{{ month_labels[m] }}</option>
+            {% endfor %}
+          </select>
+          <span class="f-text-muted" style="font-size:.78rem">to</span>
+          <select name="to_month" class="f-select-sm">
+            {% for m in months %}
+            <option value="{{ m }}" {% if m==to_month %}selected{% endif %}>{{ month_labels[m] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="calControls" class="f-filter-group" style="{% if mode != 'calendar' %}display:none{% endif %};flex-direction:row;flex-wrap:wrap;align-items:flex-end;gap:.75rem">
+      <div class="f-filter-group">
+        <label class="f-filter-label">Start</label>
+        <input type="month" name="start" class="f-select-sm" value="{{ start }}" style="min-width:9.5rem">
+      </div>
+      <div class="f-filter-group">
+        <label class="f-filter-label">End</label>
+        <input type="month" name="end" class="f-select-sm" value="{{ end }}" style="min-width:9.5rem">
+      </div>
+      <div class="f-filter-group">
+        <label class="f-filter-label">&nbsp;</label>
+        <label class="f-text-muted" style="font-size:.82rem;display:flex;align-items:center;gap:.35rem;white-space:nowrap;height:2rem">
+          <input type="checkbox" name="compare_prior" value="1" {% if compare_prior %}checked{% endif %}>
+          Compare prior year
+        </label>
+      </div>
+    </div>
+
+    <div class="f-filter-group">
+      <label class="f-filter-label">&nbsp;</label>
+      <label class="f-text-muted" style="font-size:.82rem;display:flex;align-items:center;gap:.35rem;white-space:nowrap;height:2rem">
+        <input type="checkbox" name="expenses_only" value="1" {% if expenses_only %}checked{% endif %}>
+        Expenses only
+      </label>
+    </div>
+
+    <div class="f-filter-group">
+      <label class="f-filter-label">&nbsp;</label>
+      <button type="submit" class="f-btn-sm">Update</button>
+    </div>
+  </div>
+</form>
 
 <!-- Summary cards -->
 <div class="f-summary-grid f-summary-grid-6">
@@ -39,9 +100,21 @@
     <span class="f-sum-val">${{ "{:,.0f}".format(s.planned) }}</span>
   </div>
   <div class="f-summary-row">
-    <span class="f-sum-key">Actual</span>
+    <span class="f-sum-key">Actual{% if has_compare %} ({{ primary_label }}){% endif %}</span>
     <span class="f-sum-val">${{ "{:,.0f}".format(s.actual) }}</span>
   </div>
+  {% if has_compare and s.compare_actual is defined %}
+  <div class="f-summary-row">
+    <span class="f-sum-key">Actual ({{ compare_label }})</span>
+    <span class="f-sum-val">${{ "{:,.0f}".format(s.compare_actual) }}</span>
+  </div>
+  <div class="f-summary-row">
+    <span class="f-sum-key">Difference</span>
+    <span class="f-sum-val {% if s.yoy >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
+      {% if s.yoy >= 0 %}+{% endif %}${{ "{:,.0f}".format(s.yoy) }}
+    </span>
+  </div>
+  {% else %}
   <div class="f-summary-row">
     <span class="f-sum-key">Variance</span>
     <span class="f-sum-val {% if s.variance >= 0 %}f-var-pos{% else %}f-var-neg{% endif %}">
@@ -49,6 +122,7 @@
       {% if s.var_pct is not none %}<small>({{ "{:.0f}".format(s.var_pct) }}%)</small>{% endif %}
     </span>
   </div>
+  {% endif %}
 </div>
 {% endfor %}
 </div>
@@ -58,21 +132,39 @@
   <div class="f-filter-group">
     <label class="f-filter-label">View</label>
     <select id="filterCategory" class="f-select-sm" onchange="onCategoryChange()">
+      {% if not expenses_only %}
       <option value="net">Balance</option>
       <option value="income">Income</option>
-      <option value="expenses">Total Expenses</option>
+      {% endif %}
+      <option value="expenses" {% if expenses_only %}selected{% endif %}>Total Expenses</option>
       <option value="employee">↳ Employee Costs</option>
       <option value="office">↳ Office Costs</option>
       <option value="admin">↳ Bank / Legal / Admin</option>
       <option value="travel">↳ Conference / Travel</option>
       <option value="investment">↳ Investment</option>
+      {% if not expenses_only %}
       <option value="balance">Balance (Cumulative)</option>
+      {% endif %}
     </select>
   </div>
   <div class="f-filter-group">
     <label class="f-filter-label">Line Item</label>
     <select id="filterLineItem" class="f-select-sm" onchange="renderCharts()">
       <option value="all">All Line Items</option>
+    </select>
+  </div>
+  <div class="f-filter-group">
+    <label class="f-filter-label">Series</label>
+    <select id="filterSeries" class="f-select-sm" onchange="renderCharts()">
+      {% if has_compare %}
+      <option value="actuals">Actuals (both periods)</option>
+      <option value="budget">Budget (both periods)</option>
+      <option value="all">Budget + Actuals</option>
+      {% else %}
+      <option value="all">Budget + Actuals</option>
+      <option value="actuals">Actuals only</option>
+      <option value="budget">Budget only</option>
+      {% endif %}
     </select>
   </div>
   <div class="f-filter-group">
@@ -91,7 +183,7 @@
   <div class="f-card f-card-wide" id="mainChartCard">
     <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
       <span id="mainChartTitle">Monthly Budget vs Actuals</span>
-      <button type="button" onclick="downloadChart('mainChart','GBInc-BudgetVsActual-{{ period_label|replace(' ','') }}.png', document.getElementById('mainChartTitle').textContent + ' — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      <button type="button" onclick="downloadChart('mainChart','GBInc-BudgetVsActual-{{ period_label|replace(' ','')|replace('–','-') }}.png', document.getElementById('mainChartTitle').textContent + ' — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
     </div>
     <canvas id="mainChart" height="90"></canvas>
   </div>
@@ -99,15 +191,15 @@
   <div class="f-card" id="breakdownCard" style="display:none;max-width:480px">
     <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
       <span>Expense Breakdown by Category</span>
-      <button type="button" onclick="downloadChart('breakdownChart','GBInc-Breakdown-{{ period_label|replace(' ','') }}.png','Expense Breakdown — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      <button type="button" onclick="downloadChart('breakdownChart','GBInc-Breakdown-{{ period_label|replace(' ','')|replace('–','-') }}.png','Expense Breakdown — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
     </div>
     <canvas id="breakdownChart" height="200"></canvas>
   </div>
 
-  <div class="f-card f-card-wide" id="netChartCard">
+  <div class="f-card f-card-wide" id="netChartCard" {% if expenses_only %}style="display:none"{% endif %}>
     <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
       <span>Cumulative Balance</span>
-      <button type="button" onclick="downloadChart('netChart','GBInc-NetTrend-{{ period_label|replace(' ','') }}.png','Cumulative Balance — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      <button type="button" onclick="downloadChart('netChart','GBInc-NetTrend-{{ period_label|replace(' ','')|replace('–','-') }}.png','Cumulative Balance — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
     </div>
     <canvas id="netChart" height="70"></canvas>
   </div>
@@ -119,6 +211,10 @@ const MONTHS      = {{ chart_months | tojson }};
 const LINE_DATA   = {{ line_data_json | safe }};
 const SEC_TOTALS  = {{ section_totals_json | safe }};
 const ALL_ITEMS   = {{ items | tojson }};
+const PRIMARY_LBL = {{ primary_label | tojson }};
+const COMPARE_LBL = {{ compare_label | tojson }};
+const HAS_COMPARE = {{ 'true' if has_compare else 'false' }};
+const EXPENSES_ONLY = {{ 'true' if expenses_only else 'false' }};
 
 const SECTION_LABELS = {
   income: "Income", employee: "Employee Costs",
@@ -135,6 +231,17 @@ let chartType   = "bar";
 let mainChartObj, netChartObj, breakdownObj;
 
 const EXPENSE_SECTIONS = ["employee","office","admin","travel","investment"];
+
+function setPeriodMode(mode, btn) {
+  document.getElementById("periodMode").value = mode;
+  document.querySelectorAll("[data-mode]").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  document.getElementById("fyControls").style.display = mode === "fy" ? "" : "none";
+  document.getElementById("calControls").style.display = mode === "calendar" ? "" : "none";
+  // Disable inactive fields so they don't pollute the query string
+  document.querySelectorAll("#fyControls select").forEach(el => { el.disabled = mode !== "fy"; });
+  document.querySelectorAll("#calControls input").forEach(el => { el.disabled = mode !== "calendar"; });
+}
 
 function onCategoryChange() {
   const cat = document.getElementById("filterCategory").value;
@@ -156,11 +263,11 @@ function onCategoryChange() {
 
 function setChartType(type, btn) {
   chartType = type;
-  document.querySelectorAll(".f-type-btn").forEach(b => b.classList.remove("active"));
+  document.querySelectorAll(".f-type-btn[data-type]").forEach(b => b.classList.remove("active"));
   btn.classList.add("active");
   const isPie = type === "pie";
   document.getElementById("mainChartCard").style.display   = isPie ? "none" : "";
-  document.getElementById("netChartCard").style.display    = isPie ? "none" : "";
+  document.getElementById("netChartCard").style.display    = (isPie || EXPENSES_ONLY) ? "none" : "";
   document.getElementById("breakdownCard").style.display   = isPie ? "" : "none";
   renderCharts();
 }
@@ -169,13 +276,21 @@ function sumMonthly(sections, itemId) {
   const n = MONTHS.length;
   let budget = new Array(n).fill(0);
   let actual = new Array(n).fill(0);
+  let compareBudget = new Array(n).fill(0);
+  let compareActual = new Array(n).fill(0);
+  let hasCompare = false;
   Object.entries(LINE_DATA).forEach(([id, d]) => {
     if (!sections.includes(d.section)) return;
     if (itemId !== "all" && String(id) !== String(itemId)) return;
     d.budget.forEach((v, i) => budget[i] += v);
     d.actual.forEach((v, i) => actual[i] += v);
+    if (d.compare_actual) {
+      hasCompare = true;
+      (d.compare_budget || []).forEach((v, i) => compareBudget[i] += v);
+      d.compare_actual.forEach((v, i) => compareActual[i] += v);
+    }
   });
-  return { budget, actual };
+  return { budget, actual, compareBudget, compareActual, hasCompare };
 }
 
 function getNetData() {
@@ -195,43 +310,109 @@ function getNetData() {
   });
 }
 
+function seriesMode() {
+  const el = document.getElementById("filterSeries");
+  return el ? el.value : "all";
+}
+
 function buildDatasets(cat, item) {
   const ctype = chartType === "line" ? "line" : "bar";
   const lineOpts = { fill: false, tension: .35 };
+  const mode = seriesMode();
+  const showBudget = mode === "all" || mode === "budget";
+  const showActual = mode === "all" || mode === "actuals";
+  const pLbl = PRIMARY_LBL;
+  const cLbl = COMPARE_LBL || "Compare";
 
   if (cat === "net") {
     const inc = sumMonthly(["income"], "all");
     const exp = sumMonthly(EXPENSE_SECTIONS, "all");
-    return [
-      { label:"Income Budget",   data:inc.budget, backgroundColor:"rgba(39,174,96,.4)",   borderColor:"#27AE60", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
-      { label:"Income Actual",   data:inc.actual, backgroundColor:"rgba(39,174,96,.95)",  borderColor:"#1E8449", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
-      { label:"Expense Budget",  data:exp.budget, backgroundColor:"rgba(231,76,60,.35)",  borderColor:"#E74C3C", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
-      { label:"Expense Actual",  data:exp.actual, backgroundColor:"rgba(231,76,60,.95)",  borderColor:"#C0392B", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
-    ];
+    const ds = [];
+    if (showBudget) {
+      ds.push({ label:`Income Budget (${pLbl})`, data:inc.budget, backgroundColor:"rgba(39,174,96,.35)", borderColor:"#27AE60", borderWidth:2, ...(ctype==="line"?lineOpts:{}) });
+      ds.push({ label:`Expense Budget (${pLbl})`, data:exp.budget, backgroundColor:"rgba(231,76,60,.3)", borderColor:"#E74C3C", borderWidth:2, ...(ctype==="line"?lineOpts:{}) });
+    }
+    if (showActual) {
+      ds.push({ label:`Income Actual (${pLbl})`, data:inc.actual, backgroundColor:"rgba(39,174,96,.95)", borderColor:"#1E8449", borderWidth:2, ...(ctype==="line"?lineOpts:{}) });
+      ds.push({ label:`Expense Actual (${pLbl})`, data:exp.actual, backgroundColor:"rgba(231,76,60,.95)", borderColor:"#C0392B", borderWidth:2, ...(ctype==="line"?lineOpts:{}) });
+    }
+    if (HAS_COMPARE && showActual) {
+      ds.push({ label:`Income Actual (${cLbl})`, data:inc.compareActual, backgroundColor:"rgba(39,174,96,.35)", borderColor:"#82E0AA", borderWidth:2, borderDash:[6,3], ...(ctype==="line"?lineOpts:{}) });
+      ds.push({ label:`Expense Actual (${cLbl})`, data:exp.compareActual, backgroundColor:"rgba(231,76,60,.35)", borderColor:"#F5B7B1", borderWidth:2, borderDash:[6,3], ...(ctype==="line"?lineOpts:{}) });
+    }
+    return ds;
   }
 
   const sections = cat === "expenses" ? EXPENSE_SECTIONS : [cat];
-  const { budget, actual } = sumMonthly(sections, item);
+  const { budget, actual, compareBudget, compareActual, hasCompare } = sumMonthly(sections, item);
   const isIncome = cat === "income";
-  return [
-    { label:"Budget",  data:budget, backgroundColor: isIncome ? "rgba(39,174,96,.4)"  : "rgba(52,152,219,.5)",  borderColor: isIncome ? "#27AE60" : "#2980B9", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
-    { label:"Actuals", data:actual, backgroundColor: isIncome ? "rgba(39,174,96,.95)" : "rgba(231,76,60,.95)", borderColor: isIncome ? "#1E8449" : "#C0392B", borderWidth:2, ...(ctype==="line"?lineOpts:{}) },
-  ];
+  const ds = [];
+  if (showBudget) {
+    ds.push({
+      label: `Budget (${pLbl})`,
+      data: budget,
+      backgroundColor: isIncome ? "rgba(39,174,96,.4)" : "rgba(52,152,219,.5)",
+      borderColor: isIncome ? "#27AE60" : "#2980B9",
+      borderWidth: 2,
+      ...(ctype==="line"?lineOpts:{}),
+    });
+  }
+  if (showActual) {
+    ds.push({
+      label: `Actuals (${pLbl})`,
+      data: actual,
+      backgroundColor: isIncome ? "rgba(39,174,96,.95)" : "rgba(231,76,60,.95)",
+      borderColor: isIncome ? "#1E8449" : "#C0392B",
+      borderWidth: 2,
+      ...(ctype==="line"?lineOpts:{}),
+    });
+  }
+  if (hasCompare && HAS_COMPARE) {
+    if (showBudget) {
+      ds.push({
+        label: `Budget (${cLbl})`,
+        data: compareBudget,
+        backgroundColor: isIncome ? "rgba(39,174,96,.2)" : "rgba(52,152,219,.25)",
+        borderColor: isIncome ? "#82E0AA" : "#85C1E9",
+        borderWidth: 2,
+        borderDash: [6, 3],
+        ...(ctype==="line"?lineOpts:{}),
+      });
+    }
+    if (showActual) {
+      ds.push({
+        label: `Actuals (${cLbl})`,
+        data: compareActual,
+        backgroundColor: isIncome ? "rgba(39,174,96,.45)" : "rgba(231,76,60,.45)",
+        borderColor: isIncome ? "#58D68D" : "#F1948A",
+        borderWidth: 2,
+        borderDash: [6, 3],
+        ...(ctype==="line"?lineOpts:{}),
+      });
+    }
+  }
+  return ds;
 }
 
 function getChartTitle(cat, item) {
-  if (cat === "net")     return "Monthly Income vs Expenses";
-  if (cat === "balance") return "Cumulative Balance (Running Net)";
+  const suffix = HAS_COMPARE
+    ? ` (${PRIMARY_LBL} vs ${COMPARE_LBL})`
+    : ` (${PRIMARY_LBL})`;
+  if (cat === "net")     return "Monthly Income vs Expenses" + suffix;
+  if (cat === "balance") return "Cumulative Balance (Running Net)" + suffix;
   if (item !== "all") {
     const found = ALL_ITEMS.find(i => String(i.id) === String(item));
-    return `Monthly — ${found ? found.name : ""}`;
+    return `Monthly — ${found ? found.name : ""}` + suffix;
   }
   const labels = {
     expenses:"Total Expenses", employee:"Employee Costs",
     office:"Office Costs", admin:"Bank/Legal/Admin",
     travel:"Conference/Travel", investment:"Investment",
   };
-  return `Monthly — ${labels[cat] || SECTION_LABELS[cat] || cat}`;
+  const base = EXPENSES_ONLY && cat === "expenses"
+    ? "Expenses only"
+    : (labels[cat] || SECTION_LABELS[cat] || cat);
+  return `Monthly — ${base}` + suffix;
 }
 
 function renderCharts() {
@@ -270,7 +451,7 @@ function renderCharts() {
     return;
   }
 
-  document.getElementById("netChartCard").style.display = "";
+  document.getElementById("netChartCard").style.display = EXPENSES_ONLY ? "none" : "";
   document.getElementById("mainChartTitle").textContent = getChartTitle(cat, item);
 
   const datasets = buildDatasets(cat, item);
@@ -285,6 +466,11 @@ function renderCharts() {
       datasets: { bar: { barPercentage: 0.95, categoryPercentage: 0.9 } }
     }
   });
+
+  if (EXPENSES_ONLY) {
+    if (netChartObj) { netChartObj.destroy(); netChartObj = null; }
+    return;
+  }
 
   if (netChartObj) netChartObj.destroy();
   netChartObj = new Chart(document.getElementById("netChart"), {
@@ -412,6 +598,21 @@ function downloadChart(canvasId, filename, title) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  const mode = document.getElementById("periodMode").value;
+  setPeriodMode(mode, document.querySelector(`[data-mode="${mode}"]`));
+  // Prevent comparing a FY to itself
+  const fySel = document.getElementById("fySelect");
+  const cmpSel = document.getElementById("compareFySelect");
+  function syncCompareOptions() {
+    const cur = fySel.value;
+    [...cmpSel.options].forEach(opt => {
+      if (opt.value === "0") return;
+      opt.hidden = opt.value === cur;
+      if (opt.selected && opt.hidden) cmpSel.value = "0";
+    });
+  }
+  fySel.addEventListener("change", syncCompareOptions);
+  syncCompareOptions();
   onCategoryChange();
 });
 </script>

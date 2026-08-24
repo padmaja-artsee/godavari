@@ -90,6 +90,7 @@
       function sync() {
         show.value = _fmtDateDisplay(native.value);
         if (native.name === "invoice_date") syncNoticeDateFromInvoice();
+        if (native.name === "shipment_date") syncInvoiceDateFromSail();
       }
       sync();
       native.addEventListener("change", sync);
@@ -110,23 +111,50 @@
     });
   }
 
+  /** Last calendar day of the month that contains iso yyyy-mm-dd */
+  function _monthEndFromSail(iso) {
+    const parts = String(iso || "").trim().slice(0, 10).split("-");
+    if (parts.length !== 3) return "";
+    const y = parseInt(parts[0], 10);
+    const m = parseInt(parts[1], 10);
+    if (!y || !m || m < 1 || m > 12) return "";
+    const last = new Date(y, m, 0).getDate();
+    return y + "-" + String(m).padStart(2, "0") + "-" + String(last).padStart(2, "0");
+  }
+
+  function syncInvoiceDateFromSail() {
+    const ship = document.querySelector('.ci-date-native[name="shipment_date"].ci-line-ship-date')
+      || document.querySelector('.ci-date-native[name="shipment_date"]');
+    const inv = document.querySelector('.ci-invoice-page .ci-date-native[name="invoice_date"]');
+    if (!ship || !inv) return;
+    const end = _monthEndFromSail(ship.value);
+    if (!end) return;
+    inv.value = end;
+    const wrap = inv.closest(".ci-date-wrap");
+    const show = wrap && wrap.querySelector(".ci-date-show");
+    if (show) show.value = _fmtDateDisplay(end);
+    syncNoticeDateFromInvoice();
+  }
+
   // ── Per-row recalc ────────────────────────────────────────────────────────
   function recalcRow(row) {
     const qty      = _float(row.querySelector(".ci-qty")    && row.querySelector(".ci-qty").value);
     const uprice   = _float(row.querySelector(".ci-uprice") && row.querySelector(".ci-uprice").value);
-    const cif      = _float(row.querySelector(".ci-cif")    && row.querySelector(".ci-cif").value);
     const rate     = _float(row.querySelector(".ci-rate")   && row.querySelector(".ci-rate").value);
 
-    const fobHidden = row.querySelector(".ci-fob");
-    const fobFromDeal = _float(fobHidden && fobHidden.value);
-    const unit = uprice || cif;
-    // FOB column is total $ from deal (Value − insurance − freight), not qty × CIF/MT
-    const fob = unit ? qty * unit : fobFromDeal;
+    const fobInp = row.querySelector(".ci-fob-input") || row.querySelector(".ci-fob");
+    let fob = _float(fobInp && fobInp.value);
+
+    // Only fill FOB from unit price when FOB is empty. Never overwrite a stored /
+    // freight-adjusted FOB (Excel imports) from qty × rate/CIF.
+    if (!fob && uprice && qty) {
+      fob = qty * uprice;
+      if (fobInp) fobInp.value = fob.toFixed(2);
+    }
+
     const fobOut = row.querySelector(".ci-fob-out");
     if (fobOut) fobOut.textContent = "$" + _num(fob);
-    if (fobHidden && unit) fobHidden.value = fob.toFixed(2);
 
-    // commission = fob × rate / 100
     const comm = fob * rate / 100;
     const commOut = row.querySelector(".ci-line-value");
     if (commOut) commOut.textContent = "$ " + _money(comm);
@@ -183,7 +211,7 @@
 
   // ── Bind inputs in a row ──────────────────────────────────────────────────
   function bindRow(row) {
-    row.querySelectorAll(".ci-qty, .ci-uprice, .ci-cif, .ci-rate").forEach(function (inp) {
+    row.querySelectorAll(".ci-qty, .ci-uprice, .ci-cif, .ci-rate, .ci-fob-input, .ci-fob").forEach(function (inp) {
       inp.addEventListener("input", recalcTotals);
     });
   }
@@ -201,6 +229,9 @@
     });
     clone.querySelectorAll("input[type='hidden']").forEach(function (inp) {
       inp.value = "0";
+    });
+    clone.querySelectorAll(".ci-fob-input, .ci-fob").forEach(function (inp) {
+      if (inp.type !== "hidden") inp.value = "";
     });
     clone.querySelectorAll("output").forEach(function (o) {
       if (o.classList.contains("ci-line-value")) o.textContent = "$ 0.00";
@@ -263,6 +294,20 @@
 
     // VAT % change
     if (vatInp) vatInp.addEventListener("input", recalcTotals);
+
+    // Clear red "missing" highlight once the user edits a field
+    document.querySelectorAll(".ci-field-missing").forEach(function (el) {
+      function clearMiss() {
+        if (String(el.value || "").trim() !== "") {
+          el.classList.remove("ci-field-missing");
+        }
+      }
+      el.addEventListener("input", clearMiss);
+      el.addEventListener("change", clearMiss);
+    });
+
+    // Invoice date = month-end of sail / shipment date
+    syncInvoiceDateFromSail();
 
     // Initial calc pass
     recalcTotals();

@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
@@ -1026,6 +1026,25 @@ def period_start(period: str) -> Optional[str]:
     else:
         start = today - timedelta(days=30)
     return start.isoformat()
+
+
+def calendar_month_bounds(ym: str) -> Optional[tuple[str, str]]:
+    """Parse YYYY-MM into inclusive (start_date, end_date) ISO strings."""
+    raw = (ym or "").strip()
+    if len(raw) < 7 or raw[4] != "-":
+        return None
+    try:
+        y, m = int(raw[:4]), int(raw[5:7])
+        if not (1990 <= y <= 2100 and 1 <= m <= 12):
+            return None
+        start = date(y, m, 1)
+        if m == 12:
+            end = date(y, 12, 31)
+        else:
+            end = date(y, m + 1, 1) - timedelta(days=1)
+        return start.isoformat(), end.isoformat()
+    except (TypeError, ValueError):
+        return None
 
 
 def list_customers() -> list[dict]:
@@ -2061,11 +2080,23 @@ def list_active_leads(
     sort: str = "stage",
     direction: str = "asc",
     attention_days: int | None = None,
+    month: str = "",
 ) -> list[dict]:
-    """One row per deal (or lead-only product) with activity in the period."""
+    """One row per deal (or lead-only product) with activity in the period.
+
+    ``month`` (YYYY-MM) overrides relative ``period`` and filters to that
+    calendar month (inclusive). When set, only deals/leads with activity
+    (or deal_date) in that month are shown.
+    """
     from app.pipeline import infer_stage_from_row, normalize_stage, sort_active_leads
 
-    start = period_start(period)
+    month_bounds = calendar_month_bounds(month)
+    if month_bounds:
+        start, end = month_bounds
+    else:
+        start = period_start(period)
+        end = None
+
     result: list[dict] = []
     stage_filter = (stage or "all").strip().lower()
     if stage_filter not in ("all", ""):
@@ -2079,8 +2110,35 @@ def list_active_leads(
 
     deal_clauses = ["d.deleted_at IS NULL"]
     deal_params: list[Any] = []
-    # Open / all: show every matching deal; period only filters activity summary columns.
-    if start and status not in ("open", "all"):
+
+    def _append_activity_range(clauses: list[str], params: list[Any], col: str = "a.activity_date") -> None:
+        if start:
+            clauses.append(f"{col} >= ?")
+            params.append(start)
+        if end:
+            clauses.append(f"{col} <= ?")
+            params.append(end)
+
+    # Specific month: restrict to deals touched (or dated) in that month.
+    # Relative period: for non-open/all outcomes, require activity since start.
+    if month_bounds:
+        in_month = []
+        in_params: list[Any] = []
+        _append_activity_range(in_month, in_params, "d.deal_date")
+        act_bits = ["a.deal_id = d.id"]
+        act_params_inner: list[Any] = []
+        _append_activity_range(act_bits, act_params_inner, "a.activity_date")
+        deal_clauses.append(
+            f"""(
+                ({' AND '.join(in_month)})
+                OR EXISTS (
+                    SELECT 1 FROM activities a
+                    WHERE {' AND '.join(act_bits)}
+                )
+            )"""
+        )
+        deal_params.extend(in_params + act_params_inner)
+    elif start and status not in ("open", "all"):
         deal_clauses.append(
             """EXISTS (
                 SELECT 1 FROM activities a
@@ -2117,8 +2175,15 @@ def list_active_leads(
         )
         deal_params.extend([f"%{q}%"] * 8)
 
-    period_act = " AND a.activity_date >= ?" if start else ""
-    act_params = [start] if start else []
+    period_act_bits: list[str] = []
+    act_params: list[Any] = []
+    if start:
+        period_act_bits.append("a.activity_date >= ?")
+        act_params.append(start)
+    if end:
+        period_act_bits.append("a.activity_date <= ?")
+        act_params.append(end)
+    period_act = (" AND " + " AND ".join(period_act_bits)) if period_act_bits else ""
     deal_sql = f"""
         SELECT d.id AS deal_id, d.deal_date, d.status, d.archived, d.po_number, d.quote_ref,
                d.quantity, d.quantity_unit, d.price, d.price_unit, d.value, d.notes, d.closed_date,
@@ -2172,6 +2237,9 @@ def list_active_leads(
             if start:
                 lead_clauses.append("a.activity_date >= ?")
                 lead_params.append(start)
+            if end:
+                lead_clauses.append("a.activity_date <= ?")
+                lead_params.append(end)
             if company:
                 lead_clauses.append("c.name LIKE ? COLLATE NOCASE")
                 lead_params.append(f"%{company}%")
@@ -2186,7 +2254,15 @@ def list_active_leads(
                     )"""
                 )
                 lead_params.extend([f"%{q}%"] * 4)
-            date_filter = " AND a2.activity_date >= ?" if start else ""
+            date_filter_bits: list[str] = []
+            date_filter_params: list[Any] = []
+            if start:
+                date_filter_bits.append("a2.activity_date >= ?")
+                date_filter_params.append(start)
+            if end:
+                date_filter_bits.append("a2.activity_date <= ?")
+                date_filter_params.append(end)
+            date_filter = (" AND " + " AND ".join(date_filter_bits)) if date_filter_bits else ""
             lead_sql = f"""
                 SELECT c.name AS company, p.name AS product, a.customer_id,
                        a.product_id,
@@ -2209,7 +2285,7 @@ def list_active_leads(
                 WHERE {' AND '.join(lead_clauses)}
                 GROUP BY a.customer_id, a.product_id
             """
-            lead_query_params = lead_params + ([start] if start else [])
+            lead_query_params = lead_params + date_filter_params
             for row in conn.execute(lead_sql, lead_query_params).fetchall():
                 item = dict(row)
                 item["deal_id"] = None

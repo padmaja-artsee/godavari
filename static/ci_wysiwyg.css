@@ -214,9 +214,15 @@
 }
 
 .ci-field-yellow { background: #fffde7; }
+.ci-field-missing {
+  background: #fee2e2 !important;
+  border-color: #ef4444 !important;
+  box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.35);
+}
 .ci-src { font-size: .65rem; margin-left: .35rem; font-weight: 600; }
 .ci-src-ok { color: #1a5632; }
 .ci-src-warn { color: #b7950b; }
+.ci-src-miss { color: #b91c1c; font-weight: 700; }
 .ci-static-addr { font-size: .82rem; color: #555; margin: .25rem 0 0; }
 .ci-notice-block { margin-top: 1.25rem; padding-top: .75rem; border-top: 1px solid #ddd; }
 .ci-static-note { font-size: .78rem; color: #666; margin-top: .5rem; }

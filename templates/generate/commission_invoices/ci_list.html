@@ -25,6 +25,29 @@
 </div>
 
 {% if _base == '/generate/commission-invoices' %}
+{% if import_msg %}
+<div class="card" style="border-color:#86efac;background:#f0fdf4;margin-bottom:1rem;padding:1rem">
+  <p style="margin:0">{{ import_msg }}</p>
+</div>
+{% endif %}
+{% if import_error %}
+<div class="card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem;padding:1rem">
+  <p style="margin:0">{{ import_error }}</p>
+</div>
+{% endif %}
+
+<section class="card" id="ci-import-excel" style="margin-bottom:1.25rem;padding:1.25rem">
+  <h2 style="margin:0 0 0.35rem;font-size:1rem">Generate from commission register</h2>
+  <p style="margin:0 0 1rem;color:#374151;font-size:.9rem">
+    Upload the GBL CS Excel once under <strong>Finance → Commissions</strong>, then generate draft CIs from the register by sail month.
+    Do not re-upload the same sheet here.
+  </p>
+  <div style="display:flex;gap:.65rem;flex-wrap:wrap;align-items:center">
+    <a href="/finance/commissions" class="btn btn-primary btn-sm">Open Commissions (upload &amp; generate)</a>
+    <a href="/finance/commissions/register" class="btn btn-ghost btn-sm">View register</a>
+  </div>
+</section>
+
 <section class="card" id="ci-export" style="margin-bottom:1.25rem;padding:1.25rem">
   <h2 style="margin:0 0 0.35rem;font-size:1rem">Export data request (prefilled from deals)</h2>
   <p style="margin:0 0 1rem;color:#374151;font-size:.9rem">
@@ -33,6 +56,7 @@
   </p>
 
   <form method="get" action="{{ _base }}#ci-export-results" id="ci-export-form">
+    <input type="hidden" name="deals_run" value="1" />
     <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-bottom:.75rem">
       <label style="display:flex;align-items:center;gap:.35rem;font-size:.88rem;cursor:pointer">
         <input type="radio" name="mode" value="monthly" {% if mode != 'range' %}checked{% endif %} /> Monthly
@@ -161,23 +185,103 @@
 </section>
 {% endif %}
 
+{% set sort = sort or 'created' %}
+{% set sort_dir = sort_dir or 'desc' %}
+{% set list_status = list_status or 'all' %}
+{% set list_product = list_product or '' %}
+{% set list_q = list_q or '' %}
+{% set list_from = list_from or '' %}
+{% set list_to = list_to or '' %}
+{% set list_filter_qs = list_filter_qs or '' %}
+{% macro sort_link(key, label) -%}
+  {%- set next_dir = 'asc' if sort != key or sort_dir == 'desc' else 'desc' -%}
+  <a class="ci-sort-link" href="{{ _base }}?sort={{ key }}&dir={{ next_dir }}&{{ list_filter_qs }}">
+    {{ label }}{% if sort == key %}{% if sort_dir == 'asc' %} ▲{% else %} ▼{% endif %}{% endif %}
+  </a>
+{%- endmacro %}
+
+<section class="card" id="ci-list-filters" style="margin-bottom:1rem;padding:1rem 1.25rem">
+  <h2 style="margin:0 0 0.75rem;font-size:1rem">Saved invoices</h2>
+  <form method="get" action="{{ _base }}#ci-list-table" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.65rem;align-items:end">
+    <input type="hidden" name="sort" value="{{ sort }}" />
+    <input type="hidden" name="dir" value="{{ sort_dir }}" />
+    <div>
+      <label class="form-label">Status</label>
+      <select name="list_status" class="form-input">
+        {% for s in ['all','Draft','Approved','Sent','Cancelled'] %}
+        <option value="{{ s }}" {% if list_status == s %}selected{% endif %}>{% if s == 'all' %}All statuses{% else %}{{ s }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Product</label>
+      <select name="list_product" class="form-input">
+        <option value="">All products</option>
+        {% for p in ci_products or [] %}
+        <option value="{{ p }}" {% if list_product == p %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="form-label">Search</label>
+      <input type="text" name="list_q" class="form-input" value="{{ list_q }}" placeholder="Invoice #, PO, bill-to…" />
+    </div>
+    <div>
+      <label class="form-label">Invoice from</label>
+      <input type="date" name="list_from" class="form-input" value="{{ list_from }}" />
+    </div>
+    <div>
+      <label class="form-label">Invoice to</label>
+      <input type="date" name="list_to" class="form-input" value="{{ list_to }}" />
+    </div>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+      <button type="submit" class="btn btn-primary btn-sm">Filter</button>
+      <a href="{{ _base }}" class="btn btn-ghost btn-sm">Reset</a>
+    </div>
+  </form>
+  <p style="margin:.65rem 0 0;font-size:.82rem;color:#6b7280">
+    Showing <strong>{{ rows|length }}</strong> invoice(s)
+    · Click column headers to sort
+  </p>
+</section>
+
+<div class="ci-list-bulk-bar card" id="ci-bulk-bar" style="display:none;margin-bottom:0.75rem;padding:0.75rem 1rem;align-items:center;gap:0.5rem;flex-wrap:wrap">
+  <span id="ci-bulk-count" style="font-size:.88rem;font-weight:600">0 selected</span>
+  <button type="button" class="btn btn-ghost btn-sm" id="ci-bulk-print">Print</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="ci-bulk-pdf">Download PDF</button>
+  <button type="button" class="btn btn-ghost btn-sm" id="ci-bulk-xlsx">Download Excel</button>
+  <form method="post" action="{{ _base }}/bulk-delete" id="ci-bulk-delete-form" style="display:inline"
+        data-confirm="Delete selected commission invoices? This cannot be undone.">
+    <div id="ci-bulk-delete-ids"></div>
+    <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--danger,#b91c1c)">Delete</button>
+  </form>
+</div>
+
 <div class="table-wrap card" style="padding:0;overflow-x:auto">
-  <table class="data-table">
+  <table class="data-table" id="ci-list-table">
     <thead>
       <tr>
-        <th>Invoice No</th>
-        <th>Date</th>
-        <th>Bill To</th>
-        <th>Product</th>
-        <th>Total Commission</th>
-        <th>Status</th>
-        <th>Created</th>
+        <th style="width:2.25rem;text-align:center">
+          <input type="checkbox" id="ci-list-select-all" title="Select all" aria-label="Select all invoices" />
+        </th>
+        <th>{{ sort_link('invoice_number', 'Invoice No') }}</th>
+        <th>{{ sort_link('invoice_date', 'Date') }}</th>
+        <th>{{ sort_link('bill_to', 'Bill To') }}</th>
+        <th>{{ sort_link('product', 'Product') }}</th>
+        <th>{{ sort_link('commission', 'Total Commission') }}</th>
+        <th>{{ sort_link('status', 'Status') }}</th>
+        <th>{{ sort_link('created', 'Created') }}</th>
         <th>Actions</th>
       </tr>
     </thead>
     <tbody>
       {% for row in rows %}
       <tr>
+        <td style="text-align:center">
+          <input type="checkbox" class="ci-list-cb" value="{{ row.id }}"
+                 data-invoice="{{ row.invoice_number or '' }}"
+                 aria-label="Select {{ row.invoice_number or row.id }}" />
+        </td>
         <td><a class="link" href="{{ _base }}/{{ row.id }}">{{ row.invoice_number or '—' }}</a></td>
         <td>{{ row.invoice_date or '—' }}</td>
         <td>{{ row.bill_to_name or '—' }}</td>
@@ -218,11 +322,18 @@
         </td>
       </tr>
       {% else %}
-      <tr><td colspan="8" style="text-align:center;color:#666;padding:1.5rem">No commission invoices yet.</td></tr>
+      <tr><td colspan="9" style="text-align:center;color:#666;padding:1.5rem">No commission invoices yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
 </div>
+
+<style>
+.ci-sort-link { color: inherit; text-decoration: none; white-space: nowrap; }
+.ci-sort-link:hover { color: var(--green, #1a5632); text-decoration: underline; }
+#ci-bulk-bar { display: none; }
+#ci-bulk-bar.is-visible { display: flex !important; }
+</style>
 
 <script>
 (function () {
@@ -232,7 +343,6 @@
   const selectAllBtn = document.getElementById("ci-deal-select-all-btn");
   const selectNoneBtn = document.getElementById("ci-deal-select-none-btn");
   const selectedCount = document.getElementById("ci-deal-selected-count");
-  if (!form) return;
 
   function dealCheckboxes() {
     return Array.from(document.querySelectorAll(".ci-deal-cb"));
@@ -256,21 +366,80 @@
     syncSelectAllState();
   }
 
-  if (selectAll) {
-    selectAll.addEventListener("change", function () {
-      setAllDeals(selectAll.checked);
+  if (form) {
+    if (selectAll) {
+      selectAll.addEventListener("change", function () {
+        setAllDeals(selectAll.checked);
+      });
+    }
+    if (selectAllBtn) {
+      selectAllBtn.addEventListener("click", function () { setAllDeals(true); });
+    }
+    if (selectNoneBtn) {
+      selectNoneBtn.addEventListener("click", function () { setAllDeals(false); });
+    }
+    dealCheckboxes().forEach(function (cb) {
+      cb.addEventListener("change", syncSelectAllState);
+    });
+    syncSelectAllState();
+  }
+
+  // ── Saved CI list: multi-select bulk actions ─────────────────────────────
+  const listAll = document.getElementById("ci-list-select-all");
+  const bulkBar = document.getElementById("ci-bulk-bar");
+  const bulkCount = document.getElementById("ci-bulk-count");
+  const base = {{ _base | tojson }};
+
+  function listBoxes() {
+    return Array.from(document.querySelectorAll(".ci-list-cb"));
+  }
+  function selectedIds() {
+    return listBoxes().filter(function (cb) { return cb.checked; }).map(function (cb) { return cb.value; });
+  }
+  function syncListBulk() {
+    const boxes = listBoxes();
+    const ids = selectedIds();
+    if (listAll && boxes.length) {
+      listAll.checked = ids.length === boxes.length;
+      listAll.indeterminate = ids.length > 0 && ids.length < boxes.length;
+    }
+    if (bulkBar) {
+      if (ids.length) bulkBar.classList.add("is-visible");
+      else bulkBar.classList.remove("is-visible");
+    }
+    if (bulkCount) bulkCount.textContent = ids.length + " selected";
+    const idWrap = document.getElementById("ci-bulk-delete-ids");
+    if (idWrap) {
+      idWrap.innerHTML = ids.map(function (id) {
+        return '<input type="hidden" name="ids" value="' + id + '" />';
+      }).join("");
+    }
+  }
+  if (listAll) {
+    listAll.addEventListener("change", function () {
+      listBoxes().forEach(function (cb) { cb.checked = listAll.checked; });
+      syncListBulk();
     });
   }
-  if (selectAllBtn) {
-    selectAllBtn.addEventListener("click", function () { setAllDeals(true); });
-  }
-  if (selectNoneBtn) {
-    selectNoneBtn.addEventListener("click", function () { setAllDeals(false); });
-  }
-  dealCheckboxes().forEach(function (cb) {
-    cb.addEventListener("change", syncSelectAllState);
+  listBoxes().forEach(function (cb) {
+    cb.addEventListener("change", syncListBulk);
   });
-  syncSelectAllState();
+  syncListBulk();
+
+  function openBulk(path) {
+    const ids = selectedIds();
+    if (!ids.length) return;
+    const url = base + path + "?ids=" + encodeURIComponent(ids.join(","));
+    window.location.href = url;
+  }
+  const printBtn = document.getElementById("ci-bulk-print");
+  const pdfBtn = document.getElementById("ci-bulk-pdf");
+  const xlsxBtn = document.getElementById("ci-bulk-xlsx");
+  if (printBtn) printBtn.addEventListener("click", function () { openBulk("/bulk-print"); });
+  if (pdfBtn) pdfBtn.addEventListener("click", function () { openBulk("/bulk-export.pdf"); });
+  if (xlsxBtn) xlsxBtn.addEventListener("click", function () { openBulk("/bulk-export.xlsx"); });
+
+  if (!form) return;
 
   function isRangeMode() {
     const r = form.querySelector('input[name="mode"][value="range"]');

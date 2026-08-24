@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% set _base = ci_base or '/generate/commission-invoices' %}
+{% block title %}Import monthly Excel — {{ ci_title or 'Commission Invoice' }}{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="/static/generate.css" />{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Import monthly commission Excel</h1>
+    <p class="subtitle">
+      <a class="link" href="{{ _base }}">← Back to invoices</a>
+      · One Excel row → one draft CI · GBInc # = GBL invoice # · Bill-to: Godavari Biorefineries Ltd
+    </p>
+  </div>
+</div>
+
+{% if import_error %}
+<div class="card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem;padding:1rem">
+  <p style="margin:0">{{ import_error }}</p>
+  <p style="margin:.75rem 0 0"><a class="link" href="{{ _base }}">Upload again</a></p>
+</div>
+{% endif %}
+
+{% if preview %}
+<p style="margin:0 0 1rem;font-size:.9rem;color:#374151">
+  <strong>{{ preview|length }}</strong> row(s) from
+  <code>{{ filename }}</code>. Review, uncheck any to skip, then create drafts.
+</p>
+
+<form method="post" action="{{ _base }}/import-excel/create">
+  <input type="hidden" name="token" value="{{ token }}" />
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;align-items:center">
+    <button type="submit" class="btn btn-primary">Create selected drafts</button>
+    <a href="{{ _base }}" class="btn btn-ghost">Cancel</a>
+    <button type="button" class="btn btn-ghost btn-sm" id="ci-imp-all">All</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="ci-imp-none">None</button>
+  </div>
+  <div class="table-wrap card" style="padding:0;overflow-x:auto">
+    <table class="data-table" style="font-size:.82rem">
+      <thead>
+        <tr>
+          <th style="width:2rem;text-align:center">
+            <input type="checkbox" id="ci-imp-select-all" checked title="Select all" />
+          </th>
+          <th>Sheet</th>
+          <th>Product</th>
+          <th>Invoice #</th>
+          <th>Ship to</th>
+          <th>Port</th>
+          <th>Qty</th>
+          <th>FOB</th>
+          <th>Commission</th>
+          <th>Sail date</th>
+          <th>PO</th>
+          <th>Missing</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in preview %}
+        <tr>
+          <td style="text-align:center">
+            <input type="checkbox" class="ci-imp-cb" name="selected" value="{{ r.index }}" checked />
+          </td>
+          <td>{{ r.sheet }}</td>
+          <td>{{ r.product }}</td>
+          <td>{{ r.invoice_number or '—' }}</td>
+          <td>{{ r.ship_to or '—' }}</td>
+          <td>{{ r.port or '—' }}</td>
+          <td>{{ r.qty }}</td>
+          <td>{{ "%.2f"|format(r.fob) }} {{ r.currency }}</td>
+          <td>{{ "%.2f"|format(r.commission) }}</td>
+          <td>{{ r.shipment_date or '—' }}</td>
+          <td>{{ r.po_no or '—' }}</td>
+          <td>{% if r.missing %}<span style="color:#b91c1c">{{ r.missing|join(', ') }}</span>{% else %}—{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+<script>
+(function () {
+  const boxes = function () { return Array.from(document.querySelectorAll(".ci-imp-cb")); };
+  const all = document.getElementById("ci-imp-select-all");
+  function sync() {
+    const b = boxes();
+    if (!all || !b.length) return;
+    all.checked = b.every(function (x) { return x.checked; });
+  }
+  if (all) all.addEventListener("change", function () {
+    boxes().forEach(function (x) { x.checked = all.checked; });
+  });
+  boxes().forEach(function (x) { x.addEventListener("change", sync); });
+  const a = document.getElementById("ci-imp-all");
+  const n = document.getElementById("ci-imp-none");
+  if (a) a.addEventListener("click", function () { boxes().forEach(function (x) { x.checked = true; }); sync(); });
+  if (n) n.addEventListener("click", function () { boxes().forEach(function (x) { x.checked = false; }); sync(); });
+})();
+</script>
+{% elif not import_error %}
+<p>No rows to import. <a class="link" href="{{ _base }}">Go back</a></p>
+{% endif %}
+{% endblock %}

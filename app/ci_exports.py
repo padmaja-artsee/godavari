@@ -27,7 +27,7 @@ from app.po_exports import export_po_pdf_html
 XLSX_DIR = get_data_dir() / "exports" / "commission_invoices" / "xlsx"
 PDF_DIR = get_data_dir() / "exports" / "commission_invoices" / "pdf"
 
-_MISSING_FILL = PatternFill("solid", fgColor="FFFDE7")  # light yellow highlight
+_MISSING_FILL = PatternFill("solid", fgColor="FECACA")  # light red — needs input
 
 _DATA_START = 19
 _DATA_SLOTS = 8

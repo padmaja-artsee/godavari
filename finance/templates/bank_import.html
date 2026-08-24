@@ -31,17 +31,26 @@
     {% for e in import_errors %}<li>{{ e }}</li>{% endfor %}
   </ul>
   {% endif %}
+  {% if imported %}
+  <p style="margin:.75rem 0 0">
+    <a href="{{ _base }}/actuals" class="f-link-small">Open Actuals</a> ·
+    <a href="{{ _base }}/expenses?tx_type=expense" class="f-link-small">View expenses</a> ·
+    <a href="{{ _base }}/expenses?tx_type=income" class="f-link-small">View income</a> ·
+    <a href="{{ _base }}/bank-import" class="f-link-small">New import</a>
+  </p>
+  {% else %}
   <p style="margin:.75rem 0 0">
     <a href="{{ _base }}/expenses?tx_type=expense" class="f-link-small">View expenses</a> ·
     <a href="{{ _base }}/expenses?tx_type=income" class="f-link-small">View income</a> ·
     <a href="{{ _base }}/bank-import" class="f-link-small">New import</a>
   </p>
+  {% endif %}
 </div>
 {% endif %}
 
 {% if not preview %}
 <div class="f-form-card" style="max-width:640px">
-  <form method="post" action="{{ _base }}/bank-import/preview" enctype="multipart/form-data">
+  <form method="post" action="{{ _base }}/bank-import/preview" enctype="multipart/form-data" id="bi-preview-form">
     <div class="f-form-grid">
       <div class="f-field full">
         <label class="f-label">Bank CSV file <span class="f-required">*</span></label>
@@ -50,13 +59,26 @@
           Expected columns: Account, ChkRef, Debit, Credit, Balance, Date, Description
         </p>
       </div>
+      <div class="f-field full">
+        <label class="f-label">Fiscal year range (sets From / To)</label>
+        <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center">
+          <a class="f-btn-sm f-btn-outline" href="{{ _base }}/bank-import?fy=2026">FY2026 (Apr 2025–Mar 2026)</a>
+          <a class="f-btn-sm f-btn-outline" href="{{ _base }}/bank-import?fy=2027">FY2027 (Apr 2026–Mar 2027)</a>
+          {% if selected_fy %}
+          <span class="f-badge f-badge-green">Using FY{{ selected_fy }}</span>
+          {% endif %}
+        </div>
+        <p class="f-text-muted" style="font-size:.8rem;margin:.35rem 0 0">
+          Transactions dated Apr–Mar land on that FY’s Actuals automatically after import.
+        </p>
+      </div>
       <div class="f-field">
         <label class="f-label">From date</label>
-        <input type="date" name="from_date" class="f-input" value="{{ from_date }}" />
+        <input type="date" name="from_date" id="bi-from" class="f-input" value="{{ from_date }}" />
       </div>
       <div class="f-field">
         <label class="f-label">To date</label>
-        <input type="date" name="to_date" class="f-input" value="{{ to_date }}" />
+        <input type="date" name="to_date" id="bi-to" class="f-input" value="{{ to_date }}" />
       </div>
       <div class="f-field full">
         <label class="f-label">Payment account <span class="f-required">*</span></label>

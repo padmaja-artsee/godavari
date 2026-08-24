@@ -678,6 +678,7 @@ async def active_leads_page(
     request: Request,
     status: str = Query("all"),
     period: str = Query("month"),
+    month: str = Query(""),
     company: str = Query(""),
     product: str = Query(""),
     po: str = Query(""),
@@ -690,11 +691,17 @@ async def active_leads_page(
 ):
     view_mode = "product" if view == "product" else "company"
     attention_days = 14 if attention in ("1", "true", "yes", "14") else None
+    month = (month or "").strip()
+    if len(month) >= 7 and month[4:5] == "-":
+        month = month[:7]
+    else:
+        month = ""
     if attention_days is not None:
         if "period" not in request.query_params:
             period = "all"
         if status in ("all", ""):
             status = "open"
+        # Needs-attention ignores a pinned calendar month unless explicitly set
     leads = list_active_leads(
         status,
         period,
@@ -706,6 +713,7 @@ async def active_leads_page(
         sort=sort,
         direction=direction,
         attention_days=attention_days,
+        month=month,
     )
     return templates.TemplateResponse(
         "deals.html",
@@ -716,6 +724,7 @@ async def active_leads_page(
             lead_groups=group_active_leads(leads, view_mode),
             status=status,
             period=period,
+            month=month,
             company=company,
             product=product,
             po=po,
@@ -1506,11 +1515,17 @@ async def leads_export_xlsx(
 async def deals_export_xlsx(
     status: str = Query("open"),
     period: str = Query("all"),
+    month: str = Query(""),
     company: str = Query(""),
     product: str = Query(""),
     q: str = Query(""),
 ):
-    rows = list_active_leads(status, period, company, product, "", q)
+    month = (month or "").strip()
+    if len(month) >= 7 and month[4:5] == "-":
+        month = month[:7]
+    else:
+        month = ""
+    rows = list_active_leads(status, period, company, product, "", q, month=month)
     fname = export_filename("gbinc-active-leads", status, "xlsx")
     return _download_response(
         to_xlsx_bytes([("Active Leads", rows, DEALS_COLUMNS)]),

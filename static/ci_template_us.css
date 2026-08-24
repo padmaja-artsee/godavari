@@ -261,10 +261,15 @@
 .ci-cell-num { text-align: center; }
 
 .ci-field-yellow { background: #fffde7 !important; }
+.ci-field-missing {
+  background: #fee2e2 !important;
+  border-color: #ef4444 !important;
+}
 
 .ci-src { font-size: 6px; margin-left: 2px; vertical-align: super; }
 .ci-src-ok { color: #008000; }
 .ci-src-warn { color: #b7950b; }
+.ci-src-miss { color: #b91c1c; font-weight: 700; }
 
 .ci-words-row {
   margin-top: 0.12in;
@@ -542,6 +547,7 @@
   }
 
   .ci-field-yellow { background: transparent !important; }
+  .ci-field-missing { background: transparent !important; border-color: transparent !important; box-shadow: none !important; }
   .doc-sig-img {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;

@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% set page = "commissions" %}
+{% block title %}Commissions — GBInc Finance{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Commissions</h1>
+    <p class="f-subtitle">
+      Upload GBL commission statement Excel once → cumulative register → generate draft Commission Invoices.
+      Same register powers MR Actual vs Projection and Finance Receivables (via CIs).
+    </p>
+  </div>
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+    <a href="{{ _base }}/commissions/register" class="f-btn-sm f-btn-outline">View register →</a>
+    <a href="{{ _base }}/commission-receivables" class="f-btn-sm f-btn-outline">Receivables →</a>
+    <a href="/generate/commission-invoices" class="f-btn-sm f-btn-outline">Saved CIs →</a>
+  </div>
+</div>
+
+{% if error %}
+<div class="f-card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem;padding:1rem">{{ error }}</div>
+{% endif %}
+{% if notice %}
+<div class="f-card" style="border-color:#86efac;background:#f0fdf4;margin-bottom:1rem;padding:1rem">{{ notice }}</div>
+{% endif %}
+{% if generate_error %}
+<div class="f-card" style="border-color:#fca5a5;background:#fef2f2;margin-bottom:1rem;padding:1rem">{{ generate_error }}</div>
+{% endif %}
+
+<div class="f-summary-grid" style="grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));margin-bottom:1.25rem">
+  <div class="f-summary-card">
+    <div class="f-summary-label">Register lines</div>
+    <div class="f-sum-val" style="font-size:1.25rem">{{ stats.row_count }}</div>
+  </div>
+  <div class="f-summary-card">
+    <div class="f-summary-label">Total MT</div>
+    <div class="f-sum-val" style="font-size:1.25rem">{{ stats.qty_total | num }}</div>
+  </div>
+  <div class="f-summary-card f-card-income">
+    <div class="f-summary-label">Total commission</div>
+    <div class="f-sum-val" style="font-size:1.25rem">${{ stats.commission_total | money }}</div>
+  </div>
+</div>
+
+<div class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem">
+  <h2 class="f-card-title" style="margin-bottom:.35rem">1. Upload commission statement</h2>
+  <p class="f-text-muted" style="font-size:.85rem;margin:0 0 1rem">
+    Monthly GBINC CS workbooks (all product sheets). Sail month from vessel sail date.
+    Re-uploading the same workbook replaces its lines; the same invoice in different files is kept and flagged as DUPLICATE.
+  </p>
+  {% if not preview %}
+  <form method="post" action="{{ _base }}/commissions/upload" enctype="multipart/form-data"
+        style="display:flex;gap:.65rem;flex-wrap:wrap;align-items:flex-end">
+    <div class="f-filter-group" style="flex:1;min-width:14rem">
+      <label class="f-filter-label">Excel file</label>
+      <input type="file" name="file" class="f-select-sm" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required style="padding:.35rem" />
+    </div>
+    <button type="submit" class="f-btn-sm">Upload &amp; add to register</button>
+  </form>
+  {% else %}
+  <div style="margin-bottom:1rem;padding:.75rem 1rem;background:#f0fdf4;border-radius:6px;font-size:.9rem">
+    Parsed <strong>{{ preview.row_count }}</strong> line{{ 's' if preview.row_count != 1 else '' }}
+    from <strong>{{ uploaded_name }}</strong>
+    {% if saved_as %}(saved as {{ saved_as }}){% endif %}.
+    {% if merge %}
+    Register: <strong>{{ merge.inserted }}</strong> added
+    {% if merge.replaced %}(replaced {{ merge.replaced }}){% endif %}{% if merge.skipped %},
+    {{ merge.skipped }} skipped{% endif %}.
+    {% endif %}
+  </div>
+  <div style="overflow:auto;max-height:280px;margin-bottom:1rem">
+    <table class="f-table" style="font-size:.78rem">
+      <thead>
+        <tr>
+          {% for key, label in display_columns %}
+          <th>{{ label }}</th>
+          {% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in preview.rows[:40] %}
+        <tr>
+          <td>{{ row.sr_no }}</td>
+          <td>{{ row.sail_month }}</td>
+          <td>{{ row.invoice_no }}</td>
+          <td>{{ row.vessel_sail_date }}</td>
+          <td>{{ row.po_no or '—' }}</td>
+          <td>{{ row.po_date or '—' }}</td>
+          <td>{{ row.ship_to_party }}</td>
+          <td>{{ row.port_of_discharge }}</td>
+          <td class="num">{{ row.qty | num }}</td>
+          <td>{{ row.currency }}</td>
+          <td class="num">{{ row.rate_per_mt | money }}</td>
+          <td class="num">{{ row.value | money }}</td>
+          <td class="num">{{ row.ocean_freight | money }}</td>
+          <td class="num">{{ row.insurance | money }}</td>
+          <td class="num">{{ row.fob_value | money }}</td>
+          <td class="num">{{ row.commission | money }}</td>
+          <td>{{ row.commission_currency }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if preview.rows|length > 40 %}
+    <p class="f-text-muted" style="font-size:.8rem;margin:.5rem 0 0">Showing first 40 of {{ preview.rows|length }} — see full register for all.</p>
+    {% endif %}
+  </div>
+  <a href="{{ _base }}/commissions" class="f-btn-sm f-btn-outline">Upload another</a>
+  {% endif %}
+</div>
+
+<div class="f-card" style="padding:1rem 1.1rem;margin-bottom:1.25rem">
+  <h2 class="f-card-title" style="margin-bottom:.35rem">2. Generate commission invoices</h2>
+  <p class="f-text-muted" style="font-size:.85rem;margin:0 0 1rem">
+    Create draft CIs from register lines for a sail month. Rows that already have a saved CI are unchecked by default.
+    Edit and print from <a href="/generate/commission-invoices">Generate → Commission Invoices</a>.
+  </p>
+  <form method="post" action="{{ _base }}/commissions/generate"
+        style="display:flex;gap:.65rem;flex-wrap:wrap;align-items:flex-end">
+    <div class="f-filter-group">
+      <label class="f-filter-label">Sail month</label>
+      <select name="month" class="f-select-sm" required>
+        <option value="">Select month…</option>
+        {% for m in months %}
+        <option value="{{ m }}" {% if m == generate_month %}selected{% endif %}>{{ m|title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <button type="submit" class="f-btn-sm" {% if not months %}disabled{% endif %}>Preview &amp; generate drafts</button>
+  </form>
+  {% if not months %}
+  <p class="f-text-muted" style="font-size:.82rem;margin:.75rem 0 0">Upload a commission statement first.</p>
+  {% endif %}
+</div>
+
+<div class="f-card" style="padding:1rem 1.1rem">
+  <h2 class="f-card-title" style="margin-bottom:.35rem">Uploaded input files</h2>
+  <p class="f-text-muted" style="font-size:.85rem;margin:0 0 1rem">Delete removes the file and its lines from the register.</p>
+  {% if input_files %}
+  <ul style="list-style:none;margin:0;padding:0">
+    {% for f in input_files %}
+    <li style="display:flex;justify-content:space-between;gap:1rem;align-items:center;padding:.65rem 0;border-bottom:1px solid var(--grey-b,#e5e7eb)">
+      <div>
+        <div style="font-weight:600">{{ f.display_name }}</div>
+        <div class="f-text-muted" style="font-size:.8rem">
+          {{ f.row_count }} line{{ 's' if f.row_count != 1 else '' }}
+          · Sheets: {{ f.sheets }}
+          {% if f.uploaded_at %} · {{ f.uploaded_at[:19].replace('T', ' ') }}{% endif %}
+        </div>
+      </div>
+      <form method="post" action="{{ _base }}/commissions/delete-file"
+            onsubmit="return confirm('Delete “{{ f.display_name }}” and remove its {{ f.row_count }} line(s) from the register?');">
+        <input type="hidden" name="key" value="{{ f.key }}" />
+        <button type="submit" class="f-btn-sm" style="color:#b91c1c;border-color:#fecaca">Delete</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="f-text-muted" style="margin:0">No input files yet.</p>
+  {% endif %}
+</div>
+{% endblock %}

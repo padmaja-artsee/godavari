@@ -582,12 +582,16 @@ def get_fiscal_years() -> list[int]:
     from datetime import date
     today = date.today()
     current = today.year + 1 if today.month >= 4 else today.year
+    # Always offer current + prior FY so users can import/view 25-26 before data exists.
+    seeded = {current, current - 1}
     with get_db() as conn:
         rows = conn.execute(
             "SELECT DISTINCT fiscal_year FROM budget "
-            "UNION SELECT DISTINCT fiscal_year FROM transactions"
+            "UNION SELECT DISTINCT fiscal_year FROM transactions "
+            "UNION SELECT DISTINCT fiscal_year FROM actuals_manual "
+            "UNION SELECT DISTINCT fiscal_year FROM fy_archive"
         ).fetchall()
-    return sorted({r[0] for r in rows} | {current}, reverse=True)
+    return sorted({r[0] for r in rows} | seeded, reverse=True)
 
 
 def is_archived(fiscal_year: int) -> bool:

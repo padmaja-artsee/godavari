@@ -87,6 +87,23 @@ def dollars_in_words(amount: float, currency: str = "USD") -> str:
     return words
 
 
+def invoice_date_from_sail(sail_date: str) -> str:
+    """Invoice date = last calendar day of the month that contains the sail date."""
+    import calendar
+
+    s = (sail_date or "").strip()[:10]
+    if len(s) < 10 or s[4] != "-" or s[7] != "-":
+        return ""
+    try:
+        y, m = int(s[0:4]), int(s[5:7])
+        if not (1 <= m <= 12):
+            return ""
+        last = calendar.monthrange(y, m)[1]
+        return f"{y:04d}-{m:02d}-{last:02d}"
+    except ValueError:
+        return ""
+
+
 # Backwards-compatible alias used by older call sites / exports
 amount_in_words = dollars_in_words
 
@@ -363,6 +380,12 @@ def _finalize_ci_save(
     """Recalculate line totals and always refresh amount in words from commission total."""
     totals = calculate_ci_totals(line_items, _float(data.get("vat_percent")))
     out = dict(data)
+    sail = (out.get("shipment_date") or "").strip()[:10]
+    if not sail and totals["line_items"]:
+        sail = (totals["line_items"][0].get("shipment_date") or "").strip()[:10]
+    inv_from_sail = invoice_date_from_sail(sail)
+    if inv_from_sail:
+        out["invoice_date"] = inv_from_sail
     out["notice_date"] = out.get("invoice_date", "")
     out["amount_in_words"] = dollars_in_words(
         totals["total_commission"],
@@ -451,7 +474,47 @@ def _load_ci_rows(conn, ci_id: int) -> dict[str, Any] | None:
     return enrich_ci(ci)
 
 
-def list_commission_invoices(variant: str | None = None) -> list[dict[str, Any]]:
+_CI_LIST_SORT = {
+    "invoice_number": "ci.invoice_number COLLATE NOCASE",
+    "invoice_date": "ci.invoice_date",
+    "bill_to": "ci.bill_to_name COLLATE NOCASE",
+    "product": "li.product_description COLLATE NOCASE",
+    "commission": "COALESCE(li.commission_value, 0)",
+    "status": "ci.status COLLATE NOCASE",
+    "created": "ci.created_at",
+}
+
+
+def list_commission_invoice_products(variant: str | None = None) -> list[str]:
+    sql = """
+        SELECT DISTINCT TRIM(li.product_description) AS product
+        FROM commission_invoice_line_items li
+        JOIN commission_invoices ci ON ci.id = li.commission_invoice_id
+        WHERE TRIM(COALESCE(li.product_description, '')) != ''
+    """
+    params: list[Any] = []
+    if variant:
+        sql += " AND COALESCE(ci.variant, ?) = ?"
+        params.extend([VARIANT_GBINC, variant])
+    sql += " ORDER BY product COLLATE NOCASE"
+    with get_db() as conn:
+        rows = conn.execute(sql, params).fetchall()
+    return [r["product"] for r in rows if r["product"]]
+
+
+def list_commission_invoices(
+    variant: str | None = None,
+    *,
+    sort: str = "created",
+    direction: str = "desc",
+    status: str = "",
+    product: str = "",
+    q: str = "",
+    date_from: str = "",
+    date_to: str = "",
+) -> list[dict[str, Any]]:
+    order_col = _CI_LIST_SORT.get(sort) or _CI_LIST_SORT["created"]
+    order_dir = "ASC" if str(direction).lower() == "asc" else "DESC"
     sql = """
             SELECT ci.*,
                    li.product_description AS product,
@@ -461,12 +524,40 @@ def list_commission_invoices(variant: str | None = None) -> list[dict[str, Any]]
             LEFT JOIN commission_invoice_line_items li
               ON li.commission_invoice_id = ci.id AND li.sort_order = 0
             LEFT JOIN customers c ON c.id = ci.customer_id
+            WHERE 1=1
             """
-    params: tuple = ()
+    params: list[Any] = []
     if variant:
-        sql += " WHERE COALESCE(ci.variant, ?) = ?"
-        params = (VARIANT_GBINC, variant)
-    sql += " ORDER BY ci.updated_at DESC, ci.id DESC"
+        sql += " AND COALESCE(ci.variant, ?) = ?"
+        params.extend([VARIANT_GBINC, variant])
+    st = (status or "").strip()
+    if st and st.lower() not in ("all", ""):
+        sql += " AND LOWER(COALESCE(ci.status, 'Draft')) = LOWER(?)"
+        params.append(st)
+    prod = (product or "").strip()
+    if prod:
+        sql += " AND LOWER(TRIM(COALESCE(li.product_description, ''))) = LOWER(?)"
+        params.append(prod)
+    query = (q or "").strip()
+    if query:
+        like = f"%{query}%"
+        sql += """ AND (
+            ci.invoice_number LIKE ? COLLATE NOCASE
+            OR ci.bill_to_name LIKE ? COLLATE NOCASE
+            OR ci.customer_order_no LIKE ? COLLATE NOCASE
+            OR li.product_description LIKE ? COLLATE NOCASE
+            OR li.gbl_invoice_number LIKE ? COLLATE NOCASE
+        )"""
+        params.extend([like, like, like, like, like])
+    df = (date_from or "").strip()[:10]
+    if df:
+        sql += " AND substr(COALESCE(ci.invoice_date, ''), 1, 10) >= ?"
+        params.append(df)
+    dt = (date_to or "").strip()[:10]
+    if dt:
+        sql += " AND substr(COALESCE(ci.invoice_date, ''), 1, 10) <= ?"
+        params.append(dt)
+    sql += f" ORDER BY {order_col} {order_dir}, ci.id DESC"
     with get_db() as conn:
         rows = conn.execute(sql, params).fetchall()
     return [enrich_ci(dict(r)) for r in rows]
@@ -620,11 +711,12 @@ def update_commission_invoice_dates(
     notice_date: str = "",
     line_shipment_dates: list[str] | None = None,
 ) -> bool:
-    inv = (invoice_date or "").strip()[:10]
+    ship_dates = [(d or "").strip()[:10] for d in (line_shipment_dates or [])]
+    sail = next((d for d in ship_dates if d), "")
+    inv = invoice_date_from_sail(sail) or (invoice_date or "").strip()[:10]
     notice = inv
     if not inv:
         return False
-    ship_dates = [(d or "").strip()[:10] for d in (line_shipment_dates or [])]
     now = now_iso()
     with get_db() as conn:
         row = conn.execute(
@@ -639,7 +731,7 @@ def update_commission_invoice_dates(
                 SET invoice_date = ?, notice_date = ?, shipment_date = ?, updated_at = ?
                 WHERE id = ?
                 """,
-                (inv, notice, next((d for d in ship_dates if d), ""), now, ci_id),
+                (inv, notice, sail, now, ci_id),
             )
         else:
             conn.execute(
@@ -1020,16 +1112,17 @@ def create_ci_from_deals(
 
     ci["deal_id"]      = first["id"]
     ci["customer_id"]  = first.get("customer_id")
-    ci["invoice_date"] = (
+    first_etd = (first.get("etd_india") or first.get("shipped_date") or first.get("gbl_invoice_date") or "")[:10]
+    ci["shipment_date"] = first_etd
+    inv = invoice_date_from_sail(first_etd) or (
         first.get("gbl_invoice_date") or first.get("po_date") or first.get("deal_date")
         or ci["invoice_date"]
     )[:10]
+    ci["invoice_date"] = inv
     ci["notice_date"] = ci["invoice_date"]
     # GBInc invoice # is entered on the CI (may span multiple deals); not copied from deal.
     ci["customer_order_no"] = first.get("po_number") or ""
     ci["delivery_port"] = first.get("destination") or ""
-    first_etd = (first.get("etd_india") or first.get("shipped_date") or first.get("gbl_invoice_date") or "")[:10]
-    ci["shipment_date"] = first_etd
     ci["container_numbers"] = first.get("container_number") or ""
     ci["port_of_loading"] = first.get("etd_india") and "India" or (ci.get("port_of_loading") or "")
 

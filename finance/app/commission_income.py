@@ -3,10 +3,10 @@
 Note: Finance Actuals no longer autopopulates from this module — Commission
 Income on Actuals comes from bank statement categorization (and manual adds).
 This module remains available for reporting / consolidated CI exports.
-"""
 
-Starting 2026-07-01, monthly Commission Income is summed from saved CIs
-(invoice_date) and merged into finance actuals → Total Income.
+Historically (from 2026-07-01), monthly Commission Income could be summed from
+saved CIs (invoice_date) and merged into finance actuals → Total Income;
+Actuals no longer do that automatically.
 """
 from __future__ import annotations
 

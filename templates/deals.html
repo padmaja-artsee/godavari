@@ -5,7 +5,8 @@
 {% set direction = direction|default('asc') %}
 {% set stage = stage|default('all') %}
 {% set attention = attention|default(false) %}
-{% set qs_base = 'status=' ~ status ~ '&period=' ~ period ~ '&company=' ~ (company|urlencode) ~ '&product=' ~ (product|urlencode) ~ '&po=' ~ (po|urlencode) ~ '&q=' ~ (q|urlencode) ~ '&stage=' ~ stage ~ ('&attention=1' if attention else '') %}
+{% set month = month|default('') %}
+{% set qs_base = 'status=' ~ status ~ '&period=' ~ period ~ '&month=' ~ (month|urlencode) ~ '&company=' ~ (company|urlencode) ~ '&product=' ~ (product|urlencode) ~ '&po=' ~ (po|urlencode) ~ '&q=' ~ (q|urlencode) ~ '&stage=' ~ stage ~ ('&attention=1' if attention else '') %}
 {% macro sort_link(col, label) -%}
   {% set next_dir = 'desc' if sort == col and direction != 'desc' else 'asc' %}
   <a class="sheet-sort {% if sort == col %}is-active{% endif %}"
@@ -21,7 +22,7 @@
   </div>
   <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
     <button type="button" class="btn btn-ghost btn-sm" id="toggle-cols" aria-pressed="false" title="Show or hide extra columns">Columns: Review</button>
-    <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&company={{ company }}&product={{ product }}&q={{ q }}&stage={{ stage }}"
+    <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&month={{ month|urlencode }}&company={{ company }}&product={{ product }}&q={{ q }}&stage={{ stage }}"
        class="btn btn-ghost btn-sm">↓ Export Excel</a>
     <button type="button" class="btn btn-primary" id="open-master-dialog">+ Add / Upload</button>
   </div>
@@ -30,12 +31,12 @@
 <div class="card deals-card">
   <div class="deals-presets">
     <a class="filter-pill {% if not attention %}active{% endif %}"
-       href="/deals?status=all&period={{ period }}&stage=all&sort=stage&direction=asc">All</a>
+       href="/deals?status=all&period={{ period }}&month={{ month|urlencode }}&stage=all&sort=stage&direction=asc">All</a>
     <a class="filter-pill {% if attention %}active{% endif %}"
        href="/deals?attention=1&status=open&period=all&stage=all&sort=last_touch&direction=asc"
        title="Open deals stale {{ attention_days|default(14) }}+ days, or still in First contact / RFQ">Needs attention</a>
   </div>
-  <form class="deals-toolbar" method="get" action="/deals">
+  <form class="deals-toolbar" method="get" action="/deals" id="dealsFilterForm">
     <input type="hidden" name="sort" value="{{ sort }}" />
     <input type="hidden" name="direction" value="{{ direction }}" />
     {% if attention %}<input type="hidden" name="attention" value="1" />{% endif %}
@@ -61,14 +62,19 @@
         </select>
       </div>
       <div>
-        <label class="field-label">Date range</label>
-        <select name="period" onchange="this.form.submit()">
-          <option value="week" {% if period == 'week' %}selected{% endif %}>This week</option>
-          <option value="month" {% if period == 'month' %}selected{% endif %}>This month</option>
-          <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>This quarter</option>
-          <option value="year" {% if period == 'year' %}selected{% endif %}>This year</option>
-          <option value="all" {% if period == 'all' %}selected{% endif %}>All time</option>
+        <label class="field-label">Quick range</label>
+        <select name="period" id="dealsPeriod" onchange="onDealsPeriodChange(this)">
+          <option value="week" {% if period == 'week' and not month %}selected{% endif %}>This week</option>
+          <option value="month" {% if period == 'month' and not month %}selected{% endif %}>This month</option>
+          <option value="quarter" {% if period == 'quarter' and not month %}selected{% endif %}>This quarter</option>
+          <option value="year" {% if period == 'year' and not month %}selected{% endif %}>This year</option>
+          <option value="all" {% if period == 'all' and not month %}selected{% endif %}>All time</option>
         </select>
+      </div>
+      <div>
+        <label class="field-label">Specific month</label>
+        <input type="month" name="month" id="dealsMonth" value="{{ month }}"
+               onchange="onDealsMonthChange(this)" style="min-width:9.5rem" />
       </div>
     </div>
     <div class="toolbar-search">
@@ -174,6 +180,19 @@
 {% include "_master_update_dialog.html" %}
 <script src="/static/master_update.js"></script>
 <script>
+function onDealsMonthChange(el) {
+  if (el.value) {
+    // Specific month wins over quick range
+    var period = document.getElementById('dealsPeriod');
+    if (period) period.value = 'all';
+  }
+  el.form.submit();
+}
+function onDealsPeriodChange(el) {
+  var month = document.getElementById('dealsMonth');
+  if (month) month.value = '';
+  el.form.submit();
+}
 document.querySelectorAll('.sheet-row[data-href]').forEach(function (row) {
   row.addEventListener('click', function (e) {
     if (e.target.closest('a, button')) return;

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% set page = "commissions" %}
+{% block title %}Generate CIs — {{ month }}{% endblock %}
+{% block content %}
+<div class="f-page-header">
+  <div>
+    <h1 class="f-title">Generate commission invoices</h1>
+    <p class="f-subtitle">
+      From register · Sail month <strong>{{ month|title }}</strong> · One row → one draft CI ·
+      Bill-to: Godavari Biorefineries Ltd
+    </p>
+  </div>
+  <a href="{{ _base }}/commissions" class="f-btn-sm f-btn-outline">← Commissions</a>
+</div>
+
+<p style="margin:0 0 1rem;font-size:.9rem;color:#374151">
+  <strong>{{ preview|length }}</strong> row(s) from {{ filename }}.
+  Rows that already have a saved CI are unchecked. Review, then create drafts.
+</p>
+
+<form method="post" action="{{ _base }}/commissions/generate/create">
+  <input type="hidden" name="token" value="{{ token }}" />
+  <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem;align-items:center">
+    <button type="submit" class="f-btn-sm">Create selected drafts</button>
+    <a href="{{ _base }}/commissions" class="f-btn-sm f-btn-outline">Cancel</a>
+    <button type="button" class="f-btn-sm f-btn-outline" id="ci-imp-all">All new</button>
+    <button type="button" class="f-btn-sm f-btn-outline" id="ci-imp-none">None</button>
+  </div>
+  <div class="f-card" style="padding:0;overflow:auto">
+    <table class="f-table" style="font-size:.82rem">
+      <thead>
+        <tr>
+          <th style="width:2rem;text-align:center">
+            <input type="checkbox" id="ci-imp-select-all" title="Select all new" />
+          </th>
+          <th>Sheet</th>
+          <th>Product</th>
+          <th>Invoice #</th>
+          <th>Ship to</th>
+          <th>Port</th>
+          <th class="num">Qty</th>
+          <th class="num">FOB</th>
+          <th class="num">Commission</th>
+          <th>Sail date</th>
+          <th>PO</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in preview %}
+        <tr {% if r.already_exists %}style="opacity:.65"{% endif %}>
+          <td style="text-align:center">
+            <input type="checkbox" class="ci-imp-cb" name="selected" value="{{ r.index }}"
+                   {% if r.selected_default %}checked{% endif %}
+                   data-new="{% if r.already_exists %}0{% else %}1{% endif %}" />
+          </td>
+          <td>{{ r.sheet }}</td>
+          <td>{{ r.product }}</td>
+          <td>{{ r.invoice_number or '—' }}</td>
+          <td>{{ r.ship_to or '—' }}</td>
+          <td>{{ r.port or '—' }}</td>
+          <td class="num">{{ r.qty }}</td>
+          <td class="num">{{ "%.2f"|format(r.fob) }} {{ r.currency }}</td>
+          <td class="num">{{ "%.2f"|format(r.commission) }}</td>
+          <td>{{ r.shipment_date or '—' }}</td>
+          <td>{{ r.po_no or '—' }}</td>
+          <td>
+            {% if r.already_exists %}
+            <span style="color:#b45309">Already has CI</span>
+            {% elif r.missing %}
+            <span style="color:#b91c1c">Missing: {{ r.missing|join(', ') }}</span>
+            {% else %}
+            <span style="color:#15803d">Ready</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</form>
+<script>
+(function () {
+  var boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('.ci-imp-cb')); };
+  var all = document.getElementById('ci-imp-select-all');
+  if (all) {
+    all.addEventListener('change', function () {
+      boxes().forEach(function (cb) {
+        if (cb.getAttribute('data-new') === '1') cb.checked = all.checked;
+      });
+    });
+  }
+  var btnAll = document.getElementById('ci-imp-all');
+  if (btnAll) btnAll.addEventListener('click', function () {
+    boxes().forEach(function (cb) {
+      if (cb.getAttribute('data-new') === '1') cb.checked = true;
+    });
+  });
+  var btnNone = document.getElementById('ci-imp-none');
+  if (btnNone) btnNone.addEventListener('click', function () {
+    boxes().forEach(function (cb) { cb.checked = false; });
+  });
+})();
+</script>
+{% endblock %}

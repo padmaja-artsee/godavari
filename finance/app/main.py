@@ -14,6 +14,7 @@ from fastapi import FastAPI, File, Form, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from urllib.parse import quote
 
 from finance.app.database import (
     FY_MONTHS, MONTH_LABELS, SECTION_LABELS, SECTION_ORDER,
@@ -89,6 +90,31 @@ def _fmt_date(d: str) -> str:
 
 
 templates.env.filters["fmtdate"] = _fmt_date
+
+
+def _fmt_money(v) -> str:
+    try:
+        if v is None or v == "":
+            return "—"
+        return f"{float(v):,.2f}"
+    except (TypeError, ValueError):
+        return str(v or "—")
+
+
+def _fmt_num(v) -> str:
+    try:
+        if v is None or v == "":
+            return "—"
+        n = float(v)
+        if n == int(n):
+            return f"{int(n):,}"
+        return f"{n:,.3f}".rstrip("0").rstrip(".")
+    except (TypeError, ValueError):
+        return str(v or "—")
+
+
+templates.env.filters["money"] = _fmt_money
+templates.env.filters["num"] = _fmt_num
 
 
 def _row_total(item: dict, lid: int, full: dict, by_name: dict) -> float:
@@ -423,42 +449,174 @@ def _fy_month_slice(from_month: int, to_month: int) -> list[int]:
     return FY_MONTHS[i0 : i1 + 1]
 
 
-def _analysis_period_label(months: list[int], fy: int) -> str:
-    if not months or months == list(FY_MONTHS):
-        return f"FY{fy}"
-    a, b = months[0], months[-1]
-    ya = fy - 1 if a >= 4 else fy
-    yb = fy - 1 if b >= 4 else fy
-    if a == b:
-        return f"{MONTH_LABELS[a]} {ya}"
-    if ya == yb:
-        return f"{MONTH_LABELS[a]}–{MONTH_LABELS[b]} {ya}"
-    return f"{MONTH_LABELS[a]} {ya} – {MONTH_LABELS[b]} {yb}"
+def _parse_ym(value: str, fallback: tuple[int, int]) -> tuple[int, int]:
+    """Parse YYYY-MM from <input type=month> into (year, month)."""
+    try:
+        y_s, m_s = (value or "").strip().split("-", 1)
+        y, m = int(y_s), int(m_s)
+        if 1 <= m <= 12 and 1990 <= y <= 2100:
+            return y, m
+    except (TypeError, ValueError):
+        pass
+    return fallback
+
+
+def _iter_cal_months(start_y: int, start_m: int, end_y: int, end_m: int, limit: int = 24):
+    if (start_y, start_m) > (end_y, end_m):
+        start_y, start_m, end_y, end_m = end_y, end_m, start_y, start_m
+    y, m = start_y, start_m
+    n = 0
+    while (y, m) <= (end_y, end_m) and n < limit:
+        yield y, m
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+        n += 1
+
+
+def _period_point(cal_year: int, month: int) -> dict:
+    fy = cal_year + 1 if month >= 4 else cal_year
+    return {
+        "fy": fy,
+        "month": month,
+        "cal_year": cal_year,
+        "label": f"{MONTH_LABELS[month]} {cal_year}",
+    }
+
+
+def _analysis_period_points_fy(fy: int, from_month: int, to_month: int) -> list[dict]:
+    months = _fy_month_slice(from_month or FY_MONTHS[0], to_month or FY_MONTHS[-1])
+    return [
+        _period_point(fy - 1 if m >= 4 else fy, m)
+        for m in months
+    ]
+
+
+def _analysis_period_label_points(points: list[dict], mode: str, fy: int | None = None) -> str:
+    if not points:
+        return "—"
+    if mode == "fy" and fy:
+        if len(points) == 12:
+            return f"FY{fy} ({fy - 1}-{fy % 100:02d})"
+        a, b = points[0], points[-1]
+        if a["month"] == b["month"] and a["cal_year"] == b["cal_year"]:
+            return f"{MONTH_LABELS[a['month']]} FY{fy}"
+        return f"{MONTH_LABELS[a['month']]}–{MONTH_LABELS[b['month']]} FY{fy}"
+    a, b = points[0], points[-1]
+    if a["label"] == b["label"]:
+        return a["label"]
+    return f"{a['label']} – {b['label']}"
+
+
+def _load_fy_grids(fy: int, items: list[dict]) -> tuple[dict, dict]:
+    ob = get_opening_balance(fy)
+    return (
+        compute_grid(get_budget_grid(fy), items, ob),
+        _combined_actuals(fy, items, ob),
+    )
 
 
 @app.get("/analysis", response_class=HTMLResponse)
 async def analysis_page(
     request: Request,
+    mode: str = Query("fy"),
     fy: int = Query(0),
+    compare_fy: int = Query(0),
     from_month: int = Query(0),
     to_month: int = Query(0),
+    start: str = Query(""),
+    end: str = Query(""),
+    compare_prior: int = Query(0),
+    expenses_only: int = Query(0),
 ):
     import json
+    from datetime import date
 
     fys = get_fiscal_years()
     if not fy:
         fy = fys[0]
-    months = _fy_month_slice(
-        from_month or FY_MONTHS[0],
-        to_month or FY_MONTHS[-1],
-    )
-    from_m, to_m = months[0], months[-1]
-    period_label = _analysis_period_label(months, fy)
+    mode = "calendar" if mode == "calendar" else "fy"
+    today = date.today()
+
+    # Defaults for calendar inputs: current fiscal year span
+    default_start = f"{fy - 1}-04"
+    default_end = f"{fy}-03"
+
+    if mode == "calendar":
+        sy, sm = _parse_ym(start, (fy - 1, 4))
+        ey, em = _parse_ym(end, (fy, 3))
+        points = [_period_point(y, m) for y, m in _iter_cal_months(sy, sm, ey, em)]
+        if not points:
+            points = _analysis_period_points_fy(fy, 4, 3)
+            sy, sm = points[0]["cal_year"], points[0]["month"]
+            ey, em = points[-1]["cal_year"], points[-1]["month"]
+        start_val = f"{sy:04d}-{sm:02d}"
+        end_val = f"{ey:04d}-{em:02d}"
+        # Primary FY label for cards = FY of the end month
+        fy = points[-1]["fy"]
+        compare = 0
+        compare_points = []
+        if compare_prior:
+            compare_points = [
+                _period_point(p["cal_year"] - 1, p["month"]) for p in points
+            ]
+            compare = -1  # flag: prior calendar year (same months)
+        period_label = _analysis_period_label_points(points, "calendar")
+        if compare_points:
+            period_label = f"{period_label} vs prior year"
+        from_m, to_m = points[0]["month"], points[-1]["month"]
+    else:
+        compare = compare_fy if compare_fy and compare_fy != fy and compare_fy in fys else 0
+        points = _analysis_period_points_fy(fy, from_month, to_month)
+        from_m, to_m = points[0]["month"], points[-1]["month"]
+        period_label = _analysis_period_label_points(points, "fy", fy)
+        if compare:
+            period_label = f"{period_label} vs FY{compare} ({compare - 1}-{compare % 100:02d})"
+            compare_points = _analysis_period_points_fy(compare, from_m, to_m)
+        else:
+            compare_points = []
+        start_val = default_start
+        end_val = default_end
+        # Keep calendar defaults aligned to selected FY for when user switches mode
+        start_val = f"{fy - 1}-04"
+        end_val = f"{fy}-03"
 
     items = list_line_items()
-    ob = get_opening_balance(fy)
-    b_grid = compute_grid(get_budget_grid(fy), items, ob)
-    a_grid = _combined_actuals(fy, items, ob)
+    grid_cache: dict[int, tuple[dict, dict]] = {}
+
+    def grids(fyear: int) -> tuple[dict, dict]:
+        if fyear not in grid_cache:
+            grid_cache[fyear] = _load_fy_grids(fyear, items)
+        return grid_cache[fyear]
+
+    def series_for(pts: list[dict], lid: int, kind: str) -> list[float]:
+        out = []
+        for p in pts:
+            b_grid, a_grid = grids(p["fy"])
+            src = b_grid if kind == "budget" else a_grid
+            out.append(src.get((lid, p["month"]), 0))
+        return out
+
+    def section_series(pts: list[dict], sec_items: list[dict], kind: str) -> list[float]:
+        n = len(pts)
+        totals = [0.0] * n
+        for it in sec_items:
+            vals = series_for(pts, it["id"], kind)
+            for i, v in enumerate(vals):
+                totals[i] += v
+        return totals
+
+    has_compare = bool(compare_points)
+    compare_label = (
+        f"FY{compare}" if mode == "fy" and compare > 0
+        else "Prior year" if has_compare
+        else ""
+    )
+    primary_label = (
+        f"FY{fy}" if mode == "fy"
+        else period_label.split(" vs ")[0]
+    )
 
     SUMMARY_LINES = [
         ("income",     "Income"),
@@ -470,45 +628,81 @@ async def analysis_page(
     ]
     summary = []
     for sec, label in SUMMARY_LINES:
+        if expenses_only and sec == "income":
+            continue
         sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
-        planned = sum(b_grid.get((i["id"], m), 0) for i in sec_items for m in months)
-        actual = sum(a_grid.get((i["id"], m), 0) for i in sec_items for m in months)
+        planned_s = section_series(points, sec_items, "budget")
+        actual_s = section_series(points, sec_items, "actual")
+        planned = sum(planned_s)
+        actual = sum(actual_s)
         var = planned - actual if sec != "income" else actual - planned
         var_pct = (var / planned * 100) if planned else None
-        summary.append({
+        row = {
             "label": label, "planned": planned, "actual": actual,
             "variance": var, "var_pct": var_pct, "section": sec,
-        })
+        }
+        if has_compare:
+            c_actual = sum(section_series(compare_points, sec_items, "actual"))
+            row["compare_actual"] = c_actual
+            row["yoy"] = actual - c_actual
+        summary.append(row)
 
-    chart_months = [MONTH_LABELS[m] for m in months]
+    chart_months = [p["label"] for p in points]
+    # Short labels when all points share one calendar year
+    if len({p["cal_year"] for p in points}) == 1:
+        chart_months = [MONTH_LABELS[p["month"]] for p in points]
+
     line_data = {}
     for i in items:
         if i["is_calculated"]:
             continue
-        line_data[i["id"]] = {
+        entry = {
             "name": i["name"],
             "section": i["section"],
-            "budget": [b_grid.get((i["id"], m), 0) for m in months],
-            "actual": [a_grid.get((i["id"], m), 0) for m in months],
+            "budget": series_for(points, i["id"], "budget"),
+            "actual": series_for(points, i["id"], "actual"),
         }
+        if has_compare:
+            entry["compare_budget"] = series_for(compare_points, i["id"], "budget")
+            entry["compare_actual"] = series_for(compare_points, i["id"], "actual")
+        line_data[i["id"]] = entry
 
     section_totals = {}
     for sec, label in SUMMARY_LINES:
         sec_items = [i for i in items if i["section"] == sec and not i["is_calculated"]]
-        section_totals[sec] = {
+        st = {
             "label": label,
-            "budget": [sum(b_grid.get((it["id"], m), 0) for it in sec_items) for m in months],
-            "actual": [sum(a_grid.get((it["id"], m), 0) for it in sec_items) for m in months],
+            "budget": section_series(points, sec_items, "budget"),
+            "actual": section_series(points, sec_items, "actual"),
         }
+        if has_compare:
+            st["compare_budget"] = section_series(compare_points, sec_items, "budget")
+            st["compare_actual"] = section_series(compare_points, sec_items, "actual")
+        section_totals[sec] = st
+
+    cal_years = sorted({
+        today.year - 1, today.year, today.year + 1,
+        *[y - 1 for y in fys], *fys,
+    })
 
     return templates.TemplateResponse("analysis.html", _ctx(
         request,
+        mode=mode,
         fy=fy,
+        compare_fy=compare if mode == "fy" else 0,
+        compare_prior=bool(compare_prior) if mode == "calendar" else False,
+        has_compare=has_compare,
+        compare_label=compare_label,
+        primary_label=primary_label,
+        expenses_only=bool(expenses_only),
         fiscal_years=fys,
         from_month=from_m,
         to_month=to_m,
+        start=start_val,
+        end=end_val,
         months=FY_MONTHS,
         month_labels=MONTH_LABELS,
+        cal_years=cal_years,
         period_label=period_label,
         summary=summary,
         chart_months=chart_months,
@@ -628,6 +822,342 @@ async def export_ci_consolidated_finance():
 
 
 # ---------------------------------------------------------------------------
+# Commission Receivables (CI invoiced vs bank received)
+# ---------------------------------------------------------------------------
+
+@app.get("/commission-receivables", response_class=HTMLResponse)
+async def commission_receivables_page(
+    request: Request,
+    fy: int = Query(0),
+    start: str = Query(""),
+    end: str = Query(""),
+    view: str = Query("compare"),
+):
+    """Compare commission invoiced (CIs) vs received (bank/actuals) by month.
+
+    Period is a free calendar range (from month → to month, any years).
+    """
+    from datetime import date
+
+    from finance.app.commission_receivables import (
+        commission_receivables_rows_for_points,
+        commission_receivables_summary,
+    )
+
+    fys = get_fiscal_years()
+    if not fy:
+        fy = fys[0] if fys else 0
+
+    view = (view or "compare").strip().lower()
+    if view not in ("invoiced", "received", "compare"):
+        view = "compare"
+
+    # Default range: current FY span (Apr prior → Mar current), or last 12 months
+    today = date.today()
+    if fy:
+        default_start = (fy - 1, 4)
+        default_end = (fy, 3)
+    else:
+        # trailing 12 months ending this month
+        em, ey = today.month, today.year
+        sm = em - 11
+        sy = ey
+        while sm < 1:
+            sm += 12
+            sy -= 1
+        default_start = (sy, sm)
+        default_end = (ey, em)
+
+    sy, sm = _parse_ym(start, default_start)
+    ey, em = _parse_ym(end, default_end)
+    points = [_period_point(y, m) for y, m in _iter_cal_months(sy, sm, ey, em, limit=60)]
+    if not points:
+        points = [_period_point(default_start[0], default_start[1])]
+        sy, sm = default_start
+        ey, em = default_start
+
+    start_val = f"{sy:04d}-{sm:02d}"
+    end_val = f"{ey:04d}-{em:02d}"
+    if points:
+        fy = points[-1]["fy"]
+    period_label = _analysis_period_label_points(points, "calendar")
+
+    rows = commission_receivables_rows_for_points(points)
+    summary = commission_receivables_summary(rows)
+
+    chart_labels = [r["label"] for r in rows]
+    chart_invoiced = [r["invoiced"] for r in rows]
+    chart_received = [r["received"] for r in rows]
+
+    return templates.TemplateResponse("commission_receivables.html", _ctx(
+        request,
+        page="commission_receivables",
+        fy=fy,
+        fiscal_years=fys,
+        start=start_val,
+        end=end_val,
+        view=view,
+        period_label=period_label,
+        rows=rows,
+        summary=summary,
+        chart_labels=chart_labels,
+        chart_invoiced=chart_invoiced,
+        chart_received=chart_received,
+    ))
+
+
+# ---------------------------------------------------------------------------
+# Commissions — GBL CS upload (shared register) + generate CIs
+# ---------------------------------------------------------------------------
+
+def _commissions_cs_imports():
+    from mr.app.cs_input import (
+        DISPLAY_COLUMNS,
+        delete_input_workbook,
+        delete_register_row,
+        list_input_files,
+        list_register_rows,
+        merge_rows_into_register,
+        parse_gbl_cs_xlsx,
+        register_filter_options,
+        register_stats,
+        save_cs_upload,
+    )
+    return {
+        "DISPLAY_COLUMNS": DISPLAY_COLUMNS,
+        "delete_input_workbook": delete_input_workbook,
+        "delete_register_row": delete_register_row,
+        "list_input_files": list_input_files,
+        "list_register_rows": list_register_rows,
+        "merge_rows_into_register": merge_rows_into_register,
+        "parse_gbl_cs_xlsx": parse_gbl_cs_xlsx,
+        "register_filter_options": register_filter_options,
+        "register_stats": register_stats,
+        "save_cs_upload": save_cs_upload,
+    }
+
+
+@app.get("/commissions", response_class=HTMLResponse)
+async def commissions_hub(request: Request):
+    """Single place to upload GBL CS Excel and generate draft CIs."""
+    cs = _commissions_cs_imports()
+    options = cs["register_filter_options"]()
+    stats = cs["register_stats"]()
+    return templates.TemplateResponse("commissions.html", _ctx(
+        request,
+        page="commissions",
+        preview=None,
+        error=None,
+        merge=None,
+        saved_as=None,
+        input_files=cs["list_input_files"](),
+        notice=request.query_params.get("notice") or None,
+        months=options.get("months") or [],
+        stats=stats,
+        display_columns=cs["DISPLAY_COLUMNS"],
+        generate_month=request.query_params.get("month") or "",
+        generate_error=request.query_params.get("generate_error") or None,
+    ))
+
+
+@app.post("/commissions/upload", response_class=HTMLResponse)
+async def commissions_upload(request: Request, file: UploadFile = File(...)):
+    cs = _commissions_cs_imports()
+    error = None
+    preview = None
+    merge = None
+    saved_as = None
+    raw_name = file.filename or "upload.xlsx"
+    try:
+        data = await file.read()
+        if not data:
+            raise ValueError("Uploaded file is empty.")
+        if not raw_name.lower().endswith((".xlsx", ".xlsm")):
+            raise ValueError("Please upload an Excel file (.xlsx).")
+        preview = cs["parse_gbl_cs_xlsx"](data)
+        path = cs["save_cs_upload"](raw_name, data)
+        saved_as = path.name
+        merge = cs["merge_rows_into_register"](
+            preview["rows"],
+            source_file=saved_as,
+            source_original=raw_name,
+        )
+    except Exception as exc:
+        error = str(exc)
+
+    options = cs["register_filter_options"]()
+    stats = cs["register_stats"]()
+    return templates.TemplateResponse("commissions.html", _ctx(
+        request,
+        page="commissions",
+        preview=preview,
+        error=error,
+        merge=merge,
+        saved_as=saved_as,
+        uploaded_name=raw_name,
+        display_columns=cs["DISPLAY_COLUMNS"],
+        input_files=cs["list_input_files"](),
+        notice=None,
+        months=options.get("months") or [],
+        stats=stats,
+        generate_month="",
+        generate_error=None,
+    ))
+
+
+@app.post("/commissions/delete-file")
+async def commissions_delete_file(request: Request, key: str = Form(...)):
+    cs = _commissions_cs_imports()
+    try:
+        result = cs["delete_input_workbook"](key)
+        notice = (
+            f"Removed {result['deleted_rows']} register line(s) "
+            f"and {result['deleted_files']} saved file(s)."
+        )
+    except Exception as exc:
+        notice = f"Could not delete: {exc}"
+    return RedirectResponse(
+        url=f"{FINANCE_BASE}/commissions?notice={quote(notice)}",
+        status_code=303,
+    )
+
+
+@app.get("/commissions/register", response_class=HTMLResponse)
+async def commissions_register(
+    request: Request,
+    month: str = Query(""),
+    po: str = Query(""),
+):
+    cs = _commissions_cs_imports()
+    month = (month or "").strip()
+    po = (po or "").strip()
+    rows = cs["list_register_rows"](month=month or None, po=po or None)
+    options = cs["register_filter_options"]()
+    stats = cs["register_stats"](month=month or None, po=po or None)
+    display_rows = []
+    for i, row in enumerate(rows, start=1):
+        item = dict(row)
+        item["display_sr"] = i
+        display_rows.append(item)
+    return templates.TemplateResponse("commissions_register.html", _ctx(
+        request,
+        page="commissions_register",
+        rows=display_rows,
+        display_columns=cs["DISPLAY_COLUMNS"],
+        filter_month=month,
+        filter_po=po,
+        months=options["months"],
+        po_numbers=options["po_numbers"],
+        stats=stats,
+        filtered_count=len(display_rows),
+        notice=request.query_params.get("notice") or None,
+    ))
+
+
+@app.post("/commissions/register/delete")
+async def commissions_register_delete(
+    request: Request,
+    row_id: int = Form(...),
+    month: str = Form(""),
+    po: str = Form(""),
+):
+    from urllib.parse import quote
+
+    cs = _commissions_cs_imports()
+    month = (month or "").strip()
+    po = (po or "").strip()
+    try:
+        ok = cs["delete_register_row"](row_id)
+        notice = "Line deleted." if ok else "Line was already removed."
+    except Exception as exc:
+        notice = f"Could not delete line: {exc}"
+    qs = []
+    if month:
+        qs.append(f"month={quote(month)}")
+    if po:
+        qs.append(f"po={quote(po)}")
+    qs.append(f"notice={quote(notice)}")
+    return RedirectResponse(
+        url=f"{FINANCE_BASE}/commissions/register?{'&'.join(qs)}",
+        status_code=303,
+    )
+
+
+@app.post("/commissions/generate", response_class=HTMLResponse)
+async def commissions_generate(
+    request: Request,
+    month: str = Form(""),
+):
+    """Build draft CIs from the cumulative CS register for a sail month."""
+    from app.ci_excel_import import (
+        drafts_from_register_rows,
+        preview_rows,
+        save_import_batch,
+    )
+
+    cs = _commissions_cs_imports()
+    month = (month or "").strip().upper()
+    if not month:
+        return RedirectResponse(
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('Pick a sail month to generate.')}",
+            status_code=303,
+        )
+    rows = cs["list_register_rows"](month=month)
+    if not rows:
+        return RedirectResponse(
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('No register lines for that month.')}&month={quote(month)}",
+            status_code=303,
+        )
+    drafts = drafts_from_register_rows(rows)
+    if not drafts:
+        return RedirectResponse(
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('No usable invoice rows in that month.')}&month={quote(month)}",
+            status_code=303,
+        )
+    token = save_import_batch(drafts)
+    preview = preview_rows(drafts)
+    return templates.TemplateResponse("commissions_generate_preview.html", _ctx(
+        request,
+        page="commissions",
+        preview=preview,
+        token=token,
+        month=month,
+        filename=f"Register · {month}",
+    ))
+
+
+@app.post("/commissions/generate/create")
+async def commissions_generate_create(request: Request):
+    from app.ci_excel_import import create_drafts_from_batch
+
+    form = await request.form()
+    token = str(form.get("token") or "")
+    raw_sel = form.getlist("selected") if hasattr(form, "getlist") else []
+    indices: list[int] = []
+    for v in raw_sel:
+        try:
+            indices.append(int(v))
+        except (TypeError, ValueError):
+            continue
+    if not indices:
+        return RedirectResponse(
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('Select at least one row.')}",
+            status_code=303,
+        )
+    ids = create_drafts_from_batch(token, indices)
+    if not ids:
+        return RedirectResponse(
+            url=f"{FINANCE_BASE}/commissions?generate_error={quote('Preview expired — generate again.')}",
+            status_code=303,
+        )
+    q = ",".join(str(i) for i in ids)
+    return RedirectResponse(
+        url=f"/generate/commission-invoices?imported={len(ids)}&ids={q}",
+        status_code=303,
+    )
+
+
+# ---------------------------------------------------------------------------
 # P&L Report
 # ---------------------------------------------------------------------------
 
@@ -734,23 +1264,36 @@ async def report_page(
 # ---------------------------------------------------------------------------
 
 @app.get("/bank-import", response_class=HTMLResponse)
-async def bank_import_form(request: Request, error: str = Query(""), imported: int = Query(0), warnings: int = Query(0)):
+async def bank_import_form(
+    request: Request,
+    error: str = Query(""),
+    imported: int = Query(0),
+    warnings: int = Query(0),
+    fy: int = Query(0),
+):
     from datetime import date
     today = date.today()
-    default_from = today.replace(day=1).isoformat()
+    # Optional FY preset: FY2026 = Apr 2025–Mar 2026 (25-26)
+    if fy and fy >= 2000:
+        from_date = f"{fy - 1}-04-01"
+        to_date = f"{fy}-03-31"
+    else:
+        from_date = today.replace(day=1).isoformat()
+        to_date = today.isoformat()
     pay_accounts = list_payment_accounts()
     default_pay = next((p["id"] for p in pay_accounts if "GBInc Bank" in p["name"]), None)
     return templates.TemplateResponse("bank_import.html", _ctx(
         request,
-        page="bank_import",
+        page="bank-import",
         preview=False,
         error=error,
         imported=imported,
         warnings=warnings,
         import_errors=[],
         already_submitted=False,
-        from_date=default_from,
-        to_date=today.isoformat(),
+        from_date=from_date,
+        to_date=to_date,
+        selected_fy=fy or 0,
         payment_accounts=pay_accounts,
         default_payment_account_id=default_pay,
     ))
