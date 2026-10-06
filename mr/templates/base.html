@@ -4,7 +4,8 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>{% block title %}GBInc Management Report{% endblock %}</title>
-  <link rel="stylesheet" href="{{ _base }}/static/mr.css?v=1.12.0"/>
+  <link rel="stylesheet" href="{{ _base }}/static/mr.css?v=1.13.0"/>
+  <script src="{{ _base }}/leads-static/report-deck.js?v=1"></script>
 </head>
 <body>
 <div class="app-switch no-print" aria-label="App switcher">
@@ -26,6 +27,10 @@
     <a href="{{ _base }}/" class="mr-nav-link {% if page=='dashboard' %}active{% endif %}">Dashboard</a>
     <a href="{{ _base }}/sales-projections" class="mr-nav-link {% if page=='sales_projections' %}active{% endif %}">Sales Projections</a>
     <a href="{{ _base }}/actual-vs-projection" class="mr-nav-link {% if page=='actual_vs_projection' %}active{% endif %}">Actual vs Projection</a>
+    <a href="{{ _base }}/written-report" class="mr-nav-link {% if page=='written_report' %}active{% endif %}">
+      Written Report
+      <span class="nav-badge" data-report-badge hidden></span>
+    </a>
   </div>
 
   <div class="mr-nav-section">

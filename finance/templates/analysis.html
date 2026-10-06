@@ -181,25 +181,46 @@
 <div id="chartsContainer" style="margin-top:1rem;display:grid;gap:1rem">
 
   <div class="f-card f-card-wide" id="mainChartCard">
-    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
-      <span id="mainChartTitle">Monthly Budget vs Actuals</span>
-      <button type="button" onclick="downloadChart('mainChart','GBInc-BudgetVsActual-{{ period_label|replace(' ','')|replace('–','-') }}.png', document.getElementById('mainChartTitle').textContent + ' — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <div>
+        <span id="mainChartTitle">Monthly Budget vs Actuals</span>
+        <div class="f-text-muted" style="font-size:.78rem;font-weight:400;margin-top:.15rem" id="mainChartPeriod">{{ period_label }}</div>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button type="button" class="f-btn-sm f-btn-outline" id="mainChartAddPres">+ Present</button>
+        <button type="button" class="f-btn-sm f-btn-outline" id="mainChartAddReport">+ Report</button>
+        <button type="button" onclick="downloadChart('mainChart','GBInc-BudgetVsActual-{{ period_label|replace(' ','')|replace('–','-') }}.png', document.getElementById('mainChartTitle').textContent + ' — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      </div>
     </div>
     <canvas id="mainChart" height="90"></canvas>
   </div>
 
-  <div class="f-card" id="breakdownCard" style="display:none;max-width:480px">
-    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
-      <span>Expense Breakdown by Category</span>
-      <button type="button" onclick="downloadChart('breakdownChart','GBInc-Breakdown-{{ period_label|replace(' ','')|replace('–','-') }}.png','Expense Breakdown — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+  <div class="f-card" id="breakdownCard" style="display:none;max-width:520px">
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <div>
+        <span id="breakdownChartTitle">Expense Breakdown by Category</span>
+        <div class="f-text-muted" style="font-size:.78rem;font-weight:400;margin-top:.15rem">{{ period_label }}</div>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button type="button" class="f-btn-sm f-btn-outline" id="breakdownAddPres">+ Present</button>
+        <button type="button" class="f-btn-sm f-btn-outline" id="breakdownAddReport">+ Report</button>
+        <button type="button" onclick="downloadChart('breakdownChart','GBInc-Breakdown-{{ period_label|replace(' ','')|replace('–','-') }}.png', document.getElementById('breakdownChartTitle').textContent + ' — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      </div>
     </div>
     <canvas id="breakdownChart" height="200"></canvas>
   </div>
 
   <div class="f-card f-card-wide" id="netChartCard" {% if expenses_only %}style="display:none"{% endif %}>
-    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center">
-      <span>Cumulative Balance</span>
-      <button type="button" onclick="downloadChart('netChart','GBInc-NetTrend-{{ period_label|replace(' ','')|replace('–','-') }}.png','Cumulative Balance — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <div>
+        <span id="netChartTitle">Cumulative Balance</span>
+        <div class="f-text-muted" style="font-size:.78rem;font-weight:400;margin-top:.15rem">{{ period_label }}</div>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button type="button" class="f-btn-sm f-btn-outline" id="netChartAddPres">+ Present</button>
+        <button type="button" class="f-btn-sm f-btn-outline" id="netChartAddReport">+ Report</button>
+        <button type="button" onclick="downloadChart('netChart','GBInc-NetTrend-{{ period_label|replace(' ','')|replace('–','-') }}.png', document.getElementById('netChartTitle').textContent + ' — {{ period_label }}')" class="f-btn-sm f-btn-outline">↓ Save chart</button>
+      </div>
     </div>
     <canvas id="netChart" height="70"></canvas>
   </div>
@@ -215,6 +236,8 @@ const PRIMARY_LBL = {{ primary_label | tojson }};
 const COMPARE_LBL = {{ compare_label | tojson }};
 const HAS_COMPARE = {{ 'true' if has_compare else 'false' }};
 const EXPENSES_ONLY = {{ 'true' if expenses_only else 'false' }};
+const PERIOD_LABEL = {{ period_label | tojson }};
+const FC = window.FinanceCharts;
 
 const SECTION_LABELS = {
   income: "Income", employee: "Employee Costs",
@@ -396,13 +419,14 @@ function buildDatasets(cat, item) {
 
 function getChartTitle(cat, item) {
   const suffix = HAS_COMPARE
-    ? ` (${PRIMARY_LBL} vs ${COMPARE_LBL})`
+    ? ` · ${PRIMARY_LBL} vs ${COMPARE_LBL}`
     : ` (${PRIMARY_LBL})`;
-  if (cat === "net")     return "Monthly Income vs Expenses" + suffix;
-  if (cat === "balance") return "Cumulative Balance (Running Net)" + suffix;
+  const period = PERIOD_LABEL ? ` · ${PERIOD_LABEL}` : "";
+  if (cat === "net")     return "Monthly Income vs Expenses" + suffix + period;
+  if (cat === "balance") return "Cumulative Balance (Running Net)" + suffix + period;
   if (item !== "all") {
     const found = ALL_ITEMS.find(i => String(i.id) === String(item));
-    return `Monthly — ${found ? found.name : ""}` + suffix;
+    return `Monthly — ${found ? found.name : ""}` + suffix + period;
   }
   const labels = {
     expenses:"Total Expenses", employee:"Employee Costs",
@@ -412,18 +436,40 @@ function getChartTitle(cat, item) {
   const base = EXPENSES_ONLY && cat === "expenses"
     ? "Expenses only"
     : (labels[cat] || SECTION_LABELS[cat] || cat);
-  return `Monthly — ${base}` + suffix;
+  return `Monthly — ${base}` + suffix + period;
+}
+
+function getBreakdownTitle(cat, item) {
+  const period = PERIOD_LABEL ? ` · ${PERIOD_LABEL}` : "";
+  if (item !== "all") {
+    const found = ALL_ITEMS.find(i => String(i.id) === String(item));
+    return `Breakdown by Month — ${found ? found.name : "Line item"}${period}`;
+  }
+  if (cat === "income") return "Income Breakdown by Category" + period;
+  if (EXPENSE_SECTIONS.includes(cat)) {
+    return `Expense Breakdown — ${SECTION_LABELS[cat] || cat}${period}`;
+  }
+  return "Expense Breakdown by Category" + period;
+}
+
+function chartOpts(title, yScale) {
+  return {
+    responsive: true,
+    plugins: FC.chartPlugins(title),
+    scales: { y: yScale || FC.moneyScaleY(true) },
+    datasets: { bar: { barPercentage: 0.95, categoryPercentage: 0.9 } }
+  };
 }
 
 function renderCharts() {
   if (chartType === "pie") { renderBreakdown(); return; }
   const cat  = document.getElementById("filterCategory").value;
   const item = document.getElementById("filterLineItem").value;
-
   const net = getNetData();
+  const title = getChartTitle(cat, item);
 
   if (cat === "balance") {
-    document.getElementById("mainChartTitle").textContent = getChartTitle(cat, item);
+    document.getElementById("mainChartTitle").textContent = title;
     document.getElementById("netChartCard").style.display = "none";
 
     if (mainChartObj) mainChartObj.destroy();
@@ -440,37 +486,31 @@ function renderCharts() {
           pointRadius: 4,
         }]
       },
-      options: {
-        responsive: true,
-        plugins: { legend: { position: "bottom" } },
-        scales: { y: { ticks: { callback: v => "$" + v.toLocaleString() } } },
-        datasets: { bar: { barPercentage: 0.95, categoryPercentage: 0.9 } }
-      }
+      options: chartOpts(title, { ticks: { callback: v => "$" + v.toLocaleString() } })
     });
     if (netChartObj) { netChartObj.destroy(); netChartObj = null; }
     return;
   }
 
   document.getElementById("netChartCard").style.display = EXPENSES_ONLY ? "none" : "";
-  document.getElementById("mainChartTitle").textContent = getChartTitle(cat, item);
+  document.getElementById("mainChartTitle").textContent = title;
 
   const datasets = buildDatasets(cat, item);
   if (mainChartObj) mainChartObj.destroy();
   mainChartObj = new Chart(document.getElementById("mainChart"), {
     type: chartType,
     data: { labels: MONTHS, datasets },
-    options: {
-      responsive: true,
-      plugins: { legend: { position: "bottom" } },
-      scales: { y: { beginAtZero: true, ticks: { callback: v => "$" + v.toLocaleString() } } },
-      datasets: { bar: { barPercentage: 0.95, categoryPercentage: 0.9 } }
-    }
+    options: chartOpts(title)
   });
 
   if (EXPENSES_ONLY) {
     if (netChartObj) { netChartObj.destroy(); netChartObj = null; }
     return;
   }
+
+  const netTitle = "Cumulative Balance · " + PERIOD_LABEL;
+  const netTitleEl = document.getElementById("netChartTitle");
+  if (netTitleEl) netTitleEl.textContent = netTitle;
 
   if (netChartObj) netChartObj.destroy();
   netChartObj = new Chart(document.getElementById("netChart"), {
@@ -487,7 +527,7 @@ function renderCharts() {
     },
     options: {
       responsive: true,
-      plugins: { legend: { position: "bottom" } },
+      plugins: FC.chartPlugins(netTitle),
       scales: { y: { ticks: { callback: v => "$" + v.toLocaleString() } } }
     }
   });
@@ -496,6 +536,9 @@ function renderCharts() {
 function renderBreakdown() {
   const cat  = document.getElementById("filterCategory").value;
   const item = document.getElementById("filterLineItem").value;
+  const bTitle = getBreakdownTitle(cat, item);
+  const bTitleEl = document.getElementById("breakdownChartTitle");
+  if (bTitleEl) bTitleEl.textContent = bTitle;
 
   let labels = [], dataA = [], colors = [];
   let idx = 0;
@@ -542,18 +585,20 @@ function renderBreakdown() {
     type: "doughnut",
     data: {
       labels,
-      datasets: [{ data: dataA, backgroundColor: colors, borderWidth: 2 }]
+      datasets: [{ label: "Amount", data: dataA, backgroundColor: colors, borderWidth: 2 }]
     },
     options: {
       responsive: true,
-      plugins: {
-        legend: { position: "right" },
-        tooltip: { callbacks: { label: ctx => {
-          const v = ctx.parsed;
-          const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
-          return ` $${v.toLocaleString()} (${(v/total*100).toFixed(1)}%)`;
-        }}}
-      }
+      plugins: FC.chartPlugins(bTitle, {
+        legendPosition: "right",
+        plugins: {
+          tooltip: { callbacks: { label: ctx => {
+            const v = ctx.parsed;
+            const total = ctx.dataset.data.reduce((a,b)=>a+b,0);
+            return ` ${ctx.label}: $${v.toLocaleString()} (${(v/total*100).toFixed(1)}%)`;
+          }}}
+        }
+      })
     }
   });
 }
@@ -614,6 +659,34 @@ document.addEventListener("DOMContentLoaded", () => {
   fySel.addEventListener("change", syncCompareOptions);
   syncCompareOptions();
   onCategoryChange();
+
+document.getElementById("mainChartAddPres") && document.getElementById("mainChartAddPres").addEventListener("click", function () {
+  const t = document.getElementById("mainChartTitle").textContent;
+  FC.addChartToPresentation("mainChart", t, this);
+});
+document.getElementById("breakdownAddPres") && document.getElementById("breakdownAddPres").addEventListener("click", function () {
+  const t = document.getElementById("breakdownChartTitle").textContent;
+  FC.addChartToPresentation("breakdownChart", t, this);
+});
+document.getElementById("netChartAddPres") && document.getElementById("netChartAddPres").addEventListener("click", function () {
+  const t = document.getElementById("netChartTitle").textContent;
+  FC.addChartToPresentation("netChart", t, this);
+});
+
+document.getElementById("mainChartAddReport") && document.getElementById("mainChartAddReport").addEventListener("click", function () {
+  const t = document.getElementById("mainChartTitle").textContent;
+  FC.addChartToReport("mainChart", t, this);
+});
+document.getElementById("breakdownAddReport") && document.getElementById("breakdownAddReport").addEventListener("click", function () {
+  const t = document.getElementById("breakdownChartTitle").textContent;
+  FC.addChartToReport("breakdownChart", t, this);
+});
+document.getElementById("netChartAddReport") && document.getElementById("netChartAddReport").addEventListener("click", function () {
+  const t = document.getElementById("netChartTitle").textContent;
+  FC.addChartToReport("netChart", t, this);
+});
+
+
 });
 </script>
 {% endblock %}

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Presentation{% endblock %}
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1>Presentation</h1>
+    <p class="subtitle">Curated charts as a slideshow · add from Summary, Generate Charts, or Finance. For a written narrative, use <a href="/mr/written-report">MR → Written Report</a>.</p>
+  </div>
+  <div class="page-header-actions">
+    <button type="button" class="btn btn-ghost btn-sm" id="presClearBtn" disabled>Clear all</button>
+    <button type="button" class="btn btn-primary btn-sm" id="presStartBtn" disabled>Start slideshow</button>
+  </div>
+</div>
+
+<div class="pres-empty card" id="presEmpty">
+  <div class="card-body" style="padding:2rem 1.5rem;text-align:center">
+    <p style="margin:0 0 .75rem;font-size:1.05rem;font-weight:600;color:var(--text)">No slides yet</p>
+    <p class="subtitle" style="margin:0 0 1.25rem;max-width:28rem;margin-left:auto;margin-right:auto">
+      Open a chart, set filters the way you want, then click <strong>Add to presentation</strong>.
+      Slides stay on this device until you clear them.
+    </p>
+    <div style="display:flex;gap:.75rem;justify-content:center;flex-wrap:wrap">
+      <a href="/summary" class="btn btn-primary btn-sm">Summary chart</a>
+      <a href="/generate/charts" class="btn btn-ghost btn-sm">Generate charts</a>
+    </div>
+  </div>
+</div>
+
+<div class="pres-deck" id="presDeck" hidden></div>
+
+{# Fullscreen slideshow #}
+<div class="pres-show" id="presShow" hidden>
+  <div class="pres-show-bar">
+    <div class="pres-show-title" id="presShowTitle"></div>
+    <div class="pres-show-meta" id="presShowMeta"></div>
+    <div class="pres-show-hints">
+      <kbd>←</kbd><kbd>→</kbd> slides
+      <kbd>Esc</kbd> exit
+    </div>
+    <button type="button" class="btn btn-ghost btn-sm" id="presShowExit">Exit</button>
+  </div>
+  <div class="pres-show-stage">
+    <button type="button" class="pres-show-nav prev" id="presPrev" aria-label="Previous">‹</button>
+    <img id="presShowImg" alt="" />
+    <button type="button" class="pres-show-nav next" id="presNext" aria-label="Next">›</button>
+  </div>
+  <div class="pres-show-dots" id="presShowDots"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="/static/presentation-page.js?v=2"></script>
+{% endblock %}

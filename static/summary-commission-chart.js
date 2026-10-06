@@ -175,6 +175,12 @@
   function matchesPeriod(d, spec) {
     if (!spec || spec.kind === "all") return true;
     if (!d) return false;
+    if (spec.kind === "ttm") {
+      var tr = trailing12MonthRange();
+      if (!tr) return false;
+      var t = d.y * 12 + d.m;
+      return t >= tr.fromY * 12 + tr.fromM && t <= tr.toY * 12 + tr.toM;
+    }
     if (spec.kind === "custom") {
       if (spec.from && d.iso < spec.from) return false;
       if (spec.to && d.iso > spec.to) return false;
@@ -189,6 +195,16 @@
 
   function periodLabel(spec) {
     if (!spec || spec.kind === "all") return "All time";
+    if (spec.kind === "ttm") {
+      var tr = trailing12MonthRange();
+      if (!tr) return "Trailing 12 months";
+      return (
+        "TTM · " +
+        prettyBucket(monthKey({ y: tr.fromY, m: tr.fromM }), "month") +
+        "–" +
+        prettyBucket(monthKey({ y: tr.toY, m: tr.toM }), "month")
+      );
+    }
     if (spec.kind === "month") return prettyBucket(spec.month, "month");
     if (spec.kind === "quarter") return spec.quarter || "Quarter";
     if (spec.kind === "year") return spec.year || "Year";
@@ -313,9 +329,35 @@
     return { y: Math.floor(t / 12), m: (t % 12) + 1 };
   }
 
+  /** End month for TTM = latest invoice month in data (fallback: current month). */
+  function latestDataMonth() {
+    var maxT = null;
+    rows.forEach(function (r) {
+      var d = parseDate(r.date);
+      if (!d) return;
+      var t = d.y * 12 + d.m;
+      if (maxT === null || t > maxT) maxT = t;
+    });
+    if (maxT === null) {
+      var now = new Date();
+      return { y: now.getFullYear(), m: now.getMonth() + 1 };
+    }
+    return {
+      y: Math.floor((maxT - 1) / 12),
+      m: ((maxT - 1) % 12) + 1,
+    };
+  }
+
+  function trailing12MonthRange() {
+    var end = latestDataMonth();
+    var start = addMonths(end.y, end.m, -11);
+    return { fromY: start.y, fromM: start.m, toY: end.y, toM: end.m };
+  }
+
   /** Inclusive calendar-month span for an explicit period filter, or null for All time. */
   function periodMonthRange(spec) {
     if (!spec || spec.kind === "all") return null;
+    if (spec.kind === "ttm") return trailing12MonthRange();
     if (spec.kind === "month" && spec.month && /^\d{4}-\d{2}$/.test(spec.month)) {
       var my = parseInt(spec.month.slice(0, 4), 10);
       var mm = parseInt(spec.month.slice(5, 7), 10);
@@ -1015,8 +1057,15 @@
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
+          title: {
+            display: true,
+            text: chartTitle(),
+            color: "#1C5631",
+            font: { size: 14, weight: "600" },
+            padding: { bottom: 10 },
+          },
           legend: {
-            display: stacked || compare || breakdown() === "product",
+            display: true,
             position: "bottom",
             labels: { boxWidth: 12, font: { size: 11 }, padding: 10 },
           },
@@ -1061,6 +1110,7 @@
       },
     });
     setDownloadEnabled(true);
+    if (typeof updatePresentChrome === "function") updatePresentChrome();
   }
 
   function setDownloadEnabled(on) {
@@ -1132,11 +1182,11 @@
     downloadBlob(slugFilename("csv"), "text/csv;charset=utf-8", lines.join("\n"));
   }
 
-  function downloadPng() {
-    if (!chart || !canvas) return;
+  function buildChartImage() {
+    if (!chart || !canvas) return null;
     var srcW = canvas.width;
     var srcH = canvas.height;
-    if (!srcW || !srcH) return;
+    if (!srcW || !srcH) return null;
     var TARGET_W = 1400;
     var scale = TARGET_W / srcW;
     var chartH = Math.round(srcH * scale);
@@ -1165,10 +1215,66 @@
       PAD,
       TOPBAR + chartH + 20
     );
+    return off.toDataURL("image/png");
+  }
+
+  function downloadPng() {
+    var dataUrl = buildChartImage();
+    if (!dataUrl) return;
     var a = document.createElement("a");
     a.download = slugFilename("png");
-    a.href = off.toDataURL("image/png");
+    a.href = dataUrl;
     a.click();
+  }
+
+  function addToPresentation() {
+    if (!window.PresentationDeck) {
+      alert("Presentation deck not loaded.");
+      return;
+    }
+    var dataUrl = buildChartImage();
+    if (!dataUrl) {
+      alert("Render a chart first.");
+      return;
+    }
+    var btn = $("ciChartAddPresBtn");
+    window.PresentationDeck.addSlide({
+      title: chartTitle(),
+      subtitle: "Commission chart",
+      source: "commission",
+      image: dataUrl,
+    })
+      .then(function () {
+        window.PresentationDeck.flashButton(btn, "Added ✓");
+      })
+      .catch(function (err) {
+        alert((err && err.message) || "Could not add slide");
+      });
+  }
+
+  function addToReport() {
+    if (!window.ReportDeck) {
+      alert("Report deck not loaded.");
+      return;
+    }
+    var dataUrl = buildChartImage();
+    if (!dataUrl) {
+      alert("Render a chart first.");
+      return;
+    }
+    var btn = $("ciChartAddReportBtn");
+    window.ReportDeck.addSlide({
+      title: chartTitle(),
+      subtitle: "Commission chart",
+      source: "commission",
+      image: dataUrl,
+    })
+      .then(function () {
+        window.ReportDeck.flashButton(btn, "Added ✓");
+      })
+      .catch(function (err) {
+        alert((err && err.message) || "Could not add to report");
+      });
   }
 
   populateSelectors();
@@ -1208,6 +1314,169 @@
   if (pngBtn) pngBtn.addEventListener("click", downloadPng);
   var csvBtn = $("ciChartDownloadCsv");
   if (csvBtn) csvBtn.addEventListener("click", downloadCsv);
+  var addPresBtn = $("ciChartAddPresBtn");
+  if (addPresBtn) addPresBtn.addEventListener("click", addToPresentation);
+  var addReportBtn = $("ciChartAddReportBtn");
+  if (addReportBtn) addReportBtn.addEventListener("click", addToReport);
+
+  var presenting = false;
+  var sceneIndex = 0;
+  var SCENES = [
+    { breakdown: "month", metric: "commission", stack: "product", periodKind: "ttm", label: "TTM commission by product" },
+    { breakdown: "month", metric: "commission", stack: "product", periodKind: "fy", label: "FY monthly commission by product" },
+    { breakdown: "month", metric: "fob", stack: "product", periodKind: "ttm", label: "TTM FOB by product" },
+    { breakdown: "month", metric: "commission", stack: "company", periodKind: "ttm", label: "TTM commission by buyer" },
+    { breakdown: "company", metric: "commission", stack: "product", periodKind: "ttm", label: "TTM by buyer · stacked products" },
+    { breakdown: "product", metric: "commission", stack: "company", periodKind: "ttm", label: "TTM by product · stacked buyers" },
+  ];
+
+  function applyScene(i) {
+    sceneIndex = ((i % SCENES.length) + SCENES.length) % SCENES.length;
+    var s = SCENES[sceneIndex];
+    if ($("ciChartBreakdown")) $("ciChartBreakdown").value = s.breakdown;
+    if ($("ciChartMetric")) $("ciChartMetric").value = s.metric;
+    if ($("ciChartStackBy")) $("ciChartStackBy").value = s.stack;
+    if ($("ciChartCompare")) $("ciChartCompare").checked = false;
+    if (s.periodKind && $("ciPeriodAKind")) {
+      $("ciPeriodAKind").value = s.periodKind;
+    }
+    render();
+    updatePresentChrome();
+  }
+
+  function updatePresentChrome() {
+    var title = $("ciPresentTitle");
+    if (!title) return;
+    var scene = SCENES[sceneIndex];
+    title.textContent =
+      (scene ? scene.label + " · " : "") + chartTitle() +
+      (presenting ? "  (" + (sceneIndex + 1) + "/" + SCENES.length + ")" : "");
+    var btn = $("ciChartPresentBtn");
+    if (btn) btn.textContent = presenting ? "Presenting…" : "Present";
+  }
+
+  function resizeChartSoon() {
+    setTimeout(function () {
+      if (chart) chart.resize();
+      window.dispatchEvent(new Event("resize"));
+    }, 50);
+  }
+
+  function setPresenting(on) {
+    presenting = !!on;
+    document.body.classList.toggle("ci-presenting", presenting);
+    var bar = $("ciPresentBar");
+    if (bar) bar.hidden = !presenting;
+    updatePresentChrome();
+    resizeChartSoon();
+    if (presenting) {
+      try {
+        if (document.documentElement.requestFullscreen) {
+          document.documentElement.requestFullscreen().catch(function () {});
+        }
+      } catch (e) {}
+    } else if (document.fullscreenElement) {
+      try {
+        document.exitFullscreen();
+      } catch (e) {}
+    }
+  }
+
+  function cycleSelect(id, dir) {
+    var el = $(id);
+    if (!el || !el.options || !el.options.length) return;
+    var n = el.options.length;
+    var i = el.selectedIndex;
+    el.selectedIndex = (i + dir + n) % n;
+    render();
+    updatePresentChrome();
+  }
+
+  function toggleStack() {
+    var el = $("ciChartStackBy");
+    if (!el) return;
+    el.value = el.value === "company" ? "product" : "company";
+    render();
+    updatePresentChrome();
+  }
+
+  var presentBtn = $("ciChartPresentBtn");
+  if (presentBtn) {
+    presentBtn.addEventListener("click", function () {
+      setPresenting(!presenting);
+    });
+  }
+  var presentExit = $("ciChartPresentExit");
+  if (presentExit) {
+    presentExit.addEventListener("click", function () {
+      setPresenting(false);
+    });
+  }
+
+  document.addEventListener("fullscreenchange", function () {
+    if (!document.fullscreenElement && presenting) {
+      presenting = false;
+      document.body.classList.remove("ci-presenting");
+      var bar = $("ciPresentBar");
+      if (bar) bar.hidden = true;
+      updatePresentChrome();
+      resizeChartSoon();
+    }
+  });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName)) return;
+    var key = e.key;
+    if (key === "p" || key === "P") {
+      e.preventDefault();
+      setPresenting(!presenting);
+      return;
+    }
+    if (!presenting) return;
+    if (key === "Escape") {
+      e.preventDefault();
+      setPresenting(false);
+      return;
+    }
+    if (key === "ArrowRight" || key === "n" || key === "N") {
+      e.preventDefault();
+      applyScene(sceneIndex + 1);
+      return;
+    }
+    if (key === "ArrowLeft") {
+      e.preventDefault();
+      applyScene(sceneIndex - 1);
+      return;
+    }
+    if (key === "1") {
+      e.preventDefault();
+      if ($("ciChartMetric")) $("ciChartMetric").value = "commission";
+      render();
+      return;
+    }
+    if (key === "2") {
+      e.preventDefault();
+      if ($("ciChartMetric")) $("ciChartMetric").value = "fob";
+      render();
+      return;
+    }
+    if (key === "3") {
+      e.preventDefault();
+      if ($("ciChartMetric")) $("ciChartMetric").value = "quantity";
+      render();
+      return;
+    }
+    if (key === "s" || key === "S") {
+      e.preventDefault();
+      toggleStack();
+      return;
+    }
+    if (key === "b" || key === "B") {
+      e.preventDefault();
+      cycleSelect("ciChartBreakdown", 1);
+      return;
+    }
+  });
 
   render();
 })();

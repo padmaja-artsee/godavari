@@ -112,11 +112,21 @@
 </div>
 
 <div class="f-card" style="margin-bottom:1.25rem;padding:1rem 1.1rem">
-  <h2 class="f-card-title" style="margin-bottom:.75rem">
-    {% if view == 'invoiced' %}Commission invoiced by month
-    {% elif view == 'received' %}Commission received by month
-    {% else %}Invoiced vs received by month{% endif %}
-  </h2>
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:.75rem;flex-wrap:wrap;margin-bottom:.75rem">
+    <div>
+      <h2 class="f-card-title" style="margin:0" id="crChartTitle">
+        {% if view == 'invoiced' %}Commission Invoiced by Month
+        {% elif view == 'received' %}Commission Received by Month
+        {% else %}Invoiced vs Received by Month{% endif %}
+      </h2>
+      <div class="f-text-muted" style="font-size:.78rem;margin-top:.2rem">Time frame · {{ period_label }}</div>
+    </div>
+    <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
+      <button type="button" class="f-btn-sm f-btn-outline" id="crAddPres">+ Present</button>
+      <button type="button" class="f-btn-sm f-btn-outline" id="crAddReport">+ Report</button>
+      <button type="button" class="f-btn-sm f-btn-outline" id="crDownload">↓ Save chart</button>
+    </div>
+  </div>
   <div style="position:relative;height:320px">
     <canvas id="crChart"></canvas>
   </div>
@@ -172,6 +182,11 @@
   var labels = {{ chart_labels|tojson }};
   var invoiced = {{ chart_invoiced|tojson }};
   var received = {{ chart_received|tojson }};
+  var period = {{ period_label|tojson }};
+  var FC = window.FinanceCharts;
+  var titleEl = document.getElementById('crChartTitle');
+  var baseTitle = (titleEl && titleEl.textContent.trim()) || 'Commission Receivables';
+  var title = baseTitle + ' · ' + period;
   var datasets = [];
   if (view !== 'received') {
     datasets.push({
@@ -197,26 +212,35 @@
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: {
-        legend: { display: datasets.length > 1, position: 'top' },
-        tooltip: {
-          callbacks: {
-            label: function (ctx) {
-              var v = ctx.parsed.y || 0;
-              return ctx.dataset.label + ': $' + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+      plugins: FC.chartPlugins(title, {
+        plugins: {
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var v = ctx.parsed.y || 0;
+                return ctx.dataset.label + ': $' + v.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+              }
             }
           }
         }
-      },
+      }),
       scales: {
-        y: {
-          beginAtZero: true,
-          ticks: {
-            callback: function (v) { return '$' + Number(v).toLocaleString(); }
-          }
-        }
+        y: FC.moneyScaleY(true)
       }
     }
+  });
+  var btn = document.getElementById('crAddPres');
+  if (btn) btn.addEventListener('click', function () {
+    FC.addChartToPresentation('crChart', title, this);
+  });
+  var rbtn = document.getElementById('crAddReport');
+  if (rbtn) rbtn.addEventListener('click', function () {
+    FC.addChartToReport('crChart', title, this);
+  });
+  var dl = document.getElementById('crDownload');
+  if (dl) dl.addEventListener('click', function () {
+    var slug = title.replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
+    FC.downloadChart('crChart', 'GBInc-' + (slug || 'Commission-Receivables') + '.png', title);
   });
 })();
 </script>

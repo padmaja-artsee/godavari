@@ -105,6 +105,8 @@ a = Analysis(
         "finance.app.expenses",
         "finance.app.exports",
         "finance.app.commission_exports",
+        "finance.app.commission_receivables",
+        "finance.app.commission_income",
         "finance.app.bank_import",
         # ── Management Report (MR) ─────────────────────────────────────────
         "mr",

@@ -66,6 +66,7 @@
 }
 .btn-download-chart:hover { border-color:#1A5632; color:#1A5632; }
 .btn-download-chart svg { width:13px; height:13px; }
+.chart-card-actions { display:flex; gap:.35rem; align-items:flex-start; flex-wrap:wrap; justify-content:flex-end; }
 
 .charts-note {
   font-size:.78rem; color:#888; margin:.75rem 0 0;
@@ -81,6 +82,8 @@
 {% endblock %}
 
 {% block content %}
+{% set period_label_map = {'3m':'Last 3 months','6m':'Last 6 months','12m':'Last 12 months','ytd':'This year','lastyear':'Last year','all':'All time'} %}
+{% set period_label = period_label_map.get(period, period) %}
 <div class="page-header">
   <div>
     <h1>Charts</h1>
@@ -143,7 +146,7 @@
       <input type="radio" name="metric" value="count" checked> Count
     </label>
     <label class="metric-toggle" id="tog-metric-amount" title="Show deal amount (price × qty)">
-      <input type="radio" name="metric" value="amount"> Amount (€)
+      <input type="radio" name="metric" value="amount"> Amount ($)
     </label>
   </div>
 
@@ -156,6 +159,7 @@
 
 <p class="charts-note">
   Revenue figures are best-effort: deals where price or quantity are not purely numeric are counted but excluded from revenue totals.
+  Use <strong>+ Present</strong> for the slideshow, or <strong>+ Report</strong> for a written report in <a href="/mr/written-report">MR → Written Report</a>.
   Data refreshed on page load — click Refresh to pull the latest.
 </p>
 
@@ -167,12 +171,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Deals Over Time</div>
-        <div class="chart-card-subtitle">Number of deals created per month</div>
+        <div class="chart-card-subtitle">Number of deals created per month · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-deals-month','deals_over_time')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-deals-month', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-deals-month', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-deals-month','deals_over_time')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-deals-month" class="chart-plot"></div></div>
   </div>
@@ -182,12 +194,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Revenue Over Time</div>
-        <div class="chart-card-subtitle">Estimated deal value (€) per month</div>
+        <div class="chart-card-subtitle">Estimated deal value ($) per month · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-revenue-month','revenue_over_time')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-revenue-month', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-revenue-month', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-revenue-month','revenue_over_time')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-revenue-month" class="chart-plot"></div></div>
   </div>
@@ -197,12 +217,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Deals & Revenue Combined</div>
-        <div class="chart-card-subtitle">Deal count (bars) and estimated revenue (line) — dual axis</div>
+        <div class="chart-card-subtitle">Deal count (bars) and estimated revenue (line) — dual axis · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-combined','deals_and_revenue')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-combined', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-combined', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-combined','deals_and_revenue')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-combined" class="chart-plot"></div></div>
   </div>
@@ -212,12 +240,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Deals by Status</div>
-        <div class="chart-card-subtitle">Distribution of deal outcomes in period</div>
+        <div class="chart-card-subtitle">Distribution of deal outcomes in period · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-status','deals_by_status')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-status', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-status', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-status','deals_by_status')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-status" class="chart-plot"></div></div>
   </div>
@@ -227,12 +263,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Deals by Product</div>
-        <div class="chart-card-subtitle" id="subtitle-products">Top products by deal count</div>
+        <div class="chart-card-subtitle" id="subtitle-products">Top products by deal count · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-products','deals_by_product')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-products', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-products', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-products','deals_by_product')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-products" class="chart-plot"></div></div>
   </div>
@@ -242,12 +286,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Top Customers</div>
-        <div class="chart-card-subtitle" id="subtitle-customers">Companies with most deals in period</div>
+        <div class="chart-card-subtitle" id="subtitle-customers">Companies with most deals in period · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-customers','top_customers')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-customers', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-customers', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-customers','top_customers')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-customers" class="chart-plot"></div></div>
   </div>
@@ -257,12 +309,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Shipped Deals by Month</div>
-        <div class="chart-card-subtitle">Closed/shipped deal count and estimated revenue by close date</div>
+        <div class="chart-card-subtitle">Closed/shipped deal count and estimated revenue by close date · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-shipped','shipped_deals')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-shipped', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-shipped', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-shipped','shipped_deals')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-shipped" class="chart-plot"></div></div>
   </div>
@@ -272,12 +332,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Open vs Closed Deals Over Time</div>
-        <div class="chart-card-subtitle">Stacked monthly deal counts: open · shipped · lost</div>
+        <div class="chart-card-subtitle">Stacked monthly deal counts: open · shipped · lost · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-open-closed','open_vs_closed')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-open-closed', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-open-closed', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-open-closed','open_vs_closed')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-open-closed" class="chart-plot"></div></div>
   </div>
@@ -287,12 +355,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Win Rate by Month</div>
-        <div class="chart-card-subtitle">% of closed deals that were won (shipped) vs lost</div>
+        <div class="chart-card-subtitle">% of closed deals that were won (shipped) vs lost · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-winrate','win_rate')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-winrate', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-winrate', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-winrate','win_rate')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-winrate" class="chart-plot"></div></div>
   </div>
@@ -302,12 +378,20 @@
     <div class="chart-card-header">
       <div>
         <div class="chart-card-title">Deal Pipeline Funnel</div>
-        <div class="chart-card-subtitle">Total deals → Open → Shipped (won) in period</div>
+        <div class="chart-card-subtitle">Total deals → Open → Shipped (won) in period · {{ period_label }}</div>
       </div>
-      <button class="btn-download-chart" onclick="downloadChart('plot-funnel','pipeline_funnel')">
-        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
-        PNG
-      </button>
+      <div class="chart-card-actions">
+        <button class="btn-download-chart" type="button" onclick="addChartToPresentation('plot-funnel', this)">
+          + Present
+        </button>
+        <button class="btn-download-chart" type="button" onclick="addChartToReport('plot-funnel', this)">
+          + Report
+        </button>
+        <button class="btn-download-chart" type="button" onclick="downloadChart('plot-funnel','pipeline_funnel')">
+          <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 12l-4-4h2.5V2h3v6H12L8 12zm-6 2h12v1.5H2V14z"/></svg>
+          PNG
+        </button>
+      </div>
     </div>
     <div class="chart-card-body"><div id="plot-funnel" class="chart-plot"></div></div>
   </div>
@@ -326,14 +410,23 @@ const GREEN = '#1A5632';
 const GREEN2 = '#2d7a4f';
 const GOLD  = '#c8a400';
 const GRAY  = '#9e9e9e';
+const PERIOD_LABEL = {{ period_label | tojson }};
 const BASE_LAYOUT = {
-  margin: { t: 30, r: 20, b: 55, l: 70 },
+  margin: { t: 52, r: 20, b: 70, l: 70 },
   font: FONT,
   paper_bgcolor: '#fff',
   plot_bgcolor: '#fafafa',
   hovermode: 'x unified',
-  legend: { orientation: 'h', y: -0.22, x: 0, font: { size: 11 } },
+  showlegend: true,
+  legend: { orientation: 'h', y: -0.28, x: 0, font: { size: 11 } },
 };
+function chartTitle(text) {
+  return {
+    text: text + (PERIOD_LABEL ? ' · ' + PERIOD_LABEL : ''),
+    font: { size: 15, color: '#1A5632', family: FONT.family },
+    x: 0.01, xanchor: 'left', y: 0.98, yanchor: 'top',
+  };
+}
 const CAT_XAXIS = { type: 'category', showgrid: false, tickangle: -35, automargin: true };
 const NUM_YAXIS_BASE = { rangemode: 'tozero', gridcolor: '#eee', automargin: true, ticklabelstandoff: 8 };
 const CONFIG = {
@@ -344,10 +437,10 @@ const CONFIG = {
 
 /* ─── Helpers ──────────────────────────────────────── */
 function fmtEur(v) {
-  if (!v) return '€0';
-  if (v >= 1e6) return '€' + (v/1e6).toFixed(2) + 'M';
-  if (v >= 1e3) return '€' + (v/1e3).toFixed(1) + 'k';
-  return '€' + Math.round(v).toLocaleString();
+  if (!v) return '$0';
+  if (v >= 1e6) return '$' + (v/1e6).toFixed(2) + 'M';
+  if (v >= 1e3) return '$' + (v/1e3).toFixed(1) + 'k';
+  return '$' + Math.round(v).toLocaleString();
 }
 
 function monthLabels(rows, key='month') {
@@ -367,6 +460,7 @@ function renderDealsMonth() {
     hovertemplate: '<b>%{x}</b><br>Deals: %{y}<extra></extra>',
   }], {
     ...BASE_LAYOUT,
+    title: chartTitle('Deals Over Time'),
     yaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
     xaxis: CAT_XAXIS,
   }, CONFIG);
@@ -381,11 +475,12 @@ function renderRevenueMonth() {
     x: monthLabels(d),
     y: d.map(r => r.revenue),
     marker: { color: GOLD },
-    name: 'Revenue (€)',
-    hovertemplate: '<b>%{x}</b><br>Revenue: €%{y:,.0f}<extra></extra>',
+    name: 'Revenue ($)',
+    hovertemplate: '<b>%{x}</b><br>Revenue: $%{y:,.0f}<extra></extra>',
   }], {
     ...BASE_LAYOUT,
-    yaxis: { ...NUM_YAXIS_BASE, title: 'Revenue (€)', tickformat: ',.0f' },
+    title: chartTitle('Revenue Over Time'),
+    yaxis: { ...NUM_YAXIS_BASE, title: 'Revenue ($)', tickformat: ',.0f' },
     xaxis: CAT_XAXIS,
   }, CONFIG);
 }
@@ -405,19 +500,20 @@ function renderCombined() {
     },
     {
       type: 'scatter', mode: 'lines+markers',
-      name: 'Revenue € (right)',
+      name: 'Revenue $ (right)',
       x: monthLabels(d), y: d.map(r => r.revenue),
       line: { color: GOLD, width: 2.5 },
       marker: { size: 6, color: GOLD },
       yaxis: 'y2',
-      hovertemplate: '<b>%{x}</b><br>Revenue: €%{y:,.0f}<extra></extra>',
+      hovertemplate: '<b>%{x}</b><br>Revenue: $%{y:,.0f}<extra></extra>',
     },
   ];
   Plotly.newPlot('plot-combined', traces, {
     ...BASE_LAYOUT,
+    title: chartTitle('Deals & Revenue Combined'),
     margin: { t: 30, r: 80, b: 55, l: 70 },
     yaxis:  { ...NUM_YAXIS_BASE, title: 'Deals', side: 'left' },
-    yaxis2: { ...NUM_YAXIS_BASE, title: 'Revenue (€)', overlaying: 'y',
+    yaxis2: { ...NUM_YAXIS_BASE, title: 'Revenue ($)', overlaying: 'y',
               side: 'right', showgrid: false, tickformat: ',.0f' },
     xaxis:  { ...CAT_XAXIS },
     legend: { orientation:'h', y:-0.22, x:0, font:{size:11} },
@@ -440,6 +536,7 @@ function renderStatus() {
     insidetextfont: { color: '#fff', size: 12 },
   }], {
     ...BASE_LAYOUT,
+    title: chartTitle('Deals by Status'),
     margin: { t: 30, r: 30, b: 30, l: 30 },
     legend: { orientation:'v', x:1.0, y:0.5 },
     hovermode: 'closest',
@@ -455,11 +552,11 @@ function renderProducts() {
   if (!d.length) return empty('plot-products');
   const useAmount = currentMetric === 'amount';
   const x = useAmount ? d.map(r => r.revenue) : d.map(r => r.deal_count);
-  const xlabel = useAmount ? 'Revenue (€)' : 'Deals';
-  const hov = useAmount ? '<b>%{y}</b><br>Revenue: €%{x:,.0f}<extra></extra>'
+  const xlabel = useAmount ? 'Revenue ($)' : 'Deals';
+  const hov = useAmount ? '<b>%{y}</b><br>Revenue: $%{x:,.0f}<extra></extra>'
                         : '<b>%{y}</b><br>Deals: %{x}<extra></extra>';
   const sub = document.getElementById('subtitle-products');
-  if (sub) sub.textContent = useAmount ? 'Top products by estimated revenue (€)' : 'Top products by deal count';
+  if (sub) sub.textContent =  (useAmount ? 'Top products by estimated revenue ($)' : 'Top products by deal count') + ' · ' + PERIOD_LABEL;
   Plotly.newPlot('plot-products', [{
     type: 'bar', orientation: 'h',
     y: d.map(r => r.product), x,
@@ -467,6 +564,7 @@ function renderProducts() {
     name: xlabel, hovertemplate: hov,
   }], {
     ...BASE_LAYOUT,
+    title: chartTitle('Deals by Product'),
     margin: { t: 30, r: 20, b: 45, l: 170 },
     xaxis: { ...NUM_YAXIS_BASE, title: xlabel, tickformat: useAmount ? ',.0f' : '' },
     yaxis: { showgrid: false, automargin: true, ticklabelstandoff: 8 },
@@ -480,11 +578,11 @@ function renderCustomers() {
   if (!d.length) return empty('plot-customers');
   const useAmount = currentMetric === 'amount';
   const x = useAmount ? d.map(r => r.revenue) : d.map(r => r.deal_count);
-  const xlabel = useAmount ? 'Revenue (€)' : 'Deals';
-  const hov = useAmount ? '<b>%{y}</b><br>Revenue: €%{x:,.0f}<extra></extra>'
+  const xlabel = useAmount ? 'Revenue ($)' : 'Deals';
+  const hov = useAmount ? '<b>%{y}</b><br>Revenue: $%{x:,.0f}<extra></extra>'
                         : '<b>%{y}</b><br>Deals: %{x}<extra></extra>';
   const sub = document.getElementById('subtitle-customers');
-  if (sub) sub.textContent = useAmount ? 'Companies by estimated revenue (€)' : 'Companies with most deals in period';
+  if (sub) sub.textContent = (useAmount ? 'Companies by estimated revenue ($)' : 'Companies with most deals in period') + ' · ' + PERIOD_LABEL;
   Plotly.newPlot('plot-customers', [{
     type: 'bar', orientation: 'h',
     y: d.map(r => r.customer), x,
@@ -492,6 +590,7 @@ function renderCustomers() {
     name: xlabel, hovertemplate: hov,
   }], {
     ...BASE_LAYOUT,
+    title: chartTitle('Top Customers'),
     margin: { t: 30, r: 20, b: 45, l: 180 },
     xaxis: { ...NUM_YAXIS_BASE, title: xlabel, tickformat: useAmount ? ',.0f' : '' },
     yaxis: { showgrid: false, automargin: true, ticklabelstandoff: 8 },
@@ -513,19 +612,20 @@ function renderShipped() {
     },
     {
       type: 'scatter', mode: 'lines+markers',
-      name: 'Revenue € (right)',
+      name: 'Revenue $ (right)',
       x: monthLabels(d), y: d.map(r => r.revenue),
       line: { color: GOLD, width: 2.5 },
       marker: { size: 6, color: GOLD },
       yaxis: 'y2',
-      hovertemplate: '<b>%{x}</b><br>Revenue: €%{y:,.0f}<extra></extra>',
+      hovertemplate: '<b>%{x}</b><br>Revenue: $%{y:,.0f}<extra></extra>',
     },
   ];
   Plotly.newPlot('plot-shipped', traces, {
     ...BASE_LAYOUT,
+    title: chartTitle('Shipped Deals by Month'),
     margin: { t: 30, r: 80, b: 55, l: 70 },
     yaxis:  { ...NUM_YAXIS_BASE, title: 'Shipped deals', side: 'left' },
-    yaxis2: { ...NUM_YAXIS_BASE, title: 'Revenue (€)', overlaying: 'y',
+    yaxis2: { ...NUM_YAXIS_BASE, title: 'Revenue ($)', overlaying: 'y',
               side: 'right', showgrid: false, tickformat: ',.0f' },
     xaxis:  { ...CAT_XAXIS },
     legend: { orientation:'h', y:-0.22, x:0, font:{size:11} },
@@ -554,6 +654,7 @@ function renderOpenClosed() {
     series('lost',    '#c62828', 'Lost'),
   ], {
     ...BASE_LAYOUT,
+    title: chartTitle('Open vs Closed Deals Over Time'),
     barmode: 'stack',
     yaxis: { ...NUM_YAXIS_BASE, title: 'Deals' },
     xaxis: CAT_XAXIS,
@@ -589,6 +690,7 @@ function renderWinRate() {
     },
   ], {
     ...BASE_LAYOUT,
+    title: chartTitle('Win Rate by Month'),
     barmode: 'group',
     margin: { t: 30, r: 70, b: 55, l: 55 },
     yaxis:  { ...NUM_YAXIS_BASE, title: 'Deals', side: 'left' },
@@ -613,6 +715,7 @@ function renderFunnel() {
     hovertemplate: '<b>%{y}</b><br>Count: %{x}<extra></extra>',
   }], {
     ...BASE_LAYOUT,
+    title: chartTitle('Deal Pipeline Funnel'),
     margin: { t: 30, r: 30, b: 30, l: 140 },
     funnelmode: 'stack',
   }, CONFIG);
@@ -627,6 +730,61 @@ function empty(id) {
 /* ─── Download individual chart ────────────────────── */
 function downloadChart(divId, filename) {
   Plotly.downloadImage(divId, { format:'png', width:1400, height:700, filename: filename });
+}
+
+function addChartToPresentation(divId, btn) {
+  if (!window.PresentationDeck) {
+    alert('Presentation deck not loaded.');
+    return;
+  }
+  var card = btn && btn.closest ? btn.closest('[data-chart-id]') : null;
+  var titleEl = card && card.querySelector('.chart-card-title');
+  var subEl = card && card.querySelector('.chart-card-subtitle');
+  var title = (titleEl && titleEl.textContent.trim()) || 'Chart';
+  var subtitle = (subEl && subEl.textContent.trim()) || 'Generate charts';
+  Plotly.toImage(divId, { format: 'png', width: 1400, height: 700 })
+    .then(function (dataUrl) {
+      return window.PresentationDeck.addSlide({
+        title: title,
+        subtitle: subtitle,
+        source: 'generate',
+        image: dataUrl,
+      });
+    })
+    .then(function () {
+      window.PresentationDeck.flashButton(btn, 'Added ✓');
+    })
+    .catch(function (err) {
+      alert((err && err.message) || 'Could not add slide');
+    });
+}
+
+
+function addChartToReport(divId, btn) {
+  if (!window.ReportDeck) {
+    alert('Report deck not loaded.');
+    return;
+  }
+  var card = btn && btn.closest ? btn.closest('[data-chart-id]') : null;
+  var titleEl = card && card.querySelector('.chart-card-title');
+  var subEl = card && card.querySelector('.chart-card-subtitle');
+  var title = (titleEl && titleEl.textContent.trim()) || 'Chart';
+  var subtitle = (subEl && subEl.textContent.trim()) || 'Generate charts';
+  Plotly.toImage(divId, { format: 'png', width: 1400, height: 700 })
+    .then(function (dataUrl) {
+      return window.ReportDeck.addSlide({
+        title: title,
+        subtitle: subtitle,
+        source: 'generate',
+        image: dataUrl,
+      });
+    })
+    .then(function () {
+      window.ReportDeck.flashButton(btn, 'Added ✓');
+    })
+    .catch(function (err) {
+      alert((err && err.message) || 'Could not add to report');
+    });
 }
 
 /* ─── Chart visibility toggles (checkboxes) ──────── */

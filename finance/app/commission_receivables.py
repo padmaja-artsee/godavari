@@ -8,7 +8,7 @@ Commission Income line item (bank CSV imports and manual actuals).
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Dict, List, Optional, Tuple
 
 from finance.app.database import (
     FY_MONTHS,
@@ -22,7 +22,7 @@ from finance.app.database import (
 COMMISSION_INCOME_NAME = "Commission Income"
 
 
-def commission_income_line_id(items: list[dict] | None = None) -> int | None:
+def commission_income_line_id(items: Optional[List[dict]] = None) -> Optional[int]:
     rows = items if items is not None else list_line_items()
     for item in rows:
         if item.get("name") == COMMISSION_INCOME_NAME and item.get("section") == "income":
@@ -30,9 +30,9 @@ def commission_income_line_id(items: list[dict] | None = None) -> int | None:
     return None
 
 
-def _ci_invoiced_by_cal_month() -> dict[tuple[int, int], float]:
+def _ci_invoiced_by_cal_month() -> Dict[Tuple[int, int], float]:
     """{(cal_year, month): total} from all non-cancelled GBInc CIs."""
-    totals: dict[tuple[int, int], float] = {}
+    totals: Dict[Tuple[int, int], float] = {}
     try:
         from app.commission_invoices import upgrade_commission_invoices_schema
         from app.database import get_db as leads_get_db

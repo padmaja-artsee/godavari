@@ -6,7 +6,7 @@
   <title>{% block title %}Leads{% endblock %} · GBInc</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/static/style.css?v=1.5.11" />
+  <link rel="stylesheet" href="/static/style.css?v=1.5.13" />
   {% block extra_css %}{% endblock %}
 </head>
 <body>
@@ -36,6 +36,10 @@
         <a href="/generate" class="{% if page == 'generate' %}active{% endif %}">Generate</a>
         <a href="/add?tab=log" class="{% if page == 'add' %}active{% endif %}">Add / Upload</a>
         <a href="/summary" class="{% if page == 'summary' %}active{% endif %}">Summary</a>
+        <a href="/presentation" class="{% if page == 'presentation' %}active{% endif %}">
+          Presentation
+          <span class="nav-badge" data-presentation-badge hidden></span>
+        </a>
       </nav>
     </aside>
     {% endif %}
@@ -67,7 +71,7 @@
     function showConfirm(msg, okLabel) {
       msgEl.textContent = msg;
       // Use red danger button for "Delete", neutral primary for everything else
-      var isDanger = !okLabel || okLabel === 'Delete';
+      var isDanger = !okLabel || okLabel === 'Delete' || okLabel === 'Clear';
       okBtn.textContent = isDanger ? (okLabel || 'Delete') : '';
       okBtn.style.display = isDanger ? '' : 'none';
       okBtnSafe.textContent = isDanger ? '' : okLabel;
@@ -75,6 +79,7 @@
       overlay.style.display = 'flex';
       return new Promise(function (resolve) { _resolve = resolve; });
     }
+    window.appConfirm = showConfirm;
 
     function handleOk() {
       overlay.style.display = 'none';
@@ -119,6 +124,8 @@
     }, true);
   })();
   </script>
+  <script src="/static/presentation-deck.js?v=1"></script>
+  <script src="/static/report-deck.js?v=1"></script>
   {% block extra_js %}{% endblock %}
 </body>
 </html>

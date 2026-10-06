@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Written Report — GBInc Management Report{% endblock %}
+{% block content %}
+<div class="mr-page-header">
+  <div>
+    <h1 class="mr-title">Written Report</h1>
+    <p class="mr-subtitle">
+      Curate charts with <strong>Add to report</strong> from Summary, Generate Charts, or Finance,
+      then edit the narrative and print a management report.
+    </p>
+  </div>
+  <div class="mr-header-actions no-print">
+    <button type="button" class="mr-btn mr-btn-outline" id="rptDraftBtn" disabled>Fill empty notes</button>
+    <button type="button" class="mr-btn mr-btn-outline" id="rptClearBtn" disabled>Clear all</button>
+    <button type="button" class="mr-btn mr-btn-primary" id="rptPrintBtn" disabled>Print / PDF</button>
+  </div>
+</div>
+
+<div class="mr-card no-print" id="rptMetaCard" style="margin-bottom:1rem">
+  <div class="mr-card-title">Report header</div>
+  <div class="mr-rpt-meta-grid">
+    <label class="mr-label">Report title
+      <input type="text" class="mr-input" id="rptTitle" placeholder="e.g. Monthly Management Report — September 2026" />
+    </label>
+    <label class="mr-label">Period
+      <input type="text" class="mr-input" id="rptPeriod" placeholder="e.g. FY2027 YTD · Apr–Sep" />
+    </label>
+  </div>
+  <label class="mr-label">Executive summary
+    <textarea class="mr-input mr-rpt-textarea" id="rptSummary" rows="4" placeholder="High-level narrative for leadership…"></textarea>
+  </label>
+</div>
+
+<div class="mr-card mr-rpt-empty" id="rptEmpty">
+  <p class="mr-empty" style="margin:0">
+    No charts in this report yet. Open a chart, click <strong>Add to report</strong>, then return here.
+  </p>
+  <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1rem">
+    <a class="mr-btn mr-btn-primary" href="/summary">Summary chart</a>
+    <a class="mr-btn mr-btn-outline" href="/generate/charts">Generate charts</a>
+    <a class="mr-btn mr-btn-outline" href="/finance/analysis">Finance analysis</a>
+  </div>
+</div>
+
+<div id="rptEditor" class="mr-rpt-editor" hidden></div>
+
+{# Printable composed report #}
+<article class="mr-rpt-print" id="rptPrint" hidden>
+  <header class="mr-rpt-print-header">
+    <div class="mr-rpt-print-brand">Godavari Biorefineries Inc · Management Report</div>
+    <h1 id="rptPrintTitle">Written Report</h1>
+    <p class="mr-rpt-print-period" id="rptPrintPeriod"></p>
+  </header>
+  <section class="mr-rpt-print-summary" id="rptPrintSummaryWrap" hidden>
+    <h2>Executive summary</h2>
+    <p id="rptPrintSummary"></p>
+  </section>
+  <div id="rptPrintBody"></div>
+  <footer class="mr-rpt-print-footer">Generated <span id="rptPrintDate"></span></footer>
+</article>
+
+<script src="{{ _base }}/static/mr-written-report.js?v=1"></script>
+{% endblock %}

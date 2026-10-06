@@ -51,7 +51,10 @@ BANK_RULES: list[BankRule] = [
        "Miscellaneous", "", "low", force_review=True),
     _r(6, "Payroll — Intuit", r"INTUIT PAYROLL", "debit",
        "Compensation", "Intuit QuickBooks Payroll", "high", precheck=True),
-    _r(26, "Payroll — Godavari", r"GODAVARI BIOREFI\s*PAYROLL|GODAVARI BIOREFINERIES.*PAYROLL", "debit",
+    # Bank memo variants: "GODAVARI BIOREFI PAYROLL", "BOGODA GODAVARI PAYROLL …"
+    _r(26, "Payroll — Godavari",
+       r"BOGODA\s+GODAVARI\s+PAYROLL|GODAVARI\s+BIOREFI\w*\s*PAYROLL|GODAVARI\s+BIOREFINERIES.*PAYROLL|GODAVARI.*\bPAYROLL\b",
+       "debit",
        "Compensation", "Godavari Biorefineries Ltd", "high", precheck=True),
     _r(7, "IRS tax", r"IRS USATAXPYMT", "debit",
        "Taxes", "IRS", "high", precheck=True),

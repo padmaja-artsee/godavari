@@ -1660,6 +1660,14 @@ async def deals_export_xlsx(
     )
 
 
+@app.get("/presentation", response_class=HTMLResponse)
+async def presentation_page(request: Request):
+    return templates.TemplateResponse(
+        "presentation.html",
+        ctx(request, page="presentation"),
+    )
+
+
 @app.get("/summary", response_class=HTMLResponse)
 async def summary(
     request: Request,

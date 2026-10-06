@@ -86,6 +86,22 @@ body {
 .nav a:hover { background: rgba(255,255,255,.1); color: #fff; border-left-color: transparent; }
 .nav a.active { background: rgba(255,255,255,.15); color: #fff; border-left-color: #7EC8A0; font-weight: 600; }
 
+.nav a .nav-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  min-width: 1.15rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: #7EC8A0;
+  color: #0b2e1a;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  vertical-align: middle;
+}
+.nav a .nav-badge[hidden] { display: none !important; }
+
 .main {
   padding: 1.75rem 2rem 3rem;
   overflow-x: auto;
@@ -478,6 +494,318 @@ tr:hover td { background: #f8fafc; }
 
 .ci-chart-canvas-wrap .empty[hidden] {
   display: none !important;
+}
+
+.ci-present-bar {
+  display: none;
+}
+
+.ci-chart-help kbd,
+.ci-present-hints kbd {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: #f8fafc;
+  font-size: 0.72rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+}
+
+/* ── Commission chart presentation mode ─────────────── */
+body.ci-presenting {
+  overflow: hidden;
+  background: #0f172a;
+}
+
+body.ci-presenting .app-switch,
+body.ci-presenting .sidebar,
+body.ci-presenting .page-header,
+body.ci-presenting .page-header-actions,
+body.ci-presenting .summary-filter-bar,
+body.ci-presenting .stats,
+body.ci-presenting .ci-chart-help,
+body.ci-presenting #ciChartRoot ~ .card,
+body.ci-presenting .card-header h2 {
+  display: none !important;
+}
+
+body.ci-presenting .layout {
+  display: block;
+  padding: 0;
+  margin: 0;
+  min-height: 100vh;
+}
+
+body.ci-presenting .main,
+body.ci-presenting main,
+body.ci-presenting .content {
+  margin: 0 !important;
+  padding: 0.75rem 1rem 1rem !important;
+  max-width: none !important;
+  width: 100% !important;
+}
+
+body.ci-presenting #ciChartRoot {
+  margin: 0 !important;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  background: #fff;
+  min-height: calc(100vh - 1.5rem);
+  display: flex;
+  flex-direction: column;
+}
+
+body.ci-presenting #ciChartRoot .card-header {
+  border-bottom: 1px solid var(--border);
+  padding: 0.65rem 1rem;
+}
+
+body.ci-presenting #ciChartRoot .card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0;
+}
+
+body.ci-presenting .ci-present-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  padding: 0.65rem 1rem;
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+body.ci-presenting .ci-present-bar[hidden] {
+  display: flex !important;
+}
+
+body.ci-presenting .ci-present-title {
+  font-weight: 650;
+  font-size: 1.05rem;
+  color: #fff;
+}
+
+body.ci-presenting .ci-present-hints {
+  flex: 1;
+  font-size: 0.78rem;
+  color: #94a3b8;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.55rem;
+  align-items: center;
+}
+
+body.ci-presenting .ci-present-hints kbd {
+  background: #1e293b;
+  border-color: #334155;
+  color: #cbd5e1;
+}
+
+body.ci-presenting #ciChartPresentExit {
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
+body.ci-presenting .ci-chart-controls,
+body.ci-presenting .ci-period-row {
+  padding-left: 1rem;
+  padding-right: 1rem;
+}
+
+body.ci-presenting .ci-chart-canvas-wrap {
+  flex: 1;
+  height: auto;
+  min-height: 420px;
+  margin: 0.5rem 1rem 1rem;
+}
+
+body.ci-presenting .ci-chart-total {
+  font-size: 1rem;
+  color: #0f172a;
+  font-weight: 600;
+}
+
+/* ── Presentation deck & slideshow ──────────────────── */
+.pres-deck {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+.pres-slide-card {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: 1rem;
+  background: #fff;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.pres-slide-thumb {
+  background: #f8fafc;
+  min-height: 110px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pres-slide-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  max-height: 140px;
+}
+.pres-slide-body {
+  padding: 0.85rem 1rem 0.85rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.pres-slide-idx {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--muted, #64748b);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.pres-slide-title {
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 0.2rem 0.35rem;
+  margin: 0 -0.35rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text, #0f172a);
+  background: transparent;
+  width: calc(100% + 0.7rem);
+}
+.pres-slide-title:hover,
+.pres-slide-title:focus {
+  border-color: #cbd5e1;
+  background: #fff;
+  outline: none;
+}
+.pres-slide-sub {
+  font-size: 0.82rem;
+  color: var(--muted, #64748b);
+}
+.pres-slide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.pres-show {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: #0b1220;
+  color: #e2e8f0;
+  display: flex;
+  flex-direction: column;
+}
+.pres-show[hidden] { display: none !important; }
+.pres-show-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 1.25rem;
+  background: #111827;
+  border-bottom: 1px solid #1e293b;
+  flex-wrap: wrap;
+}
+.pres-show-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #f8fafc;
+}
+.pres-show-meta {
+  font-size: 0.82rem;
+  color: #94a3b8;
+  flex: 1;
+}
+.pres-show-hints {
+  font-size: 0.78rem;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.pres-show-hints kbd {
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.72rem;
+  color: #cbd5e1;
+}
+.pres-show-stage {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 48px 1fr 48px;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 0.5rem 0.25rem;
+  min-height: 0;
+}
+.pres-show-stage img {
+  width: 100%;
+  height: 100%;
+  max-height: calc(100vh - 120px);
+  object-fit: contain;
+  background: #fff;
+  border-radius: 4px;
+}
+.pres-show-nav {
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  font-size: 2.2rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.5rem;
+  border-radius: 8px;
+}
+.pres-show-nav:hover {
+  background: #1e293b;
+  color: #fff;
+}
+.pres-show-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem 0.85rem;
+}
+.pres-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  background: #334155;
+  padding: 0;
+  cursor: pointer;
+}
+.pres-dot.active { background: #7EC8A0; }
+body.pres-showing .app-switch,
+body.pres-showing .sidebar,
+body.pres-showing .main > .page-header,
+body.pres-showing .pres-empty,
+body.pres-showing .pres-deck {
+  display: none !important;
+}
+
+@media (max-width: 720px) {
+  .pres-slide-card {
+    grid-template-columns: 1fr;
+  }
+  .pres-slide-body { padding: 0 1rem 1rem; }
+  .pres-show-stage { grid-template-columns: 36px 1fr 36px; }
 }
 
 .search-bar {

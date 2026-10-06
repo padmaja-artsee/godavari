@@ -8,7 +8,8 @@
   </div>
   <div class="f-header-controls">
     <form method="get" action="{{ _base }}/">
-      <select name="fy" class="f-select-sm" onchange="this.form.submit()">
+      <label class="f-filter-label" style="margin-right:.35rem">Time frame</label>
+      <select name="fy" class="f-select-sm" onchange="this.form.submit()" aria-label="Fiscal year">
         {% for y in fiscal_years %}
         <option value="{{ y }}" {% if y==fy %}selected{% endif %}>FY{{ y }} ({{ y-1 }}-{{ '%02d'|format(y % 100) }})</option>
         {% endfor %}
@@ -57,14 +58,35 @@
   </div>
 </div>
 
+{% set period_lbl = "FY" ~ fy ~ " · Apr " ~ (fy-1) ~ "–Mar " ~ fy %}
 <!-- Charts row -->
 <div class="f-charts-grid">
   <div class="f-card f-card-wide">
-    <div class="f-card-header">Monthly Expenses — Budget vs Actuals</div>
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <div>
+        <div>Monthly Expenses — Budget vs Actuals</div>
+        <div class="f-text-muted" style="font-size:.78rem;font-weight:400;margin-top:.15rem">{{ period_lbl }}</div>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button type="button" class="f-btn-sm f-btn-outline" id="dashExpAddPres">+ Present</button>
+        <button type="button" class="f-btn-sm f-btn-outline" id="dashExpAddReport">+ Report</button>
+        <button type="button" class="f-btn-sm f-btn-outline" id="dashExpDownload">↓ Save chart</button>
+      </div>
+    </div>
     <canvas id="expChart" height="90"></canvas>
   </div>
   <div class="f-card">
-    <div class="f-card-header">Monthly Income — Actuals</div>
+    <div class="f-card-header" style="display:flex;justify-content:space-between;align-items:center;gap:.75rem;flex-wrap:wrap">
+      <div>
+        <div>Monthly Income — Actuals</div>
+        <div class="f-text-muted" style="font-size:.78rem;font-weight:400;margin-top:.15rem">{{ period_lbl }}</div>
+      </div>
+      <div style="display:flex;gap:.4rem;flex-wrap:wrap">
+        <button type="button" class="f-btn-sm f-btn-outline" id="dashIncAddPres">+ Present</button>
+        <button type="button" class="f-btn-sm f-btn-outline" id="dashIncAddReport">+ Report</button>
+        <button type="button" class="f-btn-sm f-btn-outline" id="dashIncDownload">↓ Save chart</button>
+      </div>
+    </div>
     <canvas id="incChart" height="90"></canvas>
   </div>
 </div>
@@ -99,22 +121,52 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 const months = {{ chart_months | tojson }};
+const PERIOD = {{ period_lbl | tojson }};
+const FC = window.FinanceCharts;
+const expTitle = "Monthly Expenses — Budget vs Actuals · " + PERIOD;
+const incTitle = "Monthly Income — Actuals · " + PERIOD;
+
 new Chart(document.getElementById('expChart'), {
   type:'bar',
   data:{labels:months, datasets:[
     {label:'Budget',  data:{{ exp_budget | tojson }}, backgroundColor:'rgba(28,86,49,.25)', borderColor:'#1C5631', borderWidth:1},
     {label:'Actuals', data:{{ exp_actual | tojson }}, backgroundColor:'rgba(192,57,43,.45)', borderColor:'#C0392B', borderWidth:1}
   ]},
-  options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
+  options:{
+    responsive:true,
+    plugins: FC.chartPlugins(expTitle),
+    scales:{ y: FC.moneyScaleY(true) }
+  }
 });
 new Chart(document.getElementById('incChart'), {
   type:'bar',
   data:{labels:months, datasets:[
     {label:'Income', data:{{ income_actual | tojson }}, backgroundColor:'rgba(28,86,49,.5)', borderColor:'#1C5631', borderWidth:1}
   ]},
-  options:{responsive:true,plugins:{legend:{position:'bottom'}},
-           scales:{y:{beginAtZero:true,ticks:{callback:v=>'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}}}}
+  options:{
+    responsive:true,
+    plugins: FC.chartPlugins(incTitle),
+    scales:{ y: FC.moneyScaleY(true) }
+  }
+});
+
+document.getElementById('dashExpAddPres').addEventListener('click', function () {
+  FC.addChartToPresentation('expChart', expTitle, this);
+});
+document.getElementById('dashIncAddPres').addEventListener('click', function () {
+  FC.addChartToPresentation('incChart', incTitle, this);
+});
+document.getElementById('dashExpAddReport').addEventListener('click', function () {
+  FC.addChartToReport('expChart', expTitle, this);
+});
+document.getElementById('dashIncAddReport').addEventListener('click', function () {
+  FC.addChartToReport('incChart', incTitle, this);
+});
+document.getElementById('dashExpDownload').addEventListener('click', function () {
+  FC.downloadChart('expChart', 'GBInc-Monthly-Expenses-Budget-vs-Actuals-FY{{ fy }}.png', expTitle);
+});
+document.getElementById('dashIncDownload').addEventListener('click', function () {
+  FC.downloadChart('incChart', 'GBInc-Monthly-Income-Actuals-FY{{ fy }}.png', incTitle);
 });
 </script>
 {% endblock %}

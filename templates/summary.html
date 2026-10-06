@@ -38,16 +38,25 @@
     <h2>Commission chart</h2>
     <div class="ci-chart-header-actions">
       <span class="ci-chart-total" id="ciChartTotal"></span>
+      <button type="button" class="btn btn-ghost btn-sm" id="ciChartAddPresBtn" title="Add current chart to Presentation tab">Add to presentation</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ciChartAddReportBtn" title="Add to MR Written Report">Add to report</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ciChartPresentBtn" title="Quick present this chart (P)">Present</button>
       <button type="button" class="btn btn-ghost btn-sm" id="ciChartDownloadPng" title="Download chart as PNG">↓ PNG</button>
       <button type="button" class="btn btn-ghost btn-sm" id="ciChartDownloadCsv" title="Download chart data as CSV">↓ CSV</button>
     </div>
   </div>
   <div class="card-body">
-    <p class="subtitle" style="margin:0 0 .75rem">
-      Pick a <strong>time period</strong>, filter by company and/or product, then how to break bars down.
-      For one buyer’s mix, pick that company and set <strong>Stack by → Product</strong>.
-      Optionally compare a second period. Independent of the Week/Month pills above.
-    </p>
+    <div class="ci-present-bar" id="ciPresentBar" hidden>
+      <div class="ci-present-title" id="ciPresentTitle">Commission chart</div>
+      <div class="ci-present-hints">
+        <kbd>←</kbd><kbd>→</kbd> scenes
+        <kbd>1</kbd>–<kbd>3</kbd> value
+        <kbd>S</kbd> stack
+        <kbd>B</kbd> bars
+        <kbd>Esc</kbd> exit
+      </div>
+      <button type="button" class="btn btn-ghost btn-sm" id="ciChartPresentExit">Exit</button>
+    </div>
     <div class="ci-chart-controls">
       <label class="ci-chart-field">
         <span>Show bars</span>
@@ -135,6 +144,7 @@
             <span>Filter</span>
             <select id="ciPeriodAKind">
               <option value="all">All time</option>
+              <option value="ttm">Trailing 12 months</option>
               <option value="month">Month</option>
               <option value="quarter">Quarter</option>
               <option value="year">Year</option>
@@ -174,6 +184,7 @@
             <span>Filter</span>
             <select id="ciPeriodBKind">
               <option value="all">All time</option>
+              <option value="ttm">Trailing 12 months</option>
               <option value="month">Month</option>
               <option value="quarter">Quarter</option>
               <option value="year">Year</option>
@@ -211,6 +222,13 @@
       <canvas id="ciChartCanvas"></canvas>
       <div class="empty" id="ciChartEmpty" hidden>No commission lines for this filter.</div>
     </div>
+    <p class="subtitle ci-chart-help" style="margin:.75rem 1.25rem 1rem">
+      Pick a <strong>time period</strong>, filter by company and/or product, then how to break bars down.
+      For one buyer’s mix, pick that company and set <strong>Stack by → Product</strong>.
+      Use <strong>Add to presentation</strong> for a slideshow, or <strong>Add to report</strong> for a written report in
+      <a class="link" href="/mr/written-report">MR → Written Report</a>.
+      <strong>Present</strong> (<kbd>P</kbd>) is a quick fullscreen view of this chart.
+    </p>
   </div>
 </div>
 <script id="ciChartData" type="application/json">{{ commission_chart_rows|default([])|tojson }}</script>
@@ -444,5 +462,5 @@
 
 {% block extra_js %}
 <script src="/static/vendor/chart.umd.min.js"></script>
-<script src="/static/summary-commission-chart.js?v=11"></script>
+<script src="/static/summary-commission-chart.js?v=16"></script>
 {% endblock %}

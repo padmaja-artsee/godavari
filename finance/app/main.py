@@ -30,6 +30,10 @@ from finance.app.expenses import (
     create_transaction, delete_transaction, get_transaction,
     list_transactions, receipt_path, save_receipt, update_transaction,
 )
+from finance.app.commission_receivables import (
+    commission_receivables_rows_for_points,
+    commission_receivables_summary,
+)
 
 # When frozen by PyInstaller, __file__ doesn't reliably resolve to
 # sys._MEIPASS/finance/app/main.py.  Use LEADS_BUNDLE_BASE (set by
@@ -838,11 +842,6 @@ async def commission_receivables_page(
     Period is a free calendar range (from month → to month, any years).
     """
     from datetime import date
-
-    from finance.app.commission_receivables import (
-        commission_receivables_rows_for_points,
-        commission_receivables_summary,
-    )
 
     fys = get_fiscal_years()
     if not fy:

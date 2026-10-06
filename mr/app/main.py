@@ -95,6 +95,14 @@ async def dashboard(request: Request):
     )
 
 
+@app.get("/written-report", response_class=HTMLResponse)
+async def written_report(request: Request):
+    return templates.TemplateResponse(
+        "written_report.html",
+        _ctx(request, page="written_report"),
+    )
+
+
 @app.get("/gbl-cs-input", response_class=HTMLResponse)
 async def gbl_cs_input(request: Request):
     # Consolidated under Finance → Commissions (same register DB).
