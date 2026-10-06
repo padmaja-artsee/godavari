@@ -4,7 +4,7 @@
 <div class="page-header">
   <div>
     <h1>Summary</h1>
-    <p class="subtitle">Commission (CI when selected, otherwise activity) · activity roll-up · shipping</p>
+    <p class="subtitle">Commission from uploaded invoices · activity roll-up · shipping</p>
   </div>
   <div class="page-header-actions">
     <a href="/summary/export.xlsx?period={{ period }}&group={{ group }}&sheet=all" class="btn btn-ghost btn-sm">Download all (XLS)</a>
@@ -33,6 +33,166 @@
   <div class="stat-card"><div class="label">Products</div><div class="value">{{ stats.products }}</div></div>
 </div>
 
+<div class="card" style="margin-bottom:1.25rem" id="ciChartRoot">
+  <div class="card-header">
+    <h2>Commission chart</h2>
+    <div class="ci-chart-header-actions">
+      <span class="ci-chart-total" id="ciChartTotal"></span>
+      <button type="button" class="btn btn-ghost btn-sm" id="ciChartDownloadPng" title="Download chart as PNG">↓ PNG</button>
+      <button type="button" class="btn btn-ghost btn-sm" id="ciChartDownloadCsv" title="Download chart data as CSV">↓ CSV</button>
+    </div>
+  </div>
+  <div class="card-body">
+    <p class="subtitle" style="margin:0 0 .75rem">
+      Pick a <strong>time period</strong>, then how to break bars down (monthly, by company, etc.).
+      Optionally compare a second period. Independent of the Week/Month pills above.
+    </p>
+    <div class="ci-chart-controls">
+      <label class="ci-chart-field">
+        <span>Show bars</span>
+        <select id="ciChartBreakdown">
+          <option value="month" selected>Monthly</option>
+          <option value="quarter">Quarterly</option>
+          <option value="year">Yearly</option>
+          <option value="fy">By fiscal year</option>
+          <option value="company">By company</option>
+          <option value="product">By product</option>
+        </select>
+      </label>
+      <label class="ci-chart-field">
+        <span>Value</span>
+        <select id="ciChartMetric">
+          <option value="commission" selected>Commission $</option>
+          <option value="quantity">Quantity</option>
+        </select>
+      </label>
+      <label class="ci-chart-field" id="ciChartTopWrap">
+        <span>Top N</span>
+        <select id="ciChartTop">
+          <option value="8" selected>Top 8</option>
+          <option value="12">Top 12</option>
+          <option value="20">Top 20</option>
+          <option value="0">All</option>
+        </select>
+      </label>
+      <label class="ci-chart-field">
+        <span>Entity</span>
+        <select id="ciChartVariant">
+          <option value="all" selected>All entities</option>
+          <option value="gbinc">GB Inc</option>
+          <option value="gbbv">GB BV</option>
+        </select>
+      </label>
+      <div class="ci-chart-field ci-ms" id="ciChartProductWrap">
+        <span>Products</span>
+        <button type="button" class="ci-ms-btn" id="ciChartProductBtn" aria-haspopup="listbox" aria-expanded="false">
+          All products
+        </button>
+        <div class="ci-ms-panel" id="ciChartProductPanel" hidden>
+          <label class="ci-ms-all">
+            <input type="checkbox" id="ciChartProductAll" checked />
+            <span>All products</span>
+          </label>
+          <div class="ci-ms-list" id="ciChartProductList"></div>
+        </div>
+      </div>
+      <label class="ci-chart-field ci-chart-check">
+        <span>Compare</span>
+        <label class="ci-compare-toggle">
+          <input type="checkbox" id="ciChartCompare" />
+          <span>Second period</span>
+        </label>
+      </label>
+    </div>
+
+    <div class="ci-period-row">
+      <div class="ci-period-block" id="ciPeriodABlock">
+        <div class="ci-period-title" id="ciPeriodALabel">Time period</div>
+        <div class="ci-chart-controls">
+          <label class="ci-chart-field" id="ciPeriodAKindWrap">
+            <span>Filter</span>
+            <select id="ciPeriodAKind">
+              <option value="all">All time</option>
+              <option value="month">Month</option>
+              <option value="quarter">Quarter</option>
+              <option value="year">Year</option>
+              <option value="fy" selected>Fiscal year</option>
+              <option value="custom">Date range</option>
+            </select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodAMonthWrap" hidden>
+            <span>Month</span>
+            <select id="ciPeriodAMonth"></select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodAQuarterWrap" hidden>
+            <span>Quarter</span>
+            <select id="ciPeriodAQuarter"></select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodAYearWrap" hidden>
+            <span>Year</span>
+            <select id="ciPeriodAYear"></select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodAFyWrap" hidden>
+            <span>FY</span>
+            <select id="ciPeriodAFy"></select>
+          </label>
+          <span class="ci-chart-field ci-chart-range" id="ciPeriodACustomWrap" hidden>
+            <span>From / to</span>
+            <span class="ci-chart-range-inputs">
+              <input type="date" id="ciPeriodAFrom" />
+              <input type="date" id="ciPeriodATo" />
+            </span>
+          </span>
+        </div>
+      </div>
+      <div class="ci-period-block" id="ciPeriodBBlock" hidden>
+        <div class="ci-period-title">Compare with</div>
+        <div class="ci-chart-controls">
+          <label class="ci-chart-field">
+            <span>Filter</span>
+            <select id="ciPeriodBKind">
+              <option value="all">All time</option>
+              <option value="month">Month</option>
+              <option value="quarter">Quarter</option>
+              <option value="year">Year</option>
+              <option value="fy" selected>Fiscal year</option>
+              <option value="custom">Date range</option>
+            </select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodBMonthWrap" hidden>
+            <span>Month</span>
+            <select id="ciPeriodBMonth"></select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodBQuarterWrap" hidden>
+            <span>Quarter</span>
+            <select id="ciPeriodBQuarter"></select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodBYearWrap" hidden>
+            <span>Year</span>
+            <select id="ciPeriodBYear"></select>
+          </label>
+          <label class="ci-chart-field" id="ciPeriodBFyWrap" hidden>
+            <span>FY</span>
+            <select id="ciPeriodBFy"></select>
+          </label>
+          <span class="ci-chart-field ci-chart-range" id="ciPeriodBCustomWrap" hidden>
+            <span>From / to</span>
+            <span class="ci-chart-range-inputs">
+              <input type="date" id="ciPeriodBFrom" />
+              <input type="date" id="ciPeriodBTo" />
+            </span>
+          </span>
+        </div>
+      </div>
+    </div>
+    <div class="ci-chart-canvas-wrap">
+      <canvas id="ciChartCanvas"></canvas>
+      <div class="empty" id="ciChartEmpty" hidden>No commission lines for this filter.</div>
+    </div>
+  </div>
+</div>
+<script id="ciChartData" type="application/json">{{ commission_chart_rows|default([])|tojson }}</script>
+
 <div class="card" style="margin-bottom:1.25rem">
   <div class="card-header">
     <h2>Commission summary</h2>
@@ -43,32 +203,39 @@
   </div>
   <div class="card-body" style="overflow-x:auto">
     <p class="subtitle" style="margin:0 0 .75rem">
-      Selected commission invoices are the source of truth for that PO (no duplicate activity row).
-      POs without a CI on Summary use open-deal activity. Discrepancy = CI commission − deal commission.
-      Add invoices from <a class="link" href="/generate/commission-invoices">Commission Invoices</a>.
+      Built from line items on saved commission invoices
+      (<a class="link" href="/generate/commission-invoices">GB Inc</a> /
+      <a class="link" href="/generate/commission-invoices-gbbv">GB BV</a>).
+      Rows follow the <strong>Commission chart</strong> filters above (time, products, entity).
     </p>
     {% if commission_rows %}
-    <table>
+    <table id="ciSummaryTable">
       <thead>
         <tr>
           <th>Company</th>
           <th>Product</th>
+          <th>Unit price</th>
+          <th>Qty ordered</th>
+          <th>Date</th>
           <th>PO #</th>
-          <th>Source</th>
           <th>CI #</th>
           <th>Commission</th>
-          <th>Deal amt</th>
-          <th>Discrepancy</th>
-          <th>Date</th>
-          <th>Notes</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
       {% for r in commission_rows %}
-      <tr>
+      <tr class="ci-summary-row"
+          data-date="{{ r.invoice_date or '' }}"
+          data-product="{{ r.product or '—' }}"
+          data-variant="{{ r.variant or 'gbinc' }}"
+          data-commission="{{ r.commission or 0 }}"
+          data-quantity="{{ r.quantity or 0 }}">
         <td><strong>{{ r.company }}</strong></td>
         <td>{{ r.product }}</td>
+        <td>{% if r.unit_price %}{{ r.unit_price|money }}{% else %}—{% endif %}</td>
+        <td>{% if r.quantity %}{{ r.quantity }}{% else %}—{% endif %}</td>
+        <td>{{ r.invoice_date or '—' }}</td>
         <td>
           {% if r.deal_id %}
           <a class="link" href="/deal/{{ r.deal_id }}">{{ r.po_number }}</a>
@@ -77,47 +244,29 @@
           {% endif %}
         </td>
         <td>
-          {% if r.source == 'ci' %}
-          <span class="badge" style="background:#ecfdf5;color:#166534">{{ r.source_label }}</span>
-          {% else %}
-          <span class="badge">{{ r.source_label }}</span>
-          {% endif %}
-        </td>
-        <td>
           {% if r.ci_id %}
           <a class="link" href="{{ r.ci_base }}/{{ r.ci_id }}">{{ r.ci_number or ('CI #' ~ r.ci_id) }}</a>
           {% else %}—{% endif %}
         </td>
-        <td>{% if r.commission %}{{ r.commission|money }} {{ r.currency }}{% else %}—{% endif %}</td>
-        <td>
-          {% if r.source == 'ci' and r.deal_commission is not none %}
-          {{ r.deal_commission|money }}
-          {% else %}—{% endif %}
-        </td>
-        <td>
-          {% if r.discrepancy is not none and r.discrepancy != 0 %}
-          <span style="color:{% if r.discrepancy > 0 %}#166534{% else %}#b91c1c{% endif %};font-weight:600">
-            {% if r.discrepancy > 0 %}+{% endif %}{{ r.discrepancy|money }}
-          </span>
-          {% elif r.source == 'ci' and r.deal_commission is not none %}
-          <span style="color:#6b7280">0</span>
-          {% else %}—{% endif %}
-        </td>
-        <td>{{ r.last_activity or '—' }}</td>
-        <td title="{{ r.notes or '' }}">{{ (r.notes or '—')[:40] }}{% if (r.notes or '')|length > 40 %}…{% endif %}</td>
+        <td class="ci-summary-comm">{% if r.commission %}{{ r.commission|money }} {{ r.currency }}{% else %}—{% endif %}</td>
         <td>
           {% if r.ci_id %}
-          <a class="link" href="{{ r.ci_base }}/{{ r.ci_id }}">CI</a>
-          {% elif r.deal_id %}
-          <a class="link" href="/deal/{{ r.deal_id }}">Deal</a>
+          <a class="link" href="{{ r.ci_base }}/{{ r.ci_id }}">Open</a>
           {% endif %}
         </td>
       </tr>
       {% endfor %}
       </tbody>
+      <tfoot>
+        <tr>
+          <th colspan="7" style="text-align:right">Total (<span id="ciTableCount">0</span> lines)</th>
+          <th id="ciTableTotal">—</th>
+          <th></th>
+        </tr>
+      </tfoot>
     </table>
     {% else %}
-    <div class="empty">No commission or activity rows for this period. Mark a CI with <strong>Add to Summary</strong>, or log activity on open deals.</div>
+    <div class="empty">No saved commission invoices for this period. Add invoices under <a class="link" href="/generate/commission-invoices">Commission Invoices</a>.</div>
     {% endif %}
   </div>
 </div>
@@ -183,7 +332,8 @@
   </div>
   <div class="card-body shipping-table-scroll">
     <p class="subtitle" style="margin:0 0 .75rem">
-      Deal rows by default; CIs marked <strong>Add to Summary</strong> replace the matching PO (no doubles). Discrepancy = CI − deal commission.
+      Open deals in the selected period (by PO / invoice / shipment date).
+      CIs marked <strong>Add to Summary</strong> replace the matching PO. Discrepancy = CI − deal commission.
     </p>
     {% if shipping_rows %}
     <table class="deals-table shipping-table">
@@ -268,4 +418,9 @@
     {% endif %}
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/summary-commission-chart.js?v=6"></script>
 {% endblock %}

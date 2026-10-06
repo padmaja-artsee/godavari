@@ -1011,7 +1011,11 @@ def upsert_product(conn: sqlite3.Connection, name: str) -> int:
 
 
 def period_start(period: str) -> Optional[str]:
-    today = datetime.utcnow().date()
+    """Inclusive lower bound (YYYY-MM-DD) for week/month/quarter/year filters.
+
+    Uses the local calendar date so pills match what the user sees on the clock.
+    """
+    today = date.today()
     if period == "all":
         return None
     if period == "week":
@@ -1026,6 +1030,19 @@ def period_start(period: str) -> Optional[str]:
     else:
         start = today - timedelta(days=30)
     return start.isoformat()
+
+
+def row_in_period(row: dict, start: Optional[str], *date_keys: str) -> bool:
+    """True if any of the row's date fields is on/after start (or period is all)."""
+    if not start:
+        return True
+    for key in date_keys:
+        raw = (row.get(key) or "").strip()
+        if not raw:
+            continue
+        if raw[:10] >= start:
+            return True
+    return False
 
 
 def calendar_month_bounds(ym: str) -> Optional[tuple[str, str]]:
@@ -2079,7 +2096,7 @@ def list_active_leads(
     stage: str = "all",
     sort: str = "stage",
     direction: str = "asc",
-    attention_days: int | None = None,
+    attention_days: Optional[int] = None,
     month: str = "",
 ) -> list[dict]:
     """One row per deal (or lead-only product) with activity in the period.
@@ -2186,7 +2203,8 @@ def list_active_leads(
     period_act = (" AND " + " AND ".join(period_act_bits)) if period_act_bits else ""
     deal_sql = f"""
         SELECT d.id AS deal_id, d.deal_date, d.status, d.archived, d.po_number, d.quote_ref,
-               d.quantity, d.quantity_unit, d.price, d.price_unit, d.value, d.notes, d.closed_date,
+               d.quantity, d.quantity_unit, d.price, d.price_unit, d.value, d.commercial_total,
+               d.notes, d.closed_date,
                d.pipeline_stage, d.first_contact_at, d.rfq_at, d.rfs_at, d.conversion_at,
                c.name AS company, p.name AS product, d.customer_id, d.product_id,
                COALESCE(l.contact, '') AS contact,
@@ -2219,6 +2237,12 @@ def list_active_leads(
         for row in conn.execute(deal_sql, deal_query_params).fetchall():
             item = dict(row)
             item["pipeline_stage"] = infer_stage_from_row(item)
+            ct = (item.get("commercial_total") or "").strip()
+            if not ct:
+                ct = compute_commercial_total(
+                    item.get("quantity") or "", item.get("price") or ""
+                )
+            item["commercial_total"] = ct
             result.append(item)
 
         if status in ("all", "open") and stage_filter in ("all", "first_contact"):
@@ -2300,6 +2324,7 @@ def list_active_leads(
                 item["quantity_unit"] = "MT"
                 item["price"] = ""
                 item["price_unit"] = "/MT"
+                item["commercial_total"] = ""
                 item["notes"] = ""
                 item["deal_date"] = item["last_activity_date"]
                 result.append(item)
@@ -2327,12 +2352,98 @@ def list_active_leads(
                 filtered.append(r)
         result = filtered
 
-    return sort_active_leads(result, sort=sort, direction=direction)
+    sorted_rows = sort_active_leads(result, sort=sort, direction=direction)
+    return attach_lead_activity_history(sorted_rows)
 
+
+def attach_lead_activity_history(rows: list[dict], limit: int = 25) -> list[dict]:
+    """Attach chronological activity history (newest first) to each active-lead row."""
+    if not rows:
+        return rows
+
+    deal_ids = sorted({int(r["deal_id"]) for r in rows if r.get("deal_id")})
+    lead_pairs = sorted(
+        {
+            (int(r["customer_id"]), int(r["product_id"]))
+            for r in rows
+            if not r.get("deal_id") and r.get("customer_id") and r.get("product_id")
+        }
+    )
+
+    by_deal: dict[int, list[dict]] = {}
+    by_lead: dict[tuple[int, int], list[dict]] = {}
+
+    with get_db() as conn:
+        if deal_ids:
+            placeholders = ",".join("?" * len(deal_ids))
+            for a in conn.execute(
+                f"""
+                SELECT a.id, a.deal_id, a.customer_id, a.product_id,
+                       a.activity_date, a.channel, a.activity, a.type,
+                       a.comment, a.description, a.value
+                FROM activities a
+                WHERE a.deal_id IN ({placeholders})
+                ORDER BY a.activity_date DESC, a.id DESC
+                """,
+                deal_ids,
+            ).fetchall():
+                item = dict(a)
+                bucket = by_deal.setdefault(int(item["deal_id"]), [])
+                if len(bucket) < limit:
+                    bucket.append(item)
+
+        if lead_pairs:
+            for customer_id, product_id in lead_pairs:
+                for a in conn.execute(
+                    """
+                    SELECT a.id, a.deal_id, a.customer_id, a.product_id,
+                           a.activity_date, a.channel, a.activity, a.type,
+                           a.comment, a.description, a.value
+                    FROM activities a
+                    WHERE a.customer_id = ? AND a.product_id = ? AND a.deal_id IS NULL
+                    ORDER BY a.activity_date DESC, a.id DESC
+                    LIMIT ?
+                    """,
+                    (customer_id, product_id, limit),
+                ).fetchall():
+                    by_lead.setdefault((customer_id, product_id), []).append(dict(a))
+
+    def _activity_text(a: dict) -> str:
+        return (
+            (a.get("comment") or a.get("description") or a.get("activity") or "")
+            .strip()
+        )
+
+    for r in rows:
+        if r.get("deal_id"):
+            hist = by_deal.get(int(r["deal_id"]), [])
+        elif r.get("customer_id") and r.get("product_id"):
+            hist = by_lead.get((int(r["customer_id"]), int(r["product_id"])), [])
+        else:
+            hist = []
+        r["activity_history"] = hist
+        if hist:
+            latest = hist[0]
+            r["latest_activity_text"] = _activity_text(latest)
+            r["latest_activity_date"] = latest.get("activity_date") or ""
+            r["latest_activity_channel"] = (
+                latest.get("channel") or latest.get("type") or latest.get("activity") or ""
+            )
+        else:
+            r["latest_activity_text"] = (r.get("last_activity") or "").strip()
+            r["latest_activity_date"] = r.get("last_activity_date") or ""
+            r["latest_activity_channel"] = ""
+    return rows
 
 
 def group_active_leads(rows: list[dict], view: str = "company") -> list[dict]:
-    """Group active-lead rows for display by company or product."""
+    """Group active-lead rows for display by company or product.
+
+    Each group includes expandable-summary fields: counts by outcome/stage
+    and the latest activity date across its rows.
+    """
+    from app.pipeline import normalize_stage
+
     if view == "product":
         sort_key = lambda x: (
             (x.get("product") or "").casefold(),
@@ -2340,6 +2451,7 @@ def group_active_leads(rows: list[dict], view: str = "company") -> list[dict]:
             x.get("deal_id") or 0,
         )
         group_key = "product"
+        peer_key = "company"
     else:
         sort_key = lambda x: (
             (x.get("company") or "").casefold(),
@@ -2347,38 +2459,80 @@ def group_active_leads(rows: list[dict], view: str = "company") -> list[dict]:
             x.get("deal_id") or 0,
         )
         group_key = "company"
+        peer_key = "product"
+
+    def _summarize(label: str, group_rows: list[dict]) -> dict:
+        stage_counts: dict[str, int] = {}
+        open_n = shipped_n = lost_n = lead_n = 0
+        last_touch = ""
+        peers: list[str] = []
+        seen_peers: set[str] = set()
+        for r in group_rows:
+            st = normalize_stage(r.get("pipeline_stage"))
+            stage_counts[st] = stage_counts.get(st, 0) + 1
+            status = (r.get("status") or "").lower()
+            if status == "shipped":
+                shipped_n += 1
+            elif status == "lost":
+                lost_n += 1
+            elif status == "lead":
+                lead_n += 1
+            else:
+                open_n += 1
+            touch = r.get("last_activity_date") or r.get("deal_date") or ""
+            if touch > last_touch:
+                last_touch = touch
+            peer = (r.get(peer_key) or "").strip()
+            if peer and peer.casefold() not in seen_peers:
+                seen_peers.add(peer.casefold())
+                peers.append(peer)
+
+        stage_bits = []
+        for key, label_s in (
+            ("first_contact", "Contact"),
+            ("rfq", "RFQ"),
+            ("rfs", "RFS"),
+            ("conversion", "Conv"),
+        ):
+            n = stage_counts.get(key, 0)
+            if n:
+                stage_bits.append(f"{label_s} {n}")
+
+        return {
+            "label": label,
+            "view": view,
+            "rows": group_rows,
+            "count": len(group_rows),
+            "open_count": open_n,
+            "shipped_count": shipped_n,
+            "lost_count": lost_n,
+            "lead_count": lead_n,
+            "stage_summary": " · ".join(stage_bits) or "—",
+            "peer_summary": ", ".join(peers[:4])
+            + ("…" if len(peers) > 4 else ""),
+            "peer_count": len(peers),
+            "last_activity_date": last_touch or "—",
+            "product_id": group_rows[0].get("product_id"),
+            "customer_id": group_rows[0].get("customer_id"),
+        }
 
     sorted_rows = sorted(rows, key=sort_key)
     groups: list[dict] = []
-    current_label: str | None = None
+    current_label: Optional[str] = None
     current_rows: list[dict] = []
 
     for row in sorted_rows:
         label = row.get(group_key) or "—"
         if label != current_label:
             if current_rows:
-                groups.append(
-                    {
-                        "label": current_label,
-                        "rows": current_rows,
-                        "product_id": current_rows[0].get("product_id"),
-                        "customer_id": current_rows[0].get("customer_id"),
-                    }
-                )
+                groups.append(_summarize(current_label, current_rows))
             current_label = label
             current_rows = [row]
         else:
             current_rows.append(row)
 
     if current_rows:
-        groups.append(
-            {
-                "label": current_label,
-                "rows": current_rows,
-                "product_id": current_rows[0].get("product_id"),
-                "customer_id": current_rows[0].get("customer_id"),
-            }
-        )
+        groups.append(_summarize(current_label, current_rows))
     return groups
 
 

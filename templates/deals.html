@@ -1,28 +1,55 @@
 {% extends "base.html" %}
 {% block title %}Active leads{% endblock %}
 {% block content %}
-{% set sort = sort|default('stage') %}
-{% set direction = direction|default('asc') %}
+{% set sort = sort|default('deal_date') %}
+{% set direction = direction|default('desc') %}
 {% set stage = stage|default('all') %}
 {% set attention = attention|default(false) %}
 {% set month = month|default('') %}
-{% set qs_base = 'status=' ~ status ~ '&period=' ~ period ~ '&month=' ~ (month|urlencode) ~ '&company=' ~ (company|urlencode) ~ '&product=' ~ (product|urlencode) ~ '&po=' ~ (po|urlencode) ~ '&q=' ~ (q|urlencode) ~ '&stage=' ~ stage ~ ('&attention=1' if attention else '') %}
+{% set view = view|default('list') %}
+{% set qs_base = 'status=' ~ status ~ '&period=' ~ period ~ '&month=' ~ (month|urlencode) ~ '&company=' ~ (company|urlencode) ~ '&product=' ~ (product|urlencode) ~ '&po=' ~ (po|urlencode) ~ '&q=' ~ (q|urlencode) ~ '&stage=' ~ stage ~ '&view=' ~ view ~ ('&attention=1' if attention else '') %}
 {% macro sort_link(col, label) -%}
-  {% set next_dir = 'desc' if sort == col and direction != 'desc' else 'asc' %}
+  {% if sort == col %}
+    {% set next_dir = 'asc' if direction == 'desc' else 'desc' %}
+  {% elif col in ('deal_date', 'last_touch', 'price', 'total') %}
+    {% set next_dir = 'desc' %}
+  {% else %}
+    {% set next_dir = 'asc' %}
+  {% endif %}
   <a class="sheet-sort {% if sort == col %}is-active{% endif %}"
      href="/deals?{{ qs_base }}&sort={{ col }}&direction={{ next_dir }}">
     {{ label }}{% if sort == col %}{% if direction == 'desc' %} ↓{% else %} ↑{% endif %}{% endif %}
   </a>
 {%- endmacro %}
+{% macro stage_badge(st) -%}
+  <span class="badge badge-stage badge-stage-{{ st }}">
+    {% if st == 'rfq' %}RFQ
+    {% elif st == 'rfs' %}RFS
+    {% elif st == 'conversion' %}Conversion
+    {% else %}First contact{% endif %}
+  </span>
+{%- endmacro %}
+{% macro outcome_badge(status) -%}
+  {% if status == 'shipped' %}<span class="badge">Shipped</span>
+  {% elif status == 'lost' %}<span class="badge badge-lost">Lost</span>
+  {% elif status == 'lead' %}<span class="badge badge-muted">Lead</span>
+  {% else %}<span class="badge badge-open">Open</span>{% endif %}
+{%- endmacro %}
+{% macro money_cell(val) -%}
+  {% if val %}{{ val }}{% else %}—{% endif %}
+{%- endmacro %}
 
 <div class="page-header deals-page-header">
   <div>
     <h1>Active leads</h1>
-    <p class="subtitle">One form for new deals, stage updates, and optional PDF attach. Row click opens the deal; <strong>Update</strong> logs the next step.</p>
+    <p class="subtitle">
+      Chronological deal list (latest first). Filters narrow the set; use Group to nest by company or product.
+      Row click opens the deal; <strong>Update</strong> logs the next step.
+    </p>
   </div>
   <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
     <button type="button" class="btn btn-ghost btn-sm" id="toggle-cols" aria-pressed="false" title="Show or hide extra columns">Columns: Review</button>
-    <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&month={{ month|urlencode }}&company={{ company }}&product={{ product }}&q={{ q }}&stage={{ stage }}"
+    <a href="/deals/export.xlsx?status={{ status }}&period={{ period }}&month={{ month|urlencode }}&company={{ company|urlencode }}&product={{ product|urlencode }}&q={{ q|urlencode }}&stage={{ stage }}"
        class="btn btn-ghost btn-sm">↓ Export Excel</a>
     <button type="button" class="btn btn-primary" id="open-master-dialog">+ Add / Upload</button>
   </div>
@@ -31,14 +58,22 @@
 <div class="card deals-card">
   <div class="deals-presets">
     <a class="filter-pill {% if not attention %}active{% endif %}"
-       href="/deals?status=all&period={{ period }}&month={{ month|urlencode }}&stage=all&sort=stage&direction=asc">All</a>
+       href="/deals?status=all&period={{ period }}&month={{ month|urlencode }}&stage=all&sort=deal_date&direction=desc&view={{ view }}">All</a>
     <a class="filter-pill {% if attention %}active{% endif %}"
-       href="/deals?attention=1&status=open&period=all&stage=all&sort=last_touch&direction=asc"
+       href="/deals?attention=1&status=open&period=all&stage=all&sort=last_touch&direction=asc&view={{ view }}"
        title="Open deals stale {{ attention_days|default(14) }}+ days, or still in First contact / RFQ">Needs attention</a>
+    <span class="deals-preset-sep" aria-hidden="true"></span>
+    <a class="filter-pill {% if view == 'list' %}active{% endif %}"
+       href="/deals?{{ qs_base|replace('view=' ~ view, 'view=list') }}&sort=deal_date&direction=desc">List</a>
+    <a class="filter-pill {% if view == 'company' %}active{% endif %}"
+       href="/deals?{{ qs_base|replace('view=' ~ view, 'view=company') }}">By company</a>
+    <a class="filter-pill {% if view == 'product' %}active{% endif %}"
+       href="/deals?{{ qs_base|replace('view=' ~ view, 'view=product') }}">By product</a>
   </div>
   <form class="deals-toolbar" method="get" action="/deals" id="dealsFilterForm">
     <input type="hidden" name="sort" value="{{ sort }}" />
     <input type="hidden" name="direction" value="{{ direction }}" />
+    <input type="hidden" name="view" value="{{ view }}" />
     {% if attention %}<input type="hidden" name="attention" value="1" />{% endif %}
     <div class="toolbar-filters">
       <div>
@@ -76,113 +111,265 @@
         <input type="month" name="month" id="dealsMonth" value="{{ month }}"
                onchange="onDealsMonthChange(this)" style="min-width:9.5rem" />
       </div>
+      <div>
+        <label class="field-label">Company</label>
+        <select name="company" onchange="this.form.submit()" style="min-width:11rem">
+          <option value="">All companies</option>
+          {% for c in customers %}
+          <option value="{{ c.name }}" {% if company == c.name %}selected{% endif %}>{{ c.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="field-label">Product</label>
+        <select name="product" onchange="this.form.submit()" style="min-width:11rem">
+          <option value="">All products</option>
+          {% for p in products %}
+          <option value="{{ p.name }}" {% if product == p.name %}selected{% endif %}>{{ p.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
     </div>
     <div class="toolbar-search">
-      <input name="company" value="{{ company }}" placeholder="Filter company" list="filter-companies" />
-      <input name="product" value="{{ product }}" placeholder="Filter product" list="filter-products" />
       <input name="po" value="{{ po }}" placeholder="PO #" />
-      <input name="q" value="{{ q }}" placeholder="Search" />
-      <button type="submit" class="btn btn-primary">Apply</button>
-      <a href="/deals?status=all&period=month&stage=all&sort=stage&direction=asc" class="btn btn-ghost">Clear</a>
+      <input name="q" value="{{ q }}" placeholder="Search…" />
+      <button type="submit" class="btn btn-ghost btn-sm">Apply</button>
     </div>
   </form>
 
-  <datalist id="filter-companies">
-    {% for row in leads %}
-    <option value="{{ row.company }}"></option>
-    {% endfor %}
-  </datalist>
-  <datalist id="filter-products">
-    {% for row in leads %}
-    <option value="{{ row.product }}"></option>
-    {% endfor %}
-  </datalist>
+  <div class="deals-summary-bar">
+    <span>
+      <strong>{{ leads|length }}</strong> deal{{ 's' if leads|length != 1 else '' }}
+      {% if view != 'list' %}
+      in <strong>{{ lead_groups|length }}</strong> {{ 'product' if view == 'product' else 'company' }} group{{ 's' if lead_groups|length != 1 else '' }}
+      {% endif %}
+    </span>
+    {% if view != 'list' %}
+    <button type="button" class="btn btn-ghost btn-sm" id="expand-all-groups">Expand all</button>
+    <button type="button" class="btn btn-ghost btn-sm" id="collapse-all-groups">Collapse all</button>
+    {% endif %}
+  </div>
 
   <div class="deals-table-scroll">
-    {% if leads %}
-    <table class="deals-table sheet-table" id="leads-sheet" data-cols="review">
+    {% if view == 'list' %}
+      {% if leads %}
+      <table class="deals-table sheet-table deals-list-table" id="leads-sheet" data-cols="review" data-view="list">
+        <thead>
+          <tr>
+            <th class="col-toggle" aria-label="History"></th>
+            <th>{{ sort_link('company', 'Company') }}</th>
+            <th>{{ sort_link('product', 'Product') }}</th>
+            <th>{{ sort_link('deal_date', 'Deal date') }}</th>
+            <th class="col-num">{{ sort_link('price', 'Unit price') }}</th>
+            <th class="col-num">{{ sort_link('total', 'Total price') }}</th>
+            <th>Status</th>
+            <th>{{ sort_link('last_touch', 'Latest activity') }}</th>
+            <th class="col-extra">{{ sort_link('stage', 'Stage') }}</th>
+            <th class="col-extra">Qty</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in leads %}
+        {% set st = row.pipeline_stage or 'first_contact' %}
+        {% set rid = 'a' ~ loop.index0 %}
+        {% set hist = row.activity_history or [] %}
+        {% set prior = hist[1:] if hist|length > 1 else [] %}
+        <tr class="sheet-row deals-list-row {% if prior %}has-history{% endif %}"
+            data-group="{{ rid }}"
+            data-href="{% if row.deal_id %}/deal/{{ row.deal_id }}{% else %}/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% endif %}">
+          <td class="col-toggle" onclick="event.stopPropagation()">
+            {% if prior %}
+            <button type="button" class="icon-btn row-toggle" aria-expanded="false"
+                    aria-controls="{{ rid }}-history" aria-label="Show previous updates" title="Show previous updates">
+              <svg class="icon-chevron-right" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+              <svg class="icon-chevron-down" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            {% else %}
+            <span class="deals-no-history" title="No earlier updates">·</span>
+            {% endif %}
+          </td>
+          <td class="col-sticky">
+            <a class="link" href="/customer?name={{ row.company | urlencode }}"><strong>{{ row.company }}</strong></a>
+          </td>
+          <td>{{ row.product or '—' }}</td>
+          <td class="col-date">{{ row.deal_date or row.last_activity_date or '—' }}</td>
+          <td class="col-num">{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</td>
+          <td class="col-num">{{ money_cell(row.commercial_total) }}</td>
+          <td>{{ outcome_badge(row.status) }}</td>
+          <td class="col-activity">
+            {% if row.latest_activity_date or row.latest_activity_text %}
+            <div class="activity-latest">
+              <span class="col-date">{{ row.latest_activity_date or '—' }}</span>
+              {% if row.latest_activity_channel %}
+              <span class="badge badge-blue activity-channel">{{ row.latest_activity_channel }}</span>
+              {% endif %}
+            </div>
+            <div class="activity-latest-text" title="{{ row.latest_activity_text or '' }}">
+              {{ (row.latest_activity_text or '—')[:72] }}{% if (row.latest_activity_text or '')|length > 72 %}…{% endif %}
+            </div>
+            {% if prior %}
+            <div class="muted activity-more-hint">{{ prior|length }} earlier update{{ 's' if prior|length != 1 else '' }}</div>
+            {% endif %}
+            {% else %}
+            <span class="muted">—</span>
+            {% endif %}
+          </td>
+          <td class="col-extra">{{ stage_badge(st) }}</td>
+          <td class="col-extra">{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</td>
+          <td class="col-actions" onclick="event.stopPropagation()">
+            <button type="button" class="btn btn-primary btn-sm open-master-row"
+                    data-company="{{ row.company }}"
+                    data-product="{{ row.product }}"
+                    data-deal-id="{{ row.deal_id or '' }}"
+                    data-stage="{{ row.pipeline_stage or 'first_contact' }}">Update</button>
+          </td>
+        </tr>
+        {% if prior %}
+        <tr class="deals-detail deals-list-history" id="{{ rid }}-history" hidden>
+          <td colspan="11">
+            <div class="deals-history-panel">
+              <div class="deals-history-title">Previous updates</div>
+              <ul class="deals-history-list">
+                {% for a in prior %}
+                <li>
+                  <span class="col-date">{{ a.activity_date or '—' }}</span>
+                  {% if a.channel or a.type or a.activity %}
+                  <span class="badge badge-blue">{{ a.channel or a.type or a.activity }}</span>
+                  {% endif %}
+                  <span class="deals-history-text">{{ a.comment or a.description or a.activity or '—' }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No leads in this view. Try a wider date range, clear filters, or add an update.</div>
+      {% endif %}
+    {% elif lead_groups %}
+    <table class="deals-table sheet-table" id="leads-sheet" data-cols="review" data-view="{{ view }}">
       <thead>
         <tr>
-          <th>{{ sort_link('company', 'Company') }}</th>
-          <th class="col-extra">Contact</th>
-          <th>{{ sort_link('product', 'Product') }}</th>
-          <th>{{ sort_link('stage', 'Stage') }}</th>
-          <th>{{ sort_link('stage', 'Progress') }}</th>
-          <th class="col-extra">Qty</th>
-          <th class="col-extra">Price</th>
-          <th class="col-extra">Outcome</th>
+          <th class="col-toggle" aria-label="Expand"></th>
+          <th>{% if view == 'product' %}{{ sort_link('product', 'Product') }}{% else %}{{ sort_link('company', 'Company') }}{% endif %}</th>
+          <th>{% if view == 'product' %}Companies{% else %}Products{% endif %}</th>
+          <th>Pipeline</th>
+          <th>Open</th>
+          <th class="col-extra">Shipped</th>
           <th>{{ sort_link('last_touch', 'Last touch') }}</th>
-          <th>Next / notes</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-      {% for row in leads %}
-      {% set st = row.pipeline_stage or 'first_contact' %}
-      {% set tip = 'First contact: ' ~ (row.first_contact_at or '—') ~ ' · RFQ: ' ~ (row.rfq_at or '—') ~ ' · RFS: ' ~ (row.rfs_at or '—') ~ ' · Conversion: ' ~ (row.conversion_at or '—') %}
-      <tr class="sheet-row" data-href="{% if row.deal_id %}/deal/{{ row.deal_id }}{% else %}/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% endif %}">
+      {% for g in lead_groups %}
+      {% set gid = 'g' ~ loop.index0 %}
+      <tr class="deals-summary" data-group="{{ gid }}">
+        <td class="col-toggle">
+          <button type="button" class="icon-btn row-toggle" aria-expanded="false"
+                  aria-controls="{{ gid }}-detail" aria-label="Show details" title="Show details">
+            <svg class="icon-chevron-right" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M6 4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <svg class="icon-chevron-down" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+        </td>
         <td class="col-sticky">
-          <a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a>
+          {% if view == 'product' %}
+          <strong>{{ g.label }}</strong>
+          {% else %}
+          <a class="link" href="/customer?name={{ g.label | urlencode }}"><strong>{{ g.label }}</strong></a>
+          {% endif %}
+          <div class="muted" style="font-size:.78rem;margin-top:.15rem">{{ g.count }} deal{{ 's' if g.count != 1 else '' }}</div>
         </td>
-        <td class="col-extra">{{ row.contact or '—' }}</td>
-        <td>{{ row.product }}</td>
-        <td>
-          <span class="badge badge-stage badge-stage-{{ st }}">
-            {% if st == 'rfq' %}RFQ
-            {% elif st == 'rfs' %}RFS
-            {% elif st == 'conversion' %}Conversion
-            {% else %}First contact{% endif %}
-          </span>
+        <td title="{{ g.peer_summary }}">
+          {{ g.peer_summary or '—' }}
+          {% if g.peer_count > 4 %}<span class="muted"> (+{{ g.peer_count - 4 }})</span>{% endif %}
         </td>
-        <td class="col-progress">
-          <div class="pipe-progress" title="{{ tip }}" aria-label="{{ tip }}">
-            <span class="pipe-step {% if row.first_contact_at or st %}is-done{% endif %} {% if st == 'first_contact' %}is-current{% endif %}" data-label="Contact">●</span>
-            <span class="pipe-line {% if row.rfq_at or st in ['rfq','rfs','conversion'] %}is-done{% endif %}"></span>
-            <span class="pipe-step {% if row.rfq_at or st in ['rfq','rfs','conversion'] %}is-done{% endif %} {% if st == 'rfq' %}is-current{% endif %}" data-label="RFQ">●</span>
-            <span class="pipe-line {% if row.rfs_at or st in ['rfs','conversion'] %}is-done{% endif %}"></span>
-            <span class="pipe-step {% if row.rfs_at or st in ['rfs','conversion'] %}is-done{% endif %} {% if st == 'rfs' %}is-current{% endif %}" data-label="RFS">●</span>
-            <span class="pipe-line {% if row.conversion_at or st == 'conversion' %}is-done{% endif %}"></span>
-            <span class="pipe-step {% if row.conversion_at or st == 'conversion' %}is-done{% endif %} {% if st == 'conversion' %}is-current{% endif %}" data-label="Conv">●</span>
-          </div>
-          <div class="pipe-progress-labels" title="{{ tip }}">
-            <span>C</span><span>Q</span><span>S</span><span>V</span>
-          </div>
-        </td>
-        <td class="col-extra">{{ (row.quantity|qty_display(row.quantity_unit or 'MT')) if row.quantity else '—' }}</td>
-        <td class="col-extra">{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</td>
-        <td class="col-extra">
-          {% if row.status == 'shipped' %}<span class="badge">Shipped</span>
-          {% elif row.status == 'lost' %}<span class="badge badge-lost">Lost</span>
-          {% elif row.status == 'lead' %}<span class="badge badge-muted">Lead</span>
-          {% else %}<span class="badge badge-open">Open</span>{% endif %}
-        </td>
-        <td class="col-date">{{ row.last_activity_date or '—' }}</td>
-        <td class="col-notes" title="{{ row.last_activity or row.notes or '' }}">
-          {{ (row.last_activity or row.notes or '')[:48] }}{% if (row.last_activity or row.notes or '')|length > 48 %}…{% endif %}
-        </td>
+        <td><span class="muted" style="font-size:.82rem">{{ g.stage_summary }}</span></td>
+        <td>{{ g.open_count }}{% if g.lead_count %} <span class="muted">+{{ g.lead_count }} lead</span>{% endif %}</td>
+        <td class="col-extra">{{ g.shipped_count }}{% if g.lost_count %} <span class="muted">/ {{ g.lost_count }} lost</span>{% endif %}</td>
+        <td class="col-date">{{ g.last_activity_date }}</td>
         <td class="col-actions" onclick="event.stopPropagation()">
+          {% if view == 'company' %}
           <button type="button" class="btn btn-primary btn-sm open-master-row"
-                  data-company="{{ row.company }}"
-                  data-product="{{ row.product }}"
-                  data-deal-id="{{ row.deal_id or '' }}"
-                  data-stage="{{ row.pipeline_stage or 'first_contact' }}">Update</button>
+                  data-company="{{ g.label }}" data-product="" data-deal-id="" data-stage="first_contact">Update</button>
+          {% else %}
+          <button type="button" class="btn btn-primary btn-sm open-master-row"
+                  data-company="" data-product="{{ g.label }}" data-deal-id="" data-stage="first_contact">Update</button>
+          {% endif %}
+        </td>
+      </tr>
+      <tr class="deals-detail" id="{{ gid }}-detail" hidden>
+        <td colspan="8">
+          <table class="deals-nested-table">
+            <thead>
+              <tr>
+                <th>{% if view == 'product' %}Company{% else %}Product{% endif %}</th>
+                <th>{{ sort_link('deal_date', 'Deal date') }}</th>
+                <th class="col-extra">{{ sort_link('stage', 'Stage') }}</th>
+                <th class="col-num">Unit price</th>
+                <th class="col-num">Total</th>
+                <th class="col-extra">Outcome</th>
+                <th>Last touch</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+            {% for row in g.rows %}
+            {% set st = row.pipeline_stage or 'first_contact' %}
+            <tr class="sheet-row" data-href="{% if row.deal_id %}/deal/{{ row.deal_id }}{% else %}/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% endif %}">
+              <td>
+                {% if view == 'product' %}
+                <a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a>
+                {% else %}
+                {{ row.product }}
+                {% endif %}
+              </td>
+              <td class="col-date">{{ row.deal_date or row.last_activity_date or '—' }}</td>
+              <td class="col-extra">{{ stage_badge(st) }}</td>
+              <td class="col-num">{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</td>
+              <td class="col-num">{{ money_cell(row.commercial_total) }}</td>
+              <td class="col-extra">{{ outcome_badge(row.status) }}</td>
+              <td class="col-date">{{ row.last_activity_date or '—' }}</td>
+              <td class="col-actions" onclick="event.stopPropagation()">
+                <button type="button" class="btn btn-primary btn-sm open-master-row"
+                        data-company="{{ row.company }}"
+                        data-product="{{ row.product }}"
+                        data-deal-id="{{ row.deal_id or '' }}"
+                        data-stage="{{ row.pipeline_stage or 'first_contact' }}">Update</button>
+              </td>
+            </tr>
+            {% endfor %}
+            </tbody>
+          </table>
         </td>
       </tr>
       {% endfor %}
       </tbody>
     </table>
     {% else %}
-    <div class="empty">No leads in this view. Try a wider date range or add an update.</div>
+    <div class="empty">No leads in this view. Try a wider date range, clear filters, or add an update.</div>
     {% endif %}
   </div>
 </div>
 
 {% include "_master_update_dialog.html" %}
-<script src="/static/master_update.js"></script>
+<script src="/static/master_update.js?v=2"></script>
+<script src="/static/deals-rows.js?v=4"></script>
 <script>
 function onDealsMonthChange(el) {
   if (el.value) {
-    // Specific month wins over quick range
     var period = document.getElementById('dealsPeriod');
     if (period) period.value = 'all';
   }
@@ -217,6 +404,24 @@ document.querySelectorAll('.sheet-row[data-href]').forEach(function (row) {
   btn.addEventListener('click', function () {
     apply(sheet.getAttribute('data-cols') === 'full' ? 'review' : 'full');
   });
+})();
+(function () {
+  function setAll(open) {
+    document.querySelectorAll('.deals-summary').forEach(function (summary) {
+      var detail = summary.nextElementSibling;
+      var btn = summary.querySelector('.row-toggle');
+      if (!detail || !detail.classList.contains('deals-detail') || !btn) return;
+      detail.hidden = !open;
+      summary.classList.toggle('is-expanded', open);
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      btn.setAttribute('aria-label', open ? 'Hide details' : 'Show details');
+      btn.title = open ? 'Hide details' : 'Show details';
+    });
+  }
+  var expandBtn = document.getElementById('expand-all-groups');
+  var collapseBtn = document.getElementById('collapse-all-groups');
+  if (expandBtn) expandBtn.addEventListener('click', function () { setAll(true); });
+  if (collapseBtn) collapseBtn.addEventListener('click', function () { setAll(false); });
 })();
 </script>
 {% endblock %}

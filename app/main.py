@@ -34,6 +34,8 @@ from app.database import (
     list_active_leads,
     group_active_leads,
     list_shipping_summary,
+    period_start,
+    row_in_period,
     list_deals,
     deals_for_activity_edit,
     iso_date_input,
@@ -95,6 +97,7 @@ from app.generate import GENERATE_DOCUMENTS
 from app.po_exports import export_po_pdf, export_po_xlsx
 # ── Commission Invoice (self-contained; remove this block to drop the feature) ──
 from app.commission_invoices import summary_commission_rows, upgrade_commission_invoices_schema
+from app.company_names import cluster_company_labels
 from app.ci_routes import register_all_commission_invoice_routes
 # ── Sales (Commercial) Invoice ──────────────────────────────────────────────
 from app.sales_invoices import (
@@ -684,12 +687,18 @@ async def active_leads_page(
     po: str = Query(""),
     q: str = Query(""),
     stage: str = Query("all"),
-    sort: str = Query("stage"),
-    direction: str = Query("asc"),
-    view: str = Query("company"),
+    sort: str = Query("deal_date"),
+    direction: str = Query("desc"),
+    view: str = Query("list"),
     attention: str = Query(""),
 ):
-    view_mode = "product" if view == "product" else "company"
+    view_raw = (view or "list").strip().lower()
+    if view_raw == "product":
+        view_mode = "product"
+    elif view_raw == "company":
+        view_mode = "company"
+    else:
+        view_mode = "list"
     attention_days = 14 if attention in ("1", "true", "yes", "14") else None
     month = (month or "").strip()
     if len(month) >= 7 and month[4:5] == "-":
@@ -715,13 +724,16 @@ async def active_leads_page(
         attention_days=attention_days,
         month=month,
     )
+    lead_groups = (
+        group_active_leads(leads, view_mode) if view_mode in ("company", "product") else []
+    )
     return templates.TemplateResponse(
         "deals.html",
         ctx(
             request,
             page="deals",
             leads=leads,
-            lead_groups=group_active_leads(leads, view_mode),
+            lead_groups=lead_groups,
             status=status,
             period=period,
             month=month,
@@ -995,7 +1007,7 @@ async def post_log(
     channel: str = Form("Email"),
     comment: str = Form(""),
     value: str = Form(""),
-    pipeline_stage: str = Form("first_contact"),
+    pipeline_stage: str = Form(""),
     doc_type: str = Form(""),
     pdf_file: Optional[UploadFile] = File(None),
     # Shipping fields — only used when link_mode == "new"
@@ -1372,14 +1384,34 @@ def _download_response(content: bytes, filename: str, media_type: str) -> Respon
     )
 
 
+_SHIPPING_PERIOD_KEYS = (
+    "po_date",
+    "gbl_invoice_date",
+    "invoice_date",
+    "shipment_date",
+)
+
+
+def _shipping_for_period(period: str, *, limit: Optional[int] = None) -> list:
+    start = period_start(period)
+    rows = list_shipping_summary(status="open")
+    if start:
+        rows = [
+            r for r in rows if row_in_period(r, start, *_SHIPPING_PERIOD_KEYS)
+        ]
+    if limit is not None:
+        return rows[:limit]
+    return rows
+
+
 @app.get("/summary/export.csv")
 async def summary_export_csv(
-    period: str = Query("month"),
+    period: str = Query("all"),
     group: str = Query("product"),
     sheet: str = Query("rollup"),
 ):
     if sheet == "shipping":
-        rows = list_shipping_summary(status="open")
+        rows = _shipping_for_period(period)
         cols = SHIPPING_COLUMNS
         fname = export_filename("gbinc-shipping-summary", period, "csv")
     elif sheet == "commission":
@@ -1403,7 +1435,7 @@ async def summary_export_csv(
 
 @app.get("/summary/export.xlsx")
 async def summary_export_xlsx(
-    period: str = Query("month"),
+    period: str = Query("all"),
     group: str = Query("product"),
     sheet: str = Query("all"),
 ):
@@ -1412,7 +1444,7 @@ async def summary_export_xlsx(
         if group == "product"
         else summary_by_customer(period)
     )
-    shipping_rows = list_shipping_summary(status="open")
+    shipping_rows = _shipping_for_period(period)
     commission_rows = summary_commission_rows(period)
     if sheet == "rollup":
         sheets = [(rollup_sheet_name(group), rollup_rows, rollup_columns(group))]
@@ -1537,12 +1569,36 @@ async def deals_export_xlsx(
 @app.get("/summary", response_class=HTMLResponse)
 async def summary(
     request: Request,
-    period: str = Query("month"),
+    period: str = Query("all"),
     group: str = Query("product"),
 ):
     rows = summary_by_product(period) if group == "product" else summary_by_customer(period)
-    shipping_rows = list_shipping_summary(status="open")[:40]
-    commission_rows = summary_commission_rows(period)
+    shipping_rows = _shipping_for_period(period, limit=40)
+    # Same CI lines for chart + table (table is filtered client-side to match chart).
+    commission_rows = summary_commission_rows("all")
+    _company_weights: dict = {}
+    for _r in commission_rows:
+        _co = _r.get("company") or "—"
+        _company_weights[_co] = _company_weights.get(_co, 0.0) + float(
+            _r.get("commission") or 0
+        )
+    _company_labels = cluster_company_labels(
+        _company_weights.keys(), weights=_company_weights
+    )
+    commission_chart_rows = [
+        {
+            "company": _company_labels.get(
+                r.get("company") or "—", r.get("company") or "—"
+            ),
+            "company_raw": r.get("company") or "—",
+            "product": r.get("product") or "—",
+            "date": r.get("invoice_date") or "",
+            "commission": float(r.get("commission") or 0),
+            "quantity": float(r.get("quantity") or 0),
+            "variant": r.get("variant") or "gbinc",
+        }
+        for r in commission_rows
+    ]
     return templates.TemplateResponse(
         "summary.html",
         ctx(
@@ -1550,6 +1606,7 @@ async def summary(
             page="summary",
             shipping_rows=shipping_rows,
             commission_rows=commission_rows,
+            commission_chart_rows=commission_chart_rows,
             period=period,
             group=group,
             rows=rows,

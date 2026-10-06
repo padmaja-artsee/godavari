@@ -1,0 +1,811 @@
+/* Commission chart — filter by time period, break down monthly/company/etc, optional compare. */
+(function () {
+  var root = document.getElementById("ciChartRoot");
+  if (!root || typeof Chart === "undefined") return;
+
+  var rows = [];
+  try {
+    var dataEl = document.getElementById("ciChartData");
+    rows = JSON.parse((dataEl && dataEl.textContent) || "[]");
+  } catch (e) {
+    rows = [];
+  }
+
+  var canvas = document.getElementById("ciChartCanvas");
+  var emptyEl = document.getElementById("ciChartEmpty");
+  var totalEl = document.getElementById("ciChartTotal");
+  var chart = null;
+  var optionCache = { months: [], quarters: [], years: [], fys: [] };
+
+  var COLORS = [
+    "rgba(15, 118, 110, 0.75)",
+    "rgba(37, 99, 235, 0.7)",
+    "rgba(180, 83, 9, 0.7)",
+    "rgba(124, 58, 237, 0.65)",
+    "rgba(190, 24, 93, 0.65)",
+    "rgba(22, 163, 74, 0.7)",
+    "rgba(8, 145, 178, 0.7)",
+    "rgba(217, 119, 6, 0.7)",
+    "rgba(79, 70, 229, 0.65)",
+    "rgba(101, 163, 13, 0.7)",
+    "rgba(225, 29, 72, 0.65)",
+    "rgba(71, 85, 105, 0.65)",
+  ];
+  var COMPARE_COLORS = ["rgba(15, 118, 110, 0.8)", "rgba(37, 99, 235, 0.75)"];
+  var MONTH_NAMES = [
+    "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+  ];
+
+  function $(id) {
+    return document.getElementById(id);
+  }
+
+  function parseDate(s) {
+    if (!s || s.length < 7) return null;
+    var y = parseInt(s.slice(0, 4), 10);
+    var m = parseInt(s.slice(5, 7), 10);
+    if (!y || !m) return null;
+    return { y: y, m: m, iso: s.slice(0, 10) };
+  }
+
+  function fiscalYear(d) {
+    return d.m >= 4 ? d.y + 1 : d.y;
+  }
+
+  function monthKey(d) {
+    return d.y + "-" + String(d.m).padStart(2, "0");
+  }
+
+  function quarterKey(d) {
+    return d.y + "-Q" + (Math.floor((d.m - 1) / 3) + 1);
+  }
+
+  function yearKey(d) {
+    return String(d.y);
+  }
+
+  function fyKey(d) {
+    return String(fiscalYear(d));
+  }
+
+  function fyLabel(fy) {
+    return "FY" + String(fy % 100).padStart(2, "0") + " (Apr " + (fy - 1) + "–Mar " + fy + ")";
+  }
+
+  function prettyBucket(key, breakdown) {
+    if (breakdown === "month" && /^\d{4}-\d{2}$/.test(key)) {
+      var y = key.slice(0, 4);
+      var m = parseInt(key.slice(5, 7), 10);
+      return MONTH_NAMES[m] + " " + y;
+    }
+    if (breakdown === "fy" && /^\d{4}$/.test(key)) return fyLabel(parseInt(key, 10));
+    if (breakdown === "fy" && /^FY\d{2}$/.test(key)) return key;
+    return key;
+  }
+
+  function uniqueSorted(arr) {
+    return Array.from(new Set(arr)).sort();
+  }
+
+  function money(n) {
+    return (
+      "$" +
+      Number(n || 0).toLocaleString(undefined, {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2,
+      })
+    );
+  }
+
+  function selectedProducts() {
+    var list = $("ciChartProductList");
+    var allBox = $("ciChartProductAll");
+    if (!list || !allBox || allBox.checked) return null;
+    var picked = [];
+    list.querySelectorAll("input[type=checkbox]:checked").forEach(function (cb) {
+      picked.push(cb.value);
+    });
+    return picked;
+  }
+
+  function updateProductButton() {
+    var btn = $("ciChartProductBtn");
+    if (!btn) return;
+    var picked = selectedProducts();
+    if (!picked) btn.textContent = "All products";
+    else if (!picked.length) btn.textContent = "No products";
+    else if (picked.length === 1) btn.textContent = picked[0];
+    else btn.textContent = picked.length + " products";
+  }
+
+  function baseFiltersOk(r) {
+    var variant = $("ciChartVariant").value;
+    var products = selectedProducts();
+    if (variant !== "all" && (r.variant || "gbinc") !== variant) return false;
+    if (products && products.indexOf(r.product || "—") < 0) return false;
+    return true;
+  }
+
+  function periodSpec(prefix) {
+    return {
+      kind: ($("ci" + prefix + "Kind") || {}).value || "all",
+      month: ($("ci" + prefix + "Month") || {}).value || "",
+      quarter: ($("ci" + prefix + "Quarter") || {}).value || "",
+      year: ($("ci" + prefix + "Year") || {}).value || "",
+      fy: ($("ci" + prefix + "Fy") || {}).value || "",
+      from: (($("ci" + prefix + "From") || {}).value || "").slice(0, 10),
+      to: (($("ci" + prefix + "To") || {}).value || "").slice(0, 10),
+    };
+  }
+
+  function matchesPeriod(d, spec) {
+    if (!spec || spec.kind === "all") return true;
+    if (!d) return false;
+    if (spec.kind === "custom") {
+      if (spec.from && d.iso < spec.from) return false;
+      if (spec.to && d.iso > spec.to) return false;
+      return true;
+    }
+    if (spec.kind === "month") return monthKey(d) === spec.month;
+    if (spec.kind === "quarter") return quarterKey(d) === spec.quarter;
+    if (spec.kind === "year") return yearKey(d) === spec.year;
+    if (spec.kind === "fy") return fyKey(d) === spec.fy;
+    return true;
+  }
+
+  function periodLabel(spec) {
+    if (!spec || spec.kind === "all") return "All time";
+    if (spec.kind === "month") return prettyBucket(spec.month, "month");
+    if (spec.kind === "quarter") return spec.quarter || "Quarter";
+    if (spec.kind === "year") return spec.year || "Year";
+    if (spec.kind === "fy") {
+      var n = parseInt(spec.fy, 10);
+      return n ? fyLabel(n) : "FY";
+    }
+    if (spec.kind === "custom") return (spec.from || "…") + " → " + (spec.to || "…");
+    return "Period";
+  }
+
+  function filterByPeriod(spec) {
+    return rows.filter(function (r) {
+      if (!baseFiltersOk(r)) return false;
+      return matchesPeriod(parseDate(r.date), spec);
+    });
+  }
+
+  function metricValue(r) {
+    return $("ciChartMetric").value === "quantity"
+      ? Number(r.quantity) || 0
+      : Number(r.commission) || 0;
+  }
+
+  function isCompare() {
+    var el = $("ciChartCompare");
+    return !!(el && el.checked);
+  }
+
+  function breakdown() {
+    return ($("ciChartBreakdown") || {}).value || "month";
+  }
+
+  function isTimeBreakdown(b) {
+    return b === "month" || b === "quarter" || b === "year" || b === "fy";
+  }
+
+  function bucketOf(r, b) {
+    var d = parseDate(r.date);
+    if (!d) return "Unknown";
+    if (b === "quarter") return quarterKey(d);
+    if (b === "year") return yearKey(d);
+    if (b === "fy") return fyKey(d);
+    if (b === "product") return r.product || "—";
+    if (b === "company") return r.company || "—";
+    return monthKey(d);
+  }
+
+  function categoryOf(r) {
+    var b = breakdown();
+    if (b === "product") return r.product || "—";
+    return r.company || "—";
+  }
+
+  function topKeys(totals, n) {
+    var keys = Object.keys(totals).sort(function (a, b) {
+      return totals[b] - totals[a];
+    });
+    if (n > 0 && keys.length > n) {
+      var keep = keys.slice(0, n);
+      var other = 0;
+      keys.slice(n).forEach(function (k) {
+        other += totals[k];
+      });
+      if (other > 0) {
+        keep.push("Other");
+        totals["Other"] = (totals["Other"] || 0) + other;
+      }
+      return keep;
+    }
+    return keys;
+  }
+
+  function sortTimeKeys(keys, b) {
+    var sorted = keys.slice().sort();
+    if (b === "fy") {
+      sorted.sort(function (a, c) {
+        return parseInt(a, 10) - parseInt(c, 10);
+      });
+    }
+    return sorted;
+  }
+
+  function totalsByKey(filtered, keyFn) {
+    var totals = {};
+    filtered.forEach(function (r) {
+      var k = keyFn(r);
+      totals[k] = (totals[k] || 0) + metricValue(r);
+    });
+    return totals;
+  }
+
+  function buildCategoryChart(filtered, label) {
+    var totals = totalsByKey(filtered, categoryOf);
+    var topN = parseInt($("ciChartTop").value, 10) || 0;
+    var labels = topKeys(totals, topN);
+    return {
+      labels: labels,
+      datasets: [
+        {
+          label: label || "Commission",
+          data: labels.map(function (k) {
+            return Math.round((totals[k] || 0) * 100) / 100;
+          }),
+          backgroundColor: labels.map(function (_, i) {
+            return COLORS[i % COLORS.length];
+          }),
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+      ],
+    };
+  }
+
+  function buildCompareCategory(rowsA, rowsB) {
+    var totA = totalsByKey(rowsA, categoryOf);
+    var totB = totalsByKey(rowsB, categoryOf);
+    var combined = {};
+    Object.keys(totA).forEach(function (k) {
+      combined[k] = (combined[k] || 0) + totA[k];
+    });
+    Object.keys(totB).forEach(function (k) {
+      combined[k] = (combined[k] || 0) + totB[k];
+    });
+    var topN = parseInt($("ciChartTop").value, 10) || 0;
+    var labels = topKeys(combined, topN);
+    return {
+      labels: labels,
+      datasets: [
+        {
+          label: periodLabel(periodSpec("PeriodA")),
+          data: labels.map(function (k) {
+            return Math.round((totA[k] || 0) * 100) / 100;
+          }),
+          backgroundColor: COMPARE_COLORS[0],
+          borderWidth: 0,
+          borderRadius: 3,
+        },
+        {
+          label: periodLabel(periodSpec("PeriodB")),
+          data: labels.map(function (k) {
+            return Math.round((totB[k] || 0) * 100) / 100;
+          }),
+          backgroundColor: COMPARE_COLORS[1],
+          borderWidth: 0,
+          borderRadius: 3,
+        },
+      ],
+    };
+  }
+
+  function buildTimeChart(filtered, label) {
+    var b = breakdown();
+    var totals = totalsByKey(filtered, function (r) {
+      return bucketOf(r, b);
+    });
+    var keys = sortTimeKeys(Object.keys(totals), b);
+    return {
+      labels: keys.map(function (k) {
+        return prettyBucket(k, b);
+      }),
+      datasets: [
+        {
+          label: label || periodLabel(periodSpec("PeriodA")),
+          data: keys.map(function (k) {
+            return Math.round((totals[k] || 0) * 100) / 100;
+          }),
+          backgroundColor: COMPARE_COLORS[0],
+          borderWidth: 0,
+          borderRadius: 4,
+        },
+      ],
+      _keys: keys,
+    };
+  }
+
+  function buildCompareTime(rowsA, rowsB) {
+    var b = breakdown();
+    var totA = totalsByKey(rowsA, function (r) {
+      return bucketOf(r, b);
+    });
+    var totB = totalsByKey(rowsB, function (r) {
+      return bucketOf(r, b);
+    });
+    var keySet = {};
+    Object.keys(totA).forEach(function (k) {
+      keySet[k] = true;
+    });
+    Object.keys(totB).forEach(function (k) {
+      keySet[k] = true;
+    });
+    var keys = sortTimeKeys(Object.keys(keySet), b);
+    return {
+      labels: keys.map(function (k) {
+        return prettyBucket(k, b);
+      }),
+      datasets: [
+        {
+          label: periodLabel(periodSpec("PeriodA")),
+          data: keys.map(function (k) {
+            return Math.round((totA[k] || 0) * 100) / 100;
+          }),
+          backgroundColor: COMPARE_COLORS[0],
+          borderWidth: 0,
+          borderRadius: 3,
+        },
+        {
+          label: periodLabel(periodSpec("PeriodB")),
+          data: keys.map(function (k) {
+            return Math.round((totB[k] || 0) * 100) / 100;
+          }),
+          backgroundColor: COMPARE_COLORS[1],
+          borderWidth: 0,
+          borderRadius: 3,
+        },
+      ],
+    };
+  }
+
+  function fillSelect(sel, options, labels) {
+    if (!sel) return;
+    var cur = sel.value;
+    sel.innerHTML = "";
+    options.forEach(function (v, i) {
+      var opt = document.createElement("option");
+      opt.value = v;
+      opt.textContent = labels ? labels[i] : v;
+      sel.appendChild(opt);
+    });
+    if (options.indexOf(cur) >= 0) sel.value = cur;
+    else if (options.length) sel.value = options[options.length - 1];
+  }
+
+  function syncPeriodKindPanels(prefix) {
+    var kind = ($("ci" + prefix + "Kind") || {}).value || "all";
+    ["Month", "Quarter", "Year", "Fy", "Custom"].forEach(function (part) {
+      var el = $("ci" + prefix + part + "Wrap");
+      if (!el) return;
+      var want =
+        (part === "Month" && kind === "month") ||
+        (part === "Quarter" && kind === "quarter") ||
+        (part === "Year" && kind === "year") ||
+        (part === "Fy" && kind === "fy") ||
+        (part === "Custom" && kind === "custom");
+      el.hidden = !want;
+    });
+  }
+
+  function syncPanels() {
+    var compare = isCompare();
+    var b = breakdown();
+    var bBlock = $("ciPeriodBBlock");
+    if (bBlock) bBlock.hidden = !compare;
+    var aLabel = $("ciPeriodALabel");
+    if (aLabel) aLabel.textContent = compare ? "Period A" : "Time period";
+    var topWrap = $("ciChartTopWrap");
+    if (topWrap) topWrap.hidden = isTimeBreakdown(b);
+    syncPeriodKindPanels("PeriodA");
+    syncPeriodKindPanels("PeriodB");
+  }
+
+  function populateProductMultiSelect() {
+    var list = $("ciChartProductList");
+    var allBox = $("ciChartProductAll");
+    if (!list) return;
+    var products = uniqueSorted(
+      rows.map(function (r) {
+        return r.product || "—";
+      })
+    );
+    list.innerHTML = "";
+    products.forEach(function (name) {
+      var label = document.createElement("label");
+      var cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.value = name;
+      var span = document.createElement("span");
+      span.textContent = name;
+      label.appendChild(cb);
+      label.appendChild(span);
+      list.appendChild(label);
+      cb.addEventListener("change", function () {
+        if (allBox) allBox.checked = false;
+        updateProductButton();
+        render();
+      });
+    });
+    if (allBox) {
+      allBox.checked = true;
+      allBox.addEventListener("change", function () {
+        if (allBox.checked) {
+          list.querySelectorAll("input[type=checkbox]").forEach(function (cb) {
+            cb.checked = false;
+          });
+        }
+        updateProductButton();
+        render();
+      });
+    }
+    updateProductButton();
+  }
+
+  function wireProductDropdown() {
+    var btn = $("ciChartProductBtn");
+    var panel = $("ciChartProductPanel");
+    if (!btn || !panel) return;
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var open = panel.hidden;
+      panel.hidden = !open;
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+    });
+    panel.addEventListener("click", function (e) {
+      e.stopPropagation();
+    });
+    document.addEventListener("click", function () {
+      panel.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function populateSelectors() {
+    var months = [];
+    var quarters = [];
+    var years = [];
+    var fys = [];
+    rows.forEach(function (r) {
+      var d = parseDate(r.date);
+      if (!d) return;
+      months.push(monthKey(d));
+      quarters.push(quarterKey(d));
+      years.push(yearKey(d));
+      fys.push(fyKey(d));
+    });
+    optionCache.months = uniqueSorted(months);
+    optionCache.quarters = uniqueSorted(quarters);
+    optionCache.years = uniqueSorted(years);
+    optionCache.fys = uniqueSorted(fys);
+    var monthLabels = optionCache.months.map(function (k) {
+      return prettyBucket(k, "month");
+    });
+    var fyLabels = optionCache.fys.map(function (y) {
+      return fyLabel(parseInt(y, 10));
+    });
+
+    ["PeriodA", "PeriodB"].forEach(function (prefix) {
+      fillSelect($("ci" + prefix + "Month"), optionCache.months, monthLabels);
+      fillSelect($("ci" + prefix + "Quarter"), optionCache.quarters);
+      fillSelect($("ci" + prefix + "Year"), optionCache.years);
+      fillSelect($("ci" + prefix + "Fy"), optionCache.fys, fyLabels);
+    });
+
+    var fyA = $("ciPeriodAFy");
+    var fyB = $("ciPeriodBFy");
+    if (optionCache.fys.length >= 2 && fyA && fyB) {
+      fyA.value = optionCache.fys[optionCache.fys.length - 1];
+      fyB.value = optionCache.fys[optionCache.fys.length - 2];
+    } else if (optionCache.fys.length && fyA) {
+      fyA.value = optionCache.fys[optionCache.fys.length - 1];
+    }
+
+    populateProductMultiSelect();
+    wireProductDropdown();
+  }
+
+  function syncTable(unionRows, sumA, sumB, compare) {
+    var table = $("ciSummaryTable");
+    if (!table) return;
+    var visible = 0;
+    var sum = 0;
+    table.querySelectorAll("tr.ci-summary-row").forEach(function (tr) {
+      var meta = {
+        date: tr.getAttribute("data-date") || "",
+        product: tr.getAttribute("data-product") || "—",
+        variant: tr.getAttribute("data-variant") || "gbinc",
+        commission: Number(tr.getAttribute("data-commission") || 0),
+      };
+      var ok = unionRows.some(function (r) {
+        return (
+          (r.date || "") === meta.date &&
+          (r.product || "—") === meta.product &&
+          (r.variant || "gbinc") === meta.variant &&
+          Math.abs((Number(r.commission) || 0) - meta.commission) < 0.001
+        );
+      });
+      tr.hidden = !ok;
+      if (ok) {
+        visible += 1;
+        sum += meta.commission;
+      }
+    });
+    var countEl = $("ciTableCount");
+    var totalCell = $("ciTableTotal");
+    if (countEl) countEl.textContent = String(visible);
+    if (totalCell) totalCell.textContent = money(sum);
+
+    if (totalEl) {
+      if (compare) {
+        totalEl.textContent =
+          periodLabel(periodSpec("PeriodA")) +
+          " " +
+          money(sumA) +
+          "  ·  " +
+          periodLabel(periodSpec("PeriodB")) +
+          " " +
+          money(sumB);
+      } else if ($("ciChartMetric").value === "quantity") {
+        totalEl.textContent =
+          sum.toLocaleString(undefined, { maximumFractionDigits: 2 }) +
+          " qty · " +
+          visible +
+          " lines";
+      } else {
+        totalEl.textContent = money(sum) + " · " + visible + " lines";
+      }
+    }
+  }
+
+  function render() {
+    syncPanels();
+    var compare = isCompare();
+    var b = breakdown();
+    var rowsA = filterByPeriod(periodSpec("PeriodA"));
+    var rowsB = compare ? filterByPeriod(periodSpec("PeriodB")) : [];
+    var union = compare ? rowsA.concat(rowsB) : rowsA;
+
+    var sumA = rowsA.reduce(function (a, r) {
+      return a + metricValue(r);
+    }, 0);
+    var sumB = rowsB.reduce(function (a, r) {
+      return a + metricValue(r);
+    }, 0);
+    syncTable(union, sumA, sumB, compare);
+
+    if (!union.length) {
+      if (emptyEl) emptyEl.hidden = false;
+      if (canvas) canvas.style.display = "none";
+      if (chart) {
+        chart.destroy();
+        chart = null;
+      }
+      setDownloadEnabled(false);
+      return;
+    }
+    if (emptyEl) emptyEl.hidden = true;
+    if (canvas) canvas.style.display = "block";
+
+    var data;
+    if (isTimeBreakdown(b)) {
+      data = compare ? buildCompareTime(rowsA, rowsB) : buildTimeChart(rowsA);
+    } else {
+      data = compare
+        ? buildCompareCategory(rowsA, rowsB)
+        : buildCategoryChart(rowsA, periodLabel(periodSpec("PeriodA")));
+    }
+
+    var metricLabel =
+      $("ciChartMetric").value === "quantity" ? "Quantity" : "Commission (USD)";
+
+    if (chart) chart.destroy();
+    chart = new Chart(canvas, {
+      type: "bar",
+      data: data,
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            display: compare || isTimeBreakdown(b),
+            position: "bottom",
+            labels: { boxWidth: 12, font: { size: 11 } },
+          },
+          tooltip: {
+            callbacks: {
+              label: function (ctx) {
+                var v = ctx.parsed.y;
+                var prefix = ctx.dataset.label ? ctx.dataset.label + ": " : "";
+                if ($("ciChartMetric").value === "quantity") return prefix + v;
+                return prefix + money(v);
+              },
+            },
+          },
+        },
+        scales: {
+          x: {
+            ticks: { maxRotation: 45, minRotation: 0, font: { size: 11 } },
+            grid: { display: false },
+          },
+          y: {
+            beginAtZero: true,
+            title: { display: true, text: metricLabel, font: { size: 11 } },
+            ticks: {
+              callback: function (v) {
+                if ($("ciChartMetric").value === "quantity") return v;
+                if (Math.abs(v) >= 1000)
+                  return "$" + (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
+                return "$" + v;
+              },
+            },
+          },
+        },
+      },
+    });
+    setDownloadEnabled(true);
+  }
+
+  function setDownloadEnabled(on) {
+    ["ciChartDownloadPng", "ciChartDownloadCsv"].forEach(function (id) {
+      var el = $(id);
+      if (el) el.disabled = !on;
+    });
+  }
+
+  function chartTitle() {
+    var b = breakdown();
+    var names = {
+      month: "Monthly",
+      quarter: "Quarterly",
+      year: "Yearly",
+      fy: "By fiscal year",
+      company: "By company",
+      product: "By product",
+    };
+    var metric = $("ciChartMetric").value === "quantity" ? "Quantity" : "Commission";
+    var title = metric + " · " + (names[b] || b);
+    var a = periodLabel(periodSpec("PeriodA"));
+    if (isCompare()) title += " · " + a + " vs " + periodLabel(periodSpec("PeriodB"));
+    else title += " · " + a;
+    return title;
+  }
+
+  function slugFilename(ext) {
+    var raw = "commission-chart-" + chartTitle();
+    var slug = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+    return (slug.slice(0, 80) || "commission-chart") + "." + ext;
+  }
+
+  function csvCell(v) {
+    var s = v == null ? "" : String(v);
+    if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function downloadBlob(filename, mime, text) {
+    var blob = new Blob([text], { type: mime });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+    setTimeout(function () {
+      URL.revokeObjectURL(a.href);
+    }, 1000);
+  }
+
+  function downloadCsv() {
+    if (!chart) return;
+    var labels = chart.data.labels || [];
+    var sets = chart.data.datasets || [];
+    var header = ["Label"].concat(
+      sets.map(function (ds) {
+        return ds.label || "Value";
+      })
+    );
+    var lines = [header.map(csvCell).join(",")];
+    labels.forEach(function (lab, i) {
+      var row = [lab];
+      sets.forEach(function (ds) {
+        var v = (ds.data || [])[i];
+        row.push(v == null ? "" : v);
+      });
+      lines.push(row.map(csvCell).join(","));
+    });
+    downloadBlob(slugFilename("csv"), "text/csv;charset=utf-8", lines.join("\n"));
+  }
+
+  function downloadPng() {
+    if (!chart || !canvas) return;
+    var srcW = canvas.width;
+    var srcH = canvas.height;
+    if (!srcW || !srcH) return;
+    var TARGET_W = 1400;
+    var scale = TARGET_W / srcW;
+    var chartH = Math.round(srcH * scale);
+    var PAD = 28;
+    var TOPBAR = 72;
+    var FOOTER = 32;
+    var off = document.createElement("canvas");
+    off.width = TARGET_W;
+    off.height = TOPBAR + chartH + FOOTER;
+    var ctx = off.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, off.width, off.height);
+    ctx.fillStyle = "#1C5631";
+    ctx.fillRect(0, 0, off.width, TOPBAR - 8);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 18px system-ui, sans-serif";
+    ctx.fillText("GBInc  —  Commission", PAD, 28);
+    ctx.font = "14px system-ui, sans-serif";
+    var title = chartTitle();
+    ctx.fillText(title, PAD, 52);
+    ctx.drawImage(canvas, 0, 0, srcW, srcH, 0, TOPBAR, TARGET_W, chartH);
+    ctx.fillStyle = "#94a3b8";
+    ctx.font = "11px system-ui, sans-serif";
+    ctx.fillText(
+      "Generated " + new Date().toLocaleDateString(),
+      PAD,
+      TOPBAR + chartH + 20
+    );
+    var a = document.createElement("a");
+    a.download = slugFilename("png");
+    a.href = off.toDataURL("image/png");
+    a.click();
+  }
+
+  populateSelectors();
+
+  var kindA = $("ciPeriodAKind");
+  if (kindA && optionCache.fys.length) kindA.value = "fy";
+  var kindB = $("ciPeriodBKind");
+  if (kindB && optionCache.fys.length) kindB.value = "fy";
+
+  [
+    "ciChartBreakdown",
+    "ciChartMetric",
+    "ciChartTop",
+    "ciChartVariant",
+    "ciChartCompare",
+    "ciPeriodAKind",
+    "ciPeriodAMonth",
+    "ciPeriodAQuarter",
+    "ciPeriodAYear",
+    "ciPeriodAFy",
+    "ciPeriodAFrom",
+    "ciPeriodATo",
+    "ciPeriodBKind",
+    "ciPeriodBMonth",
+    "ciPeriodBQuarter",
+    "ciPeriodBYear",
+    "ciPeriodBFy",
+    "ciPeriodBFrom",
+    "ciPeriodBTo",
+  ].forEach(function (id) {
+    var el = $(id);
+    if (el) el.addEventListener("change", render);
+  });
+
+  var pngBtn = $("ciChartDownloadPng");
+  if (pngBtn) pngBtn.addEventListener("click", downloadPng);
+  var csvBtn = $("ciChartDownloadCsv");
+  if (csvBtn) csvBtn.addEventListener("click", downloadCsv);
+
+  render();
+})();

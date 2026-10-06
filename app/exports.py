@@ -56,15 +56,13 @@ SHIPPING_COLUMNS = [
 COMMISSION_SUMMARY_COLUMNS = [
     ("Company", "company"),
     ("Product", "product"),
+    ("Unit price", "unit_price"),
+    ("Quantity", "quantity"),
+    ("Date", "invoice_date"),
     ("PO #", "po_number"),
-    ("Source", "source_label"),
     ("CI #", "ci_number"),
     ("Commission", "commission"),
-    ("Deal commission", "deal_commission"),
-    ("Discrepancy", "discrepancy"),
     ("Currency", "currency"),
-    ("Last activity / invoice", "last_activity"),
-    ("Notes", "notes"),
 ]
 
 

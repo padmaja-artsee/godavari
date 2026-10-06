@@ -15,6 +15,7 @@
   const productNone = document.getElementById("master-product-none");
   const productHidden = document.getElementById("master-product");
   const stageSelect = document.getElementById("master-stage");
+  const stageWrap = document.getElementById("master-stage-wrap");
   const channelSelect = document.getElementById("master-channel");
   const activityDate = document.getElementById("master-activity-date");
   const dealDate = document.getElementById("master-deal-date");
@@ -36,6 +37,19 @@
     return d.getFullYear() + "-" + m + "-" + day;
   }
 
+  function syncStageVisibility() {
+    const existing = linkMode.value === "existing";
+    if (stageWrap) stageWrap.hidden = existing;
+    // Don't submit First contact / RFQ / … when logging against an existing deal
+    // (shipping, follow-ups, etc.). Backend keeps/advances stage from the deal + channel.
+    if (stageSelect) {
+      stageSelect.disabled = existing;
+      stageSelect.required = !existing;
+      if (existing) stageSelect.removeAttribute("name");
+      else stageSelect.setAttribute("name", "pipeline_stage");
+    }
+  }
+
   function syncMode() {
     const mode = linkMode.value;
     dealWrap.hidden = mode !== "existing";
@@ -51,9 +65,11 @@
       productNew.required = false;
     }
     dealSelect.required = mode === "existing";
+    syncStageVisibility();
   }
 
   function syncChannelFromStage() {
+    if (linkMode.value === "existing") return;
     const suggested = CHANNEL_FOR_STAGE[stageSelect.value];
     if (suggested) channelSelect.value = suggested;
   }

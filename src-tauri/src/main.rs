@@ -84,13 +84,9 @@ fn find_backend() -> Option<PathBuf> {
         return Some(in_resources);
     }
 
-    // PyInstaller BUNDLE puts the binary at Contents/MacOS/leads
-    let in_macos = macos_dir.join(bin_name);
-    if in_macos.exists() {
-        return Some(in_macos);
-    }
-
-    // Fallback: MacOS/leads-bin/leads (dev / alternate layout)
+    // Never treat the Tauri shell itself (Contents/MacOS/leads) as the backend —
+    // that causes an infinite relaunch loop when leads-bin is missing.
+    // Only accept a sibling leads-bin next to the exe (dev / alternate layout).
     let next_to_exe = macos_dir.join("leads-bin").join(bin_name);
     if next_to_exe.exists() {
         return Some(next_to_exe);

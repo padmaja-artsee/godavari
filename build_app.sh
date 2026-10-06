@@ -58,7 +58,11 @@ echo "▶ Step 2: Build Tauri shell..."
 command -v cargo >/dev/null 2>&1 || die "cargo not found — install Rust"
 rm -rf src-tauri/leads-bin
 cp -r dist/leads src-tauri/leads-bin
-( cd src-tauri && cargo tauri build )
+( cd src-tauri && cargo tauri build --bundles app ) || {
+  # Some environments fail on Tauri's own DMG helper; the .app is enough —
+  # we package the installer DMG ourselves in Step 5.
+  echo "  ⚠ Tauri bundle step reported an error — checking for .app anyway..."
+}
 echo "  ✓ Tauri compiled"
 
 TAURI_APP=""

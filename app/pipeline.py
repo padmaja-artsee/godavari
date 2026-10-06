@@ -103,10 +103,32 @@ def sort_active_leads(
 
         return _k
 
+    def num_key(field: str):
+        def _k(r: dict) -> tuple:
+            raw = r.get(field) or ""
+            try:
+                n = float(str(raw).replace(",", "").strip())
+            except (TypeError, ValueError):
+                n = 0.0
+            return (n, company_key(r), product_key(r), r.get("deal_id") or 0)
+
+        return _k
+
     if sort == "company":
         key = lambda r: (company_key(r), product_key(r), r.get("deal_id") or 0)
     elif sort == "product":
         key = lambda r: (product_key(r), company_key(r), r.get("deal_id") or 0)
+    elif sort == "deal_date":
+        key = lambda r: (
+            r.get("deal_date") or r.get("last_activity_date") or "",
+            company_key(r),
+            product_key(r),
+            r.get("deal_id") or 0,
+        )
+    elif sort == "price":
+        key = num_key("price")
+    elif sort == "total":
+        key = num_key("commercial_total")
     elif sort == "first_contact":
         key = date_key("first_contact_at")
     elif sort == "rfq":
