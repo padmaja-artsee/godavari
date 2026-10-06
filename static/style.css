@@ -1258,6 +1258,28 @@ tr:hover td { background: #f8fafc; }
   margin-bottom: 0.65rem;
 }
 
+.order-activity summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: #1A5632;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  user-select: none;
+  width: fit-content;
+}
+.order-activity summary::-webkit-details-marker { display: none; }
+.order-activity summary::before {
+  content: "▶";
+  font-size: 0.65rem;
+  display: inline-block;
+  transition: transform .15s ease;
+}
+.order-activity[open] summary::before { transform: rotate(90deg); }
+.order-activity table { margin-top: 0.55rem; }
+
 .nav-hint {
   margin-top: auto;
   padding: 0.75rem 0.5rem 0;

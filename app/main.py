@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, unquote
 
 from typing import List, Optional, Union
 
@@ -19,6 +19,7 @@ from app.database import (
     create_deal,
     create_lead,
     customer_detail,
+    company_order_rollup,
     delete_activity,
     attach_activity_to_deal,
     delete_customer,
@@ -32,6 +33,7 @@ from app.database import (
     init_db,
     list_customers,
     list_active_leads,
+    ordered_mt_total,
     group_active_leads,
     list_shipping_summary,
     period_start,
@@ -42,6 +44,8 @@ from app.database import (
     list_deals_for_company,
     list_products,
     log_update,
+    start_company_quote,
+    add_quote_step,
     archive_deal,
     bulk_deal_action,
     delete_deal,
@@ -662,6 +666,7 @@ async def leads_contacts(
     company: str = Query(""),
     product: str = Query(""),
     q: str = Query(""),
+    error: str = Query(""),
 ):
     return templates.TemplateResponse(
         "leads.html",
@@ -669,9 +674,12 @@ async def leads_contacts(
             request,
             page="leads",
             leads=search_leads_contacts(company, product, q),
+            customers=list_customers(),
+            products=list_products(),
             company=company,
             product=product,
             q=q,
+            quote_error=error.replace("+", " ") if error else "",
         ),
     )
 
@@ -733,6 +741,7 @@ async def active_leads_page(
             request,
             page="deals",
             leads=leads,
+            ordered_mt=ordered_mt_total(leads),
             lead_groups=lead_groups,
             status=status,
             period=period,
@@ -1266,13 +1275,37 @@ async def delete_activity_route(
 @app.get("/customer", response_class=HTMLResponse)
 async def customer_page(
     request: Request,
-    name: str = Query(...),
+    name: str = Query(""),
     product: str = Query(""),
     error: str = Query(""),
+    period: str = Query("all"),
 ):
+    if not name.strip():
+        parsed = parse_qs(unquote(request.url.query or ""))
+        name = (parsed.get("name") or [""])[0].strip()
+        if not product:
+            product = (parsed.get("product") or [""])[0]
+        recovered_period = (parsed.get("period") or [""])[0]
+        if recovered_period:
+            period = recovered_period
+    if not name:
+        return RedirectResponse("/leads", status_code=303)
     detail = customer_detail(name, product)
     if not detail:
         return RedirectResponse("/leads", status_code=303)
+    if period not in ("week", "month", "quarter", "year", "all"):
+        period = "all"
+    order_rollup = company_order_rollup(detail["customer"]["id"], period, product)
+    detail["pursuits"] = [
+        d for d in detail["deals"] if not (d.get("po_number") or "").strip()
+    ]
+    activity_by_order = {
+        g["deal_id"]: g["activities"] for g in detail["timeline"]["deal_groups"]
+    }
+    for order in order_rollup["orders"]:
+        order["activities"] = activity_by_order.get(order["id"], [])
+    for pursuit in detail["pursuits"]:
+        pursuit["activities"] = activity_by_order.get(pursuit["id"], [])
     err_msg = ""
     if error == "pick_deal":
         err_msg = "Pick a deal to attach this entry to, or switch to Company only."
@@ -1285,6 +1318,7 @@ async def customer_page(
             page="leads",
             detail=detail,
             product_filter=product,
+            order_rollup=order_rollup,
             company_deals=deals_for_activity_edit(
                 name, _timeline_deal_ids(detail["timeline"])
             ),
@@ -1292,6 +1326,65 @@ async def customer_page(
             all_products=list_products(),
         ),
     )
+
+
+def _quote_redirect(company: str, error: str = "") -> RedirectResponse:
+    if company and get_lead_by_company(company):
+        url = f"/customer?name={quote(company)}&period=all"
+        if error:
+            url += f"&error={quote(error)}"
+        return RedirectResponse(url, status_code=303)
+    url = "/leads"
+    if error:
+        url += f"?error={quote(error)}"
+    return RedirectResponse(url, status_code=303)
+
+
+@app.post("/quotes")
+async def post_new_quote(
+    company: str = Form(...),
+    product: str = Form(...),
+    activity_date: str = Form(""),
+    comment: str = Form(""),
+):
+    try:
+        result = start_company_quote(company, product, activity_date, comment)
+    except ValueError as e:
+        return _quote_redirect(company.strip(), str(e))
+    return _quote_redirect(result["company"])
+
+
+@app.post("/quotes/{deal_id}/activity")
+async def post_quote_step(
+    deal_id: int,
+    step: str = Form(...),
+    activity_date: str = Form(...),
+    comment: str = Form(""),
+    po_number: str = Form(""),
+    quantity: str = Form(""),
+    quantity_unit: str = Form("MT"),
+    price: str = Form(""),
+    price_unit: str = Form("/MT"),
+    fob_currency: str = Form("USD"),
+):
+    try:
+        company = add_quote_step(
+            deal_id,
+            step,
+            activity_date,
+            comment,
+            po_number,
+            quantity,
+            quantity_unit,
+            price,
+            price_unit,
+            fob_currency,
+        )
+    except ValueError as e:
+        detail = get_deal_detail(deal_id)
+        company = (detail or {}).get("deal", {}).get("company", "")
+        return _quote_redirect(company, str(e))
+    return _quote_redirect(company)
 
 
 @app.post("/customer/{customer_id}/delete")
@@ -1551,13 +1644,14 @@ async def deals_export_xlsx(
     company: str = Query(""),
     product: str = Query(""),
     q: str = Query(""),
+    stage: str = Query("all"),
 ):
     month = (month or "").strip()
     if len(month) >= 7 and month[4:5] == "-":
         month = month[:7]
     else:
         month = ""
-    rows = list_active_leads(status, period, company, product, "", q, month=month)
+    rows = list_active_leads(status, period, company, product, "", q, stage=stage, month=month)
     fname = export_filename("gbinc-active-leads", status, "xlsx")
     return _download_response(
         to_xlsx_bytes([("Active Leads", rows, DEALS_COLUMNS)]),

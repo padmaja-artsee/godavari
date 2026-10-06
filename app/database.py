@@ -2086,6 +2086,32 @@ def _activity_period_clause(start: str) -> tuple[str, list[Any]]:
     return clause, [start, start]
 
 
+def ordered_mt_total(rows: list[dict]) -> str:
+    """Sum ordered quantity in metric tons for the rows on screen.
+
+    A row counts when it has a PO number and is not lost. KG is converted
+    to MT. FCL and other units are left out of the tonnage.
+    """
+    total = 0.0
+    for row in rows:
+        if not str(row.get("po_number") or "").strip():
+            continue
+        if str(row.get("status") or "").strip().lower() == "lost":
+            continue
+        qty = _parse_commercial_number(str(row.get("quantity") or ""))
+        if not qty:
+            continue
+        unit = str(row.get("quantity_unit") or "MT").strip().upper()
+        if unit in ("MT", "MTS", "METRIC TON", "METRIC TONS"):
+            total += qty
+        elif unit in ("KG", "KGS", "KILO", "KILOS", "KILOGRAM", "KILOGRAMS"):
+            total += qty / 1000.0
+    if total == int(total):
+        return f"{int(total):,}"
+    text = f"{total:,.2f}".rstrip("0").rstrip(".")
+    return text
+
+
 def list_active_leads(
     status: str = "all",
     period: str = "month",
@@ -2115,9 +2141,12 @@ def list_active_leads(
         end = None
 
     result: list[dict] = []
-    stage_filter = (stage or "all").strip().lower()
-    if stage_filter not in ("all", ""):
-        stage_filter = normalize_stage(stage_filter)
+    stage_raw = (stage or "all").strip().lower().replace(" ", "_").replace("-", "_")
+    po_only = stage_raw in ("with_po", "has_po", "orders")
+    if po_only:
+        stage_filter = "with_po"
+    elif stage_raw not in ("all", ""):
+        stage_filter = normalize_stage(stage_raw)
     else:
         stage_filter = "all"
 
@@ -2329,7 +2358,9 @@ def list_active_leads(
                 item["deal_date"] = item["last_activity_date"]
                 result.append(item)
 
-    if stage_filter != "all":
+    if stage_filter == "with_po":
+        result = [r for r in result if str(r.get("po_number") or "").strip()]
+    elif stage_filter != "all":
         result = [
             r for r in result
             if normalize_stage(r.get("pipeline_stage")) == stage_filter
@@ -3092,6 +3123,135 @@ def log_update(data: dict[str, Any]) -> dict:
         }
 
 
+QUOTE_STEPS = {
+    "RFQ": "rfq",
+    "Quote sent": "rfq",
+    "RFS": "rfs",
+    "PO given": "conversion",
+}
+
+
+def start_company_quote(
+    company: str, product: str, activity_date: str, comment: str
+) -> dict:
+    """Open one quote on a company and log the first activity as RFQ."""
+    company = (company or "").strip()
+    product = (product or "").strip()
+    if not company:
+        raise ValueError("Company is required")
+    if not product:
+        raise ValueError("Product is required")
+    when = (activity_date or "").strip() or date.today().isoformat()
+    note = (comment or "").strip() or "Quote requested"
+    return log_update(
+        {
+            "company": company,
+            "link_mode": "new",
+            "product": product,
+            "deal_date": when,
+            "activity_date": when,
+            "channel": "RFQ",
+            "pipeline_stage": "rfq",
+            "comment": note,
+            "po_number": "",
+        }
+    )
+
+
+def add_quote_step(
+    deal_id: int,
+    step: str,
+    activity_date: str,
+    comment: str,
+    po_number: str = "",
+    quantity: str = "",
+    quantity_unit: str = "MT",
+    price: str = "",
+    price_unit: str = "/MT",
+    fob_currency: str = "USD",
+) -> str:
+    """Add a step to an existing quote. PO given fills that same quote."""
+    stage = QUOTE_STEPS.get(step)
+    if not stage:
+        raise ValueError("Choose RFQ, Quote sent, RFS, or PO given")
+    when = (activity_date or "").strip()
+    if not when:
+        raise ValueError("Date is required")
+    po = (po_number or "").strip()
+    if step == "PO given" and not po:
+        raise ValueError("PO number is required")
+    note = (comment or "").strip()
+    if not note:
+        note = f"PO {po}" if step == "PO given" else step
+    with get_db() as conn:
+        row = conn.execute(
+            """
+            SELECT d.id, d.customer_id, d.product_id, d.po_number, d.notes,
+                   c.name AS company
+            FROM deals d
+            JOIN customers c ON c.id = d.customer_id
+            WHERE d.id = ? AND d.deleted_at IS NULL
+            """,
+            (deal_id,),
+        ).fetchone()
+        if not row:
+            raise ValueError("Quote not found")
+        if step == "PO given":
+            other = conn.execute(
+                """
+                SELECT id FROM deals
+                WHERE customer_id = ? AND id != ? AND deleted_at IS NULL
+                  AND TRIM(po_number) = ?
+                """,
+                (row["customer_id"], deal_id, po),
+            ).fetchone()
+            if other:
+                raise ValueError("That PO is already an order for this company")
+            qty = (quantity or "").strip()
+            unit = normalize_quantity_unit(quantity_unit or "MT", "")
+            rate = (price or "").strip()
+            punit = (price_unit or "/MT").strip() or "/MT"
+            total = compute_commercial_total(qty, rate) if qty and rate else ""
+            value = format_deal_value(qty, rate, punit, unit) if qty or rate else ""
+            currency = (fob_currency or "USD").strip() or "USD"
+            sets = ["po_number = ?", "po_date = ?", "updated_at = ?"]
+            params: list[Any] = [po, when, now_iso()]
+            if qty:
+                sets.extend(["quantity = ?", "quantity_unit = ?"])
+                params.extend([qty, unit])
+            if rate:
+                sets.extend(["price = ?", "price_unit = ?", "fob_currency = ?"])
+                params.extend([rate, punit, currency])
+            if total:
+                sets.append("commercial_total = ?")
+                params.append(total)
+            if value:
+                sets.append("value = ?")
+                params.append(value)
+            params.append(deal_id)
+            conn.execute(
+                f"UPDATE deals SET {', '.join(sets)} WHERE id = ? AND deleted_at IS NULL",
+                params,
+            )
+        _insert_activity(
+            conn,
+            {
+                "customer_id": row["customer_id"],
+                "deal_id": deal_id,
+                "product_id": row["product_id"],
+                "activity_date": when,
+                "channel": step,
+                "activity": step,
+                "type": "",
+                "value": po if step == "PO given" else "",
+                "comment": note,
+                "source": "quote",
+            },
+        )
+        apply_pipeline_progress(conn, deal_id, stage, when)
+        return row["company"]
+
+
 def add_activity(data: dict[str, Any]) -> int:
     result = log_update(
         {
@@ -3568,6 +3728,87 @@ def dashboard_stats(period: str = "all") -> dict:
     }
 
 
+def _money_label(amount: float) -> str:
+    if amount == int(amount):
+        return f"{int(amount):,}"
+    return f"{amount:,.2f}"
+
+
+def company_order_rollup(
+    customer_id: int, period: str = "all", product: str = ""
+) -> dict:
+    """Orders for one company, optionally limited to a calendar period.
+
+    An order is a deal row that belongs to this customer and has a PO number.
+    The period uses PO date, then deal date. Totals are split by currency.
+    """
+    allowed = {"week", "month", "quarter", "year", "all"}
+    if period not in allowed:
+        period = "all"
+    start = period_start(period)
+    product_name = (product or "").strip().lower()
+    with get_db() as conn:
+        cust = conn.execute(
+            "SELECT id, name FROM customers WHERE id = ?", (customer_id,)
+        ).fetchone()
+        rows = conn.execute(
+            """
+            SELECT d.id, d.customer_id, d.po_number, d.po_date, d.quantity,
+                   d.quantity_unit, d.price, d.price_unit, d.deal_date, d.status,
+                   d.commercial_total, d.fob_currency,
+                   c.name AS company, p.name AS product
+            FROM deals d
+            JOIN customers c ON c.id = d.customer_id
+            JOIN products p ON p.id = d.product_id
+            WHERE d.customer_id = ?
+              AND d.deleted_at IS NULL
+              AND d.archived = 0
+              AND d.po_number IS NOT NULL
+              AND TRIM(d.po_number) != ''
+            ORDER BY COALESCE(NULLIF(TRIM(d.po_date), ''), d.deal_date) DESC, d.id DESC
+            """,
+            (customer_id,),
+        ).fetchall()
+    orders: list[dict] = []
+    totals: dict[str, float] = {}
+    for raw in rows:
+        d = dict(raw)
+        if d["customer_id"] != customer_id:
+            continue
+        if product_name and (d.get("product") or "").strip().lower() != product_name:
+            continue
+        d["order_date"] = (
+            (d.get("po_date") or "").strip()[:10]
+            or (d.get("deal_date") or "").strip()[:10]
+        )
+        if not row_in_period(d, start, "order_date"):
+            continue
+        amount = (d.get("commercial_total") or "").strip()
+        if not amount:
+            amount = compute_commercial_total(
+                d.get("quantity") or "", d.get("price") or ""
+            )
+        d["order_total"] = amount
+        currency = (d.get("fob_currency") or "USD").strip() or "USD"
+        d["currency"] = currency
+        if amount:
+            totals[currency] = totals.get(currency, 0.0) + _parse_commercial_number(
+                amount
+            )
+        orders.append(d)
+    return {
+        "company_id": customer_id,
+        "company": cust["name"] if cust else "",
+        "period": period,
+        "orders": orders,
+        "totals": [
+            {"currency": cur, "amount": _money_label(n)}
+            for cur, n in sorted(totals.items())
+        ],
+        "count": len(orders),
+    }
+
+
 def customer_detail(name: str, product: str = "") -> Optional[dict]:
     with get_db() as conn:
         lead = conn.execute(
@@ -3589,8 +3830,8 @@ def customer_detail(name: str, product: str = "") -> Optional[dict]:
             cid = cust["id"]
             deals = conn.execute(
                 """
-                SELECT d.id, d.po_number, d.quantity, d.quantity_unit, d.price, d.price_unit,
-                       d.deal_date, d.status, d.shipped_date,
+                SELECT d.id, d.po_number, d.quote_ref, d.pipeline_stage, d.quantity, d.quantity_unit,
+                       d.price, d.price_unit, d.deal_date, d.status, d.shipped_date,
                        d.closed_date, d.value, d.notes, p.name AS product
                 FROM deals d
                 JOIN products p ON p.id = d.product_id
@@ -3622,8 +3863,8 @@ def customer_detail(name: str, product: str = "") -> Optional[dict]:
             }
         deals = conn.execute(
             """
-            SELECT d.id, d.po_number, d.quantity, d.quantity_unit, d.price, d.price_unit,
-                   d.deal_date, d.status, d.shipped_date,
+            SELECT d.id, d.po_number, d.quote_ref, d.pipeline_stage, d.quantity, d.quantity_unit,
+                   d.price, d.price_unit, d.deal_date, d.status, d.shipped_date,
                    d.closed_date, d.value, d.notes, p.name AS product
             FROM deals d
             JOIN products p ON p.id = d.product_id

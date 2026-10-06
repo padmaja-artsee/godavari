@@ -5,7 +5,7 @@
 <div class="page-header">
   <div>
     <h1>{{ detail.customer.name }}{% if detail.product_filter %} — {{ detail.product_filter }}{% endif %}</h1>
-    <p class="subtitle">{% if detail.product_filter %}All logged updates for this product{% else %}Company profile, contacts, deals, and activity{% endif %}</p>
+    <p class="subtitle">{% if detail.product_filter %}Orders and updates for this product{% else %}Contacts, orders, and activity for this company{% endif %}</p>
     {% if detail.deal_counts %}
     <p class="subtitle deal-stats">
       {{ detail.deal_counts.open }} open · {{ detail.deal_counts.shipped }} shipped ·
@@ -14,8 +14,8 @@
     {% endif %}
   </div>
   <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-    <a href="/add?tab=log&company={{ detail.customer.name | urlencode }}{% if detail.product_filter %}&product={{ detail.product_filter | urlencode }}{% endif %}" class="btn btn-primary">+ Add or update</a>
-    <a href="/add?tab=deal&company={{ detail.customer.name | urlencode }}" class="btn btn-ghost">+ Create deal</a>
+    <a href="#new-quote" class="btn btn-primary">+ New quote</a>
+    <a href="/add?tab=log&company={{ detail.customer.name | urlencode }}{% if detail.product_filter %}&product={{ detail.product_filter | urlencode }}{% endif %}" class="btn btn-ghost">+ Add or update</a>
     <form method="post" action="/customer/{{ detail.customer.id }}/delete" class="inline-form"
       data-confirm="Delete {{ detail.customer.name }} and all deals, activities, and contact data? This cannot be undone.">
       <button type="submit" class="btn btn-danger">Delete company</button>
@@ -118,99 +118,247 @@
   </form>
 </div>
 
-<div class="card">
+<div class="card" id="company-orders">
   <div class="card-header">
-    <h2>Deals</h2>
-    <a href="/add?tab=deal&company={{ detail.customer.name | urlencode }}" class="btn btn-primary btn-sm">+ Create deal</a>
+    <h2>Orders</h2>
+    <span class="muted" style="font-size:.85rem">{{ order_rollup.company }}</span>
   </div>
   <div class="card-body">
-    {% if detail.deals %}
-    <table>
-      <thead><tr><th>ID#</th><th>Date</th><th>Product</th><th>PO</th><th>Qty</th><th>Price</th><th>Status</th><th></th></tr></thead>
-      <tbody>
-      {% for d in detail.deals %}
-      <tr>
-        <td>{{ d.id }}</td>
-        <td>{{ d.deal_date }}</td>
-        <td>{{ d.product }}</td>
-        <td>{{ d.po_number or '—' }}</td>
-        <td>{{ (d.quantity|qty_display(d.quantity_unit or 'MT')) if d.quantity else '—' }}</td>
-        <td>{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% else %}—{% endif %}</td>
-        <td>
-          {% if d.status == 'shipped' %}<span class="badge">Shipped</span>
-          {% elif d.status == 'lost' %}<span class="badge badge-lost">Lost</span>
-          {% else %}<span class="badge badge-open">Open</span>{% endif %}
-        </td>
-        <td><a class="link" href="/deal/{{ d.id }}">View →</a></td>
-      </tr>
+    <div class="filters" style="margin-bottom:1rem">
+      {% for p, label in [('week','Week'),('month','Month'),('quarter','Quarter'),('year','Year'),('all','All')] %}
+      <a href="/customer?name={{ detail.customer.name | urlencode }}&period={{ p }}{% if detail.product_filter %}&product={{ detail.product_filter | urlencode }}{% endif %}"
+         class="filter-pill {% if order_rollup.period == p %}active{% endif %}">{{ label }}</a>
       {% endfor %}
-      </tbody>
-    </table>
+    </div>
+    <p class="subtitle" style="margin:0 0 .75rem">
+      {{ order_rollup.count }} order{{ '' if order_rollup.count == 1 else 's' }}
+      {% if order_rollup.totals %}
+      ·
+      {% for t in order_rollup.totals %}
+      <strong>{{ t.currency }} {{ t.amount }}</strong>{% if not loop.last %}, {% endif %}
+      {% endfor %}
+      {% else %}
+      · no priced total in this period
+      {% endif %}
+    </p>
+    {% if order_rollup.orders %}
+    {% for d in order_rollup.orders %}
+    <div class="timeline-group">
+      <div class="timeline-group-head">
+        <strong>{{ d.order_date or '—' }}</strong>
+        <span>{{ d.company }}</span>
+        <span>{{ d.product }}</span>
+        <span class="muted">PO {{ d.po_number }}</span>
+        <span class="muted">{{ (d.quantity|qty_display(d.quantity_unit or 'MT')) if d.quantity else '—' }}</span>
+        <span class="muted">{% if d.price %}{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}{% endif %}</span>
+        {% if d.order_total %}<span><strong>{{ d.currency }} {{ d.order_total }}</strong></span>{% endif %}
+        {% if d.status == 'shipped' %}<span class="badge">Shipped</span>
+        {% elif d.status == 'lost' %}<span class="badge badge-lost">Lost</span>
+        {% else %}<span class="badge badge-open">Open</span>{% endif %}
+        <a class="link" href="/deal/{{ d.id }}">View →</a>
+        <a class="link" href="/add?tab=log&company={{ detail.customer.name | urlencode }}&deal_id={{ d.id }}">+ Activity</a>
+        <form method="post" action="/deals/{{ d.id }}/delete" class="inline-form"
+              data-confirm="Delete PO {{ d.po_number }} for {{ d.product }}?">
+          <input type="hidden" name="next_url" value="/customer?name={{ detail.customer.name | urlencode }}&period={{ order_rollup.period }}" />
+          <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+        </form>
+      </div>
+      <details class="order-activity">
+        <summary>Activity ({{ d.activities|length }})</summary>
+        {% if d.activities %}
+        <table>
+          <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
+          <tbody>
+          {% for a in d.activities %}
+          {{ activity_row(a, detail.customer.name, '', company_deals) }}
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="muted" style="padding:0.35rem 0 0.25rem">No activity on this order yet.</p>
+        {% endif %}
+      </details>
+    </div>
+    {% endfor %}
     {% else %}
-    <div class="empty">No deals — <a class="link" href="/add?tab=log&company={{ detail.customer.name | urlencode }}">log update & start deal</a></div>
+    <div class="empty">No orders for {{ order_rollup.company }} in this period. An order is a PO recorded on this company.</div>
     {% endif %}
   </div>
 </div>
 
+<div class="card" id="new-quote">
+  <div class="card-header">
+    <h2>Quotes</h2>
+    <span class="muted" style="font-size:.85rem">{{ detail.customer.name }}</span>
+  </div>
+  <div class="card-body">
+    {% if activity_error %}
+    <p class="form-error" style="margin:0 0 1rem">{{ activity_error }}</p>
+    {% endif %}
+    <form method="post" action="/quotes" class="form-grid" style="margin-bottom:1.25rem">
+      <input type="hidden" name="company" value="{{ detail.customer.name }}" />
+      <div>
+        <label>Product *</label>
+        <input name="product" required list="products-datalist" value="{{ detail.product_filter or '' }}" placeholder="e.g. Ethyl Vinyl Ether" />
+      </div>
+      <div>
+        <label>Date *</label>
+        <input name="activity_date" type="date" required />
+      </div>
+      <div class="full">
+        <label>What they asked</label>
+        <textarea name="comment" rows="2" placeholder="Quantity, destination, timing…"></textarea>
+      </div>
+      <div class="full">
+        <button type="submit" class="btn btn-primary btn-sm">Start quote</button>
+      </div>
+    </form>
+    {% if detail.pursuits %}
+    {% for d in detail.pursuits %}
+    <div class="timeline-group">
+      <div class="timeline-group-head">
+        <strong>Quote {{ d.quote_ref or d.id }}</strong>
+        <span>{{ d.product }}</span>
+        <span class="muted">{{ d.deal_date }}</span>
+        {% if d.quantity %}<span class="muted">{{ d.quantity|qty_display(d.quantity_unit or 'MT') }}</span>{% endif %}
+        {% if d.price %}<span class="muted">{{ d.price }}{% if d.price_unit and d.price_unit != 'Other' %}{{ d.price_unit }}{% endif %}</span>{% endif %}
+        <a class="link" href="/deal/{{ d.id }}">View →</a>
+        <form method="post" action="/deals/{{ d.id }}/delete" class="inline-form"
+              data-confirm="Delete Quote {{ d.quote_ref or d.id }}?">
+          <input type="hidden" name="next_url" value="/customer?name={{ detail.customer.name | urlencode }}&period=all" />
+          <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+        </form>
+      </div>
+      <details class="order-activity">
+        <summary>Activity ({{ d.activities|length }})</summary>
+        {% if d.activities %}
+        <table>
+          <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
+          <tbody>
+          {% for a in d.activities %}
+          {{ activity_row(a, detail.customer.name, '', company_deals) }}
+          {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="muted" style="padding:0.35rem 0 0.25rem">No steps yet.</p>
+        {% endif %}
+      </details>
+      <form method="post" action="/quotes/{{ d.id }}/activity" class="form-grid quote-step-form" style="margin:0.75rem 0 0.25rem">
+        <div>
+          <label>Next step</label>
+          <select name="step" class="quote-step">
+            <option>RFQ</option>
+            <option selected>Quote sent</option>
+            <option>RFS</option>
+            <option>PO given</option>
+          </select>
+        </div>
+        <div>
+          <label>Date *</label>
+          <input name="activity_date" type="date" required />
+        </div>
+        <div class="quote-po-fields">
+          <label>PO # *</label>
+          <input name="po_number" placeholder="Customer PO number" />
+        </div>
+        <div class="quote-po-fields">
+          <label>Quantity</label>
+          <input name="quantity" placeholder="e.g. 6000" />
+        </div>
+        <div class="quote-po-fields">
+          <label>Qty unit</label>
+          <select name="quantity_unit">
+            {% for u in quantity_units %}
+            <option value="{{ u }}" {% if u == 'KG' %}selected{% endif %}>{{ u }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="quote-po-fields">
+          <label>Price</label>
+          <input name="price" placeholder="e.g. 4.10" />
+        </div>
+        <div class="quote-po-fields">
+          <label>Price unit</label>
+          <select name="price_unit">
+            {% for u in price_units %}
+            <option value="{{ u }}" {% if u == '/KG' %}selected{% endif %}>{{ u }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="quote-po-fields">
+          <label>Currency</label>
+          <select name="fob_currency">
+            {% for c in deal_currencies %}
+            <option value="{{ c }}" {% if c == 'USD' %}selected{% endif %}>{{ c }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="full">
+          <label>Note</label>
+          <input name="comment" placeholder="What happened on this step" />
+        </div>
+        <div class="full">
+          <button type="submit" class="btn btn-primary btn-sm">Add step</button>
+        </div>
+      </form>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="empty">No open quotes. Start one above. When a PO is given, the quote becomes an order.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if activity_error or detail.timeline.company_level %}
 <div class="card">
-  <div class="card-header"><h2>Timeline by deal</h2></div>
+  <div class="card-header"><h2>Activity not on an order</h2></div>
   <div class="card-body timeline-wrap">
     {% if activity_error %}
     <p class="form-error" style="padding:0.75rem 1.25rem;margin:0">{{ activity_error }}</p>
     {% endif %}
-    {% if detail.timeline.deal_groups %}
-    {% for group in detail.timeline.deal_groups %}
-    <div class="timeline-group">
-      <div class="timeline-group-head">
-        <a class="link" href="/deal/{{ group.deal_id }}"><strong>{{ group.product }}</strong></a>
-        <span class="muted">{{ group.deal_date }}</span>
-        {% if group.deal_status == 'shipped' %}<span class="badge">Shipped</span>
-        {% elif group.deal_status == 'lost' %}<span class="badge badge-lost">Lost</span>
-        {% else %}<span class="badge badge-open">Open</span>{% endif %}
-        {% if group.po_number %}<span class="muted">PO {{ group.po_number }}</span>{% endif %}
-        <a class="link" href="/add?tab=log&company={{ detail.customer.name | urlencode }}&deal_id={{ group.deal_id }}">+ Add entry</a>
-      </div>
-      {% if group.activities %}
-      <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
-        <tbody>
-        {% for a in group.activities %}
-        {{ activity_row(a, detail.customer.name, '', company_deals) }}
-        {% endfor %}
-        </tbody>
-      </table>
-      {% else %}
-      <p class="muted" style="padding:0.5rem 0">No log entries on this deal yet.</p>
-      {% endif %}
-    </div>
-    {% endfor %}
-    {% endif %}
-
     {% if detail.timeline.company_level %}
-    <div class="timeline-group">
-      <div class="timeline-group-head"><strong>Company (not tied to a deal)</strong></div>
-      <table>
-        <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
-        <tbody>
-        {% for a in detail.timeline.company_level %}
-        {{ activity_row(a, detail.customer.name, '', company_deals) }}
-        {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% endif %}
-
-    {% if not detail.timeline.deal_groups and not detail.timeline.company_level %}
-    <div class="empty">No activity logged. Use <strong>Add or update</strong> to record emails and deal progress.</div>
+    <table>
+      <thead><tr><th>Date</th><th>Type</th><th>Details</th><th></th></tr></thead>
+      <tbody>
+      {% for a in detail.timeline.company_level %}
+      {{ activity_row(a, detail.customer.name, '', company_deals) }}
+      {% endfor %}
+      </tbody>
+    </table>
     {% endif %}
   </div>
 </div>
+{% endif %}
 
 <p><a class="link" href="/leads">← Back to leads</a></p>
 <datalist id="products-datalist">
   {% for p in all_products %}<option value="{{ p.name }}">{% endfor %}
 </datalist>
 <script src="/static/activity-edit.js"></script>
+<script>
+(function () {
+  function syncQuoteStep(form) {
+    var step = form.querySelector(".quote-step");
+    if (!step) return;
+    var show = step.value === "PO given";
+    form.querySelectorAll(".quote-po-fields").forEach(function (el) {
+      el.hidden = !show;
+    });
+    var po = form.querySelector("[name=po_number]");
+    if (po) po.required = show;
+  }
+  document.querySelectorAll(".quote-step-form").forEach(function (form) {
+    syncQuoteStep(form);
+    form.querySelector(".quote-step").addEventListener("change", function () {
+      syncQuoteStep(form);
+    });
+  });
+  var dateInputs = document.querySelectorAll("#new-quote input[name=activity_date], .quote-step-form input[name=activity_date]");
+  var today = new Date().toISOString().slice(0, 10);
+  dateInputs.forEach(function (el) { if (!el.value) el.value = today; });
+})();
+</script>
 <script>
 (function () {
   const btn = document.getElementById("toggle-add-contact");

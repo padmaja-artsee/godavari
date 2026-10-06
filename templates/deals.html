@@ -84,6 +84,7 @@
           <option value="rfq" {% if stage == 'rfq' %}selected{% endif %}>RFQ</option>
           <option value="rfs" {% if stage == 'rfs' %}selected{% endif %}>RFS (sample)</option>
           <option value="conversion" {% if stage == 'conversion' %}selected{% endif %}>Conversion</option>
+          <option value="with_po" {% if stage == 'with_po' %}selected{% endif %}>With PO</option>
         </select>
       </div>
       <div>
@@ -139,7 +140,8 @@
 
   <div class="deals-summary-bar">
     <span>
-      <strong>{{ leads|length }}</strong> deal{{ 's' if leads|length != 1 else '' }}
+      <strong>{{ leads|length }}</strong> {{ 'order' if stage == 'with_po' else 'deal' }}{{ 's' if leads|length != 1 else '' }}
+      · <strong>{{ ordered_mt }}</strong> MT ordered
       {% if view != 'list' %}
       in <strong>{{ lead_groups|length }}</strong> {{ 'product' if view == 'product' else 'company' }} group{{ 's' if lead_groups|length != 1 else '' }}
       {% endif %}
@@ -196,7 +198,7 @@
           <td class="col-sticky">
             <a class="link" href="/customer?name={{ row.company | urlencode }}"><strong>{{ row.company }}</strong></a>
           </td>
-          <td>{{ row.product or '—' }}</td>
+          <td>{{ row.product or '—' }}{% if row.po_number %}<div class="muted">PO {{ row.po_number }}</div>{% endif %}</td>
           <td class="col-date">{{ row.deal_date or row.last_activity_date or '—' }}</td>
           <td class="col-num">{% if row.price %}{{ row.price }}{% if row.price_unit and row.price_unit != 'Other' %}{{ row.price_unit }}{% endif %}{% else %}—{% endif %}</td>
           <td class="col-num">{{ money_cell(row.commercial_total) }}</td>
@@ -331,9 +333,9 @@
             <tr class="sheet-row" data-href="{% if row.deal_id %}/deal/{{ row.deal_id }}{% else %}/customer?name={{ row.company | urlencode }}&product={{ row.product | urlencode }}{% endif %}">
               <td>
                 {% if view == 'product' %}
-                <a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a>
+                <a class="link" href="/customer?name={{ row.company | urlencode }}">{{ row.company }}</a>{% if row.po_number %}<div class="muted">PO {{ row.po_number }}</div>{% endif %}
                 {% else %}
-                {{ row.product }}
+                {{ row.product }}{% if row.po_number %}<div class="muted">PO {{ row.po_number }}</div>{% endif %}
                 {% endif %}
               </td>
               <td class="col-date">{{ row.deal_date or row.last_activity_date or '—' }}</td>

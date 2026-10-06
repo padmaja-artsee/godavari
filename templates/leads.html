@@ -8,9 +8,49 @@
   </div>
   <div style="display:flex;gap:.5rem;align-items:center">
     <a href="/leads/export.xlsx?company={{ company | urlencode }}&product={{ product | urlencode }}&q={{ q | urlencode }}" class="btn btn-ghost btn-sm">↓ Export Excel</a>
-    <a href="/add?tab=log" class="btn btn-primary">+ Add or update</a>
+    <a href="#new-quote" class="btn btn-primary">+ New quote</a>
+    <a href="/add?tab=log" class="btn btn-ghost">+ Add or update</a>
   </div>
 </div>
+
+<div class="card" id="new-quote" style="margin-bottom:1.25rem">
+  <div class="card-header"><h2>New quote</h2></div>
+  <div class="card-body">
+    {% if quote_error %}
+    <p class="form-error" style="margin:0 0 1rem">{{ quote_error }}</p>
+    {% endif %}
+    <p class="subtitle" style="margin:0 0 .75rem">Opens one quote on the company and logs the first step as RFQ. A new company name is added.</p>
+    <form method="post" action="/quotes" class="form-grid">
+      <div>
+        <label>Company *</label>
+        <input name="company" required list="lead-customers" value="{{ company }}" placeholder="Company name" />
+      </div>
+      <div>
+        <label>Product *</label>
+        <input name="product" required list="lead-products" placeholder="e.g. Ethyl Vinyl Ether" />
+      </div>
+      <div>
+        <label>Date *</label>
+        <input name="activity_date" type="date" required id="new-quote-date" />
+      </div>
+      <div class="full">
+        <label>What they asked</label>
+        <textarea name="comment" rows="2" placeholder="Quantity, destination, timing…"></textarea>
+      </div>
+      <div class="full">
+        <button type="submit" class="btn btn-primary btn-sm">Start quote</button>
+      </div>
+    </form>
+  </div>
+</div>
+<datalist id="lead-customers">{% for c in customers %}<option value="{{ c.name }}">{% endfor %}</datalist>
+<datalist id="lead-products">{% for p in products %}<option value="{{ p.name }}">{% endfor %}</datalist>
+<script>
+(function () {
+  var el = document.getElementById("new-quote-date");
+  if (el && !el.value) el.value = new Date().toISOString().slice(0, 10);
+})();
+</script>
 
 <div class="card">
   <form class="search-bar" method="get" action="/leads">
