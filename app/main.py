@@ -1594,6 +1594,7 @@ async def summary(
             "product": r.get("product") or "—",
             "date": r.get("invoice_date") or "",
             "commission": float(r.get("commission") or 0),
+            "fob": float(r.get("fob") or 0),
             "quantity": float(r.get("quantity") or 0),
             "variant": r.get("variant") or "gbinc",
         }

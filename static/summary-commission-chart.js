@@ -42,7 +42,7 @@
     return document.getElementById(id);
   }
 
-  function colorForProduct(name) {
+  function colorForSeries(name) {
     if (name === "Other") return OTHER_COLOR;
     var s = String(name || "—");
     var h = 2166136261;
@@ -51,6 +51,10 @@
       h = Math.imul(h, 16777619);
     }
     return COLORS[(h >>> 0) % COLORS.length];
+  }
+
+  function colorForProduct(name) {
+    return colorForSeries(name);
   }
 
   function parseDate(s) {
@@ -110,9 +114,9 @@
     );
   }
 
-  function selectedProducts() {
-    var list = $("ciChartProductList");
-    var allBox = $("ciChartProductAll");
+  function selectedFromMulti(listId, allId) {
+    var list = $(listId);
+    var allBox = $(allId);
     if (!list || !allBox || allBox.checked) return null;
     var picked = [];
     list.querySelectorAll("input[type=checkbox]:checked").forEach(function (cb) {
@@ -121,21 +125,38 @@
     return picked;
   }
 
-  function updateProductButton() {
-    var btn = $("ciChartProductBtn");
+  function selectedProducts() {
+    return selectedFromMulti("ciChartProductList", "ciChartProductAll");
+  }
+
+  function selectedCompanies() {
+    return selectedFromMulti("ciChartCompanyList", "ciChartCompanyAll");
+  }
+
+  function updateMultiButton(btnId, picked, singular, plural) {
+    var btn = $(btnId);
     if (!btn) return;
-    var picked = selectedProducts();
-    if (!picked) btn.textContent = "All products";
-    else if (!picked.length) btn.textContent = "No products";
+    if (!picked) btn.textContent = "All " + plural;
+    else if (!picked.length) btn.textContent = "No " + plural;
     else if (picked.length === 1) btn.textContent = picked[0];
-    else btn.textContent = picked.length + " products";
+    else btn.textContent = picked.length + " " + plural;
+  }
+
+  function updateProductButton() {
+    updateMultiButton("ciChartProductBtn", selectedProducts(), "product", "products");
+  }
+
+  function updateCompanyButton() {
+    updateMultiButton("ciChartCompanyBtn", selectedCompanies(), "company", "companies");
   }
 
   function baseFiltersOk(r) {
     var variant = $("ciChartVariant").value;
     var products = selectedProducts();
+    var companies = selectedCompanies();
     if (variant !== "all" && (r.variant || "gbinc") !== variant) return false;
     if (products && products.indexOf(r.product || "—") < 0) return false;
+    if (companies && companies.indexOf(r.company || "—") < 0) return false;
     return true;
   }
 
@@ -187,9 +208,36 @@
   }
 
   function metricValue(r) {
-    return $("ciChartMetric").value === "quantity"
-      ? Number(r.quantity) || 0
-      : Number(r.commission) || 0;
+    var m = ($("ciChartMetric") || {}).value || "commission";
+    if (m === "quantity") return Number(r.quantity) || 0;
+    if (m === "fob") return Number(r.fob) || 0;
+    return Number(r.commission) || 0;
+  }
+
+  function metricIsMoney() {
+    var m = ($("ciChartMetric") || {}).value || "commission";
+    return m !== "quantity";
+  }
+
+  function metricAxisLabel() {
+    var m = ($("ciChartMetric") || {}).value || "commission";
+    if (m === "quantity") return "Quantity";
+    if (m === "fob") return "FOB (USD)";
+    return "Commission (USD)";
+  }
+
+  function metricShortName() {
+    var m = ($("ciChartMetric") || {}).value || "commission";
+    if (m === "quantity") return "Quantity";
+    if (m === "fob") return "FOB";
+    return "Commission";
+  }
+
+  function formatMetric(v) {
+    if (!metricIsMoney()) {
+      return Number(v || 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+    return money(v);
   }
 
   function isCompare() {
@@ -199,6 +247,15 @@
 
   function breakdown() {
     return ($("ciChartBreakdown") || {}).value || "month";
+  }
+
+  function stackBy() {
+    return ($("ciChartStackBy") || {}).value || "product";
+  }
+
+  function seriesOf(r) {
+    if (stackBy() === "company") return r.company || "—";
+    return r.product || "—";
   }
 
   function isTimeBreakdown(b) {
@@ -376,16 +433,25 @@
     return [];
   }
 
-  function zeroProductDatasets(keys, stackId) {
-    var picked = selectedProducts();
-    var names =
-      picked && picked.length
-        ? picked
-        : uniqueSorted(
-            rows.map(function (r) {
-              return r.product || "—";
-            })
-          ).slice(0, 1);
+  function zeroSeriesDatasets(keys, stackId) {
+    var names;
+    if (stackBy() === "company") {
+      names = uniqueSorted(
+        rows.map(function (r) {
+          return r.company || "—";
+        })
+      ).slice(0, 1);
+    } else {
+      var picked = selectedProducts();
+      names =
+        picked && picked.length
+          ? picked
+          : uniqueSorted(
+              rows.map(function (r) {
+                return r.product || "—";
+              })
+            ).slice(0, 1);
+    }
     if (!names.length) names = ["—"];
     return names.map(function (p) {
       return {
@@ -393,12 +459,16 @@
         data: keys.map(function () {
           return 0;
         }),
-        backgroundColor: colorForProduct(p),
+        backgroundColor: colorForSeries(p),
         borderWidth: 0,
         borderSkipped: false,
-        stack: stackId || "products",
+        stack: stackId || "series",
       };
     });
+  }
+
+  function zeroProductDatasets(keys, stackId) {
+    return zeroSeriesDatasets(keys, stackId);
   }
 
   function totalsByKey(filtered, keyFn) {
@@ -410,20 +480,20 @@
     return totals;
   }
 
-  /** Stacked series: one dataset per product (Top N + Other), stable colors. */
-  function buildProductStackDatasets(filtered, bucketKeys, bucketFn, stackId) {
-    var productTotals = {};
+  /** Stacked series: one dataset per product or buyer company (Top N + Other). */
+  function buildStackDatasets(filtered, bucketKeys, bucketFn, stackId) {
+    var seriesTotals = {};
     var cell = {};
     filtered.forEach(function (r) {
-      var p = r.product || "—";
+      var s = seriesOf(r);
       var b = bucketFn(r);
       var v = metricValue(r);
-      productTotals[p] = (productTotals[p] || 0) + v;
-      if (!cell[p]) cell[p] = {};
-      cell[p][b] = (cell[p][b] || 0) + v;
+      seriesTotals[s] = (seriesTotals[s] || 0) + v;
+      if (!cell[s]) cell[s] = {};
+      cell[s][b] = (cell[s][b] || 0) + v;
     });
-    var ranked = Object.keys(productTotals).sort(function (a, c) {
-      return productTotals[c] - productTotals[a];
+    var ranked = Object.keys(seriesTotals).sort(function (a, c) {
+      return seriesTotals[c] - seriesTotals[a];
     });
     var topN = parseInt(($("ciChartTop") || {}).value, 10) || 0;
     var keep = ranked;
@@ -444,17 +514,23 @@
         data: bucketKeys.map(function (k) {
           return Math.round(((cell[p] && cell[p][k]) || 0) * 100) / 100;
         }),
-        backgroundColor: colorForProduct(p),
+        backgroundColor: colorForSeries(p),
         borderWidth: 0,
         borderSkipped: false,
-        stack: stackId || "products",
+        stack: stackId || "series",
       };
     });
   }
 
+  function buildProductStackDatasets(filtered, bucketKeys, bucketFn, stackId) {
+    return buildStackDatasets(filtered, bucketKeys, bucketFn, stackId);
+  }
+
   function buildCategoryChart(filtered, label) {
     var b = breakdown();
-    if (b === "product") {
+    var stackDim = stackBy();
+    // Flat bars when axis and stack use the same dimension
+    if ((b === "product" && stackDim === "product") || (b === "company" && stackDim === "company")) {
       var totals = totalsByKey(filtered, categoryOf);
       var topN = parseInt($("ciChartTop").value, 10) || 0;
       var labels = topKeys(totals, topN);
@@ -463,12 +539,12 @@
         stacked: false,
         datasets: [
           {
-            label: label || "Commission",
+            label: label || metricShortName(),
             data: labels.map(function (k) {
               return Math.round((totals[k] || 0) * 100) / 100;
             }),
             backgroundColor: labels.map(function (k) {
-              return colorForProduct(k);
+              return colorForSeries(k);
             }),
             borderWidth: 0,
             borderRadius: 4,
@@ -477,33 +553,31 @@
       };
     }
 
-    // By company: each company bar stacked by product
-    var companyTotals = totalsByKey(filtered, function (r) {
-      return r.company || "—";
+    // Axis by product/company, stacked by the other dimension
+    var axisTotals = totalsByKey(filtered, categoryOf);
+    var topNAxis = parseInt($("ciChartTop").value, 10) || 0;
+    var axisLabels = topKeys(axisTotals, topNAxis);
+    var keepAxis = {};
+    axisLabels.forEach(function (c) {
+      if (c !== "Other") keepAxis[c] = true;
     });
-    var topNCo = parseInt($("ciChartTop").value, 10) || 0;
-    var companies = topKeys(companyTotals, topNCo);
-    var keepCo = {};
-    companies.forEach(function (c) {
-      if (c !== "Other") keepCo[c] = true;
-    });
-    var hasOther = companies.indexOf("Other") >= 0;
+    var hasOther = axisLabels.indexOf("Other") >= 0;
     var mapped = filtered.map(function (r) {
-      var c = r.company || "—";
+      var axisKey = categoryOf(r);
       return Object.assign({}, r, {
-        _bucket: keepCo[c] ? c : hasOther ? "Other" : c,
+        _bucket: keepAxis[axisKey] ? axisKey : hasOther ? "Other" : axisKey,
       });
     });
     return {
-      labels: companies,
+      labels: axisLabels,
       stacked: true,
-      datasets: buildProductStackDatasets(
+      datasets: buildStackDatasets(
         mapped,
-        companies,
+        axisLabels,
         function (r) {
           return r._bucket;
         },
-        "products"
+        "series"
       ),
     };
   }
@@ -555,16 +629,16 @@
       });
       keys = sortTimeKeys(Object.keys(totals), b);
     }
-    var datasets = buildProductStackDatasets(
+    var datasets = buildStackDatasets(
       filtered,
       keys,
       function (r) {
         return bucketOf(r, b);
       },
-      "products"
+      "series"
     );
     if (!datasets.length && keys.length) {
-      datasets = zeroProductDatasets(keys, "products");
+      datasets = zeroSeriesDatasets(keys, "series");
     }
     return {
       labels: keys.map(function (k) {
@@ -662,30 +736,44 @@
     var aLabel = $("ciPeriodALabel");
     if (aLabel) aLabel.textContent = compare ? "Period A" : "Time period";
     var topWrap = $("ciChartTopWrap");
+    var stackWrap = $("ciChartStackWrap");
+    if (stackWrap) stackWrap.hidden = compare;
     if (topWrap) {
-      // Top N limits products in stacked bars (or bars when by product/company)
       topWrap.hidden = compare;
       var topLabel = topWrap.querySelector("span");
       if (topLabel) {
         topLabel.textContent =
-          isTimeBreakdown(b) || b === "company" ? "Top products" : "Top N";
+          stackBy() === "company" ? "Top companies" : "Top products";
       }
     }
     syncPeriodKindPanels("PeriodA");
     syncPeriodKindPanels("PeriodB");
   }
 
-  function populateProductMultiSelect() {
-    var list = $("ciChartProductList");
-    var allBox = $("ciChartProductAll");
+  function closeAllMultiPanels(exceptPanel) {
+    [
+      ["ciChartProductPanel", "ciChartProductBtn"],
+      ["ciChartCompanyPanel", "ciChartCompanyBtn"],
+    ].forEach(function (pair) {
+      var panel = $(pair[0]);
+      var btn = $(pair[1]);
+      if (!panel || panel === exceptPanel) return;
+      panel.hidden = true;
+      if (btn) btn.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function populateMultiSelect(opts) {
+    var list = $(opts.listId);
+    var allBox = $(opts.allId);
     if (!list) return;
-    var products = uniqueSorted(
+    var names = uniqueSorted(
       rows.map(function (r) {
-        return r.product || "—";
+        return opts.valueOf(r);
       })
     );
     list.innerHTML = "";
-    products.forEach(function (name) {
+    names.forEach(function (name) {
       var label = document.createElement("label");
       var cb = document.createElement("input");
       cb.type = "checkbox";
@@ -697,7 +785,7 @@
       list.appendChild(label);
       cb.addEventListener("change", function () {
         if (allBox) allBox.checked = false;
-        updateProductButton();
+        opts.onUpdate();
         render();
       });
     });
@@ -709,30 +797,57 @@
             cb.checked = false;
           });
         }
-        updateProductButton();
+        opts.onUpdate();
         render();
       });
     }
-    updateProductButton();
+    opts.onUpdate();
   }
 
-  function wireProductDropdown() {
-    var btn = $("ciChartProductBtn");
-    var panel = $("ciChartProductPanel");
+  function wireMultiDropdown(btnId, panelId) {
+    var btn = $(btnId);
+    var panel = $(panelId);
     if (!btn || !panel) return;
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
       var open = panel.hidden;
+      closeAllMultiPanels(open ? panel : null);
       panel.hidden = !open;
       btn.setAttribute("aria-expanded", open ? "true" : "false");
     });
     panel.addEventListener("click", function (e) {
       e.stopPropagation();
     });
-    document.addEventListener("click", function () {
-      panel.hidden = true;
-      btn.setAttribute("aria-expanded", "false");
+  }
+
+  function populateProductMultiSelect() {
+    populateMultiSelect({
+      listId: "ciChartProductList",
+      allId: "ciChartProductAll",
+      valueOf: function (r) {
+        return r.product || "—";
+      },
+      onUpdate: updateProductButton,
     });
+  }
+
+  function populateCompanyMultiSelect() {
+    populateMultiSelect({
+      listId: "ciChartCompanyList",
+      allId: "ciChartCompanyAll",
+      valueOf: function (r) {
+        return r.company || "—";
+      },
+      onUpdate: updateCompanyButton,
+    });
+  }
+
+  function wireProductDropdown() {
+    wireMultiDropdown("ciChartProductBtn", "ciChartProductPanel");
+  }
+
+  function wireCompanyDropdown() {
+    wireMultiDropdown("ciChartCompanyBtn", "ciChartCompanyPanel");
   }
 
   function populateSelectors() {
@@ -775,8 +890,13 @@
       fyA.value = optionCache.fys[optionCache.fys.length - 1];
     }
 
+    populateCompanyMultiSelect();
     populateProductMultiSelect();
+    wireCompanyDropdown();
     wireProductDropdown();
+    document.addEventListener("click", function () {
+      closeAllMultiPanels(null);
+    });
   }
 
   function syncTable(unionRows, sumA, sumB, compare) {
@@ -815,19 +935,16 @@
         totalEl.textContent =
           periodLabel(periodSpec("PeriodA")) +
           " " +
-          money(sumA) +
+          formatMetric(sumA) +
           "  ·  " +
           periodLabel(periodSpec("PeriodB")) +
           " " +
-          money(sumB);
-      } else if ($("ciChartMetric").value === "quantity") {
+          formatMetric(sumB);
+      } else if (!metricIsMoney()) {
         totalEl.textContent =
-          sum.toLocaleString(undefined, { maximumFractionDigits: 2 }) +
-          " qty · " +
-          visible +
-          " lines";
+          formatMetric(sum) + " qty · " + visible + " lines";
       } else {
-        totalEl.textContent = money(sum) + " · " + visible + " lines";
+        totalEl.textContent = formatMetric(sum) + " · " + visible + " lines";
       }
     }
   }
@@ -887,8 +1004,7 @@
       return;
     }
 
-    var metricLabel =
-      $("ciChartMetric").value === "quantity" ? "Quantity" : "Commission (USD)";
+    var metricLabel = metricAxisLabel();
     var stacked = !!data.stacked;
 
     if (chart) chart.destroy();
@@ -910,17 +1026,14 @@
                 var v = ctx.parsed.y;
                 if (v == null || v === 0) return null;
                 var prefix = ctx.dataset.label ? ctx.dataset.label + ": " : "";
-                if ($("ciChartMetric").value === "quantity") return prefix + v;
-                return prefix + money(v);
+                return prefix + formatMetric(v);
               },
               footer: function (items) {
                 if (!stacked || !items.length) return "";
                 var sum = items.reduce(function (a, it) {
                   return a + (it.parsed.y || 0);
                 }, 0);
-                if ($("ciChartMetric").value === "quantity")
-                  return "Total: " + sum;
-                return "Total: " + money(sum);
+                return "Total: " + formatMetric(sum);
               },
             },
           },
@@ -937,7 +1050,7 @@
             title: { display: true, text: metricLabel, font: { size: 11 } },
             ticks: {
               callback: function (v) {
-                if ($("ciChartMetric").value === "quantity") return v;
+                if (!metricIsMoney()) return v;
                 if (Math.abs(v) >= 1000)
                   return "$" + (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "k";
                 return "$" + v;
@@ -967,7 +1080,7 @@
       company: "By company",
       product: "By product",
     };
-    var metric = $("ciChartMetric").value === "quantity" ? "Quantity" : "Commission";
+    var metric = metricShortName();
     var title = metric + " · " + (names[b] || b);
     var a = periodLabel(periodSpec("PeriodA"));
     if (isCompare()) title += " · " + a + " vs " + periodLabel(periodSpec("PeriodB"));
@@ -1068,6 +1181,7 @@
   [
     "ciChartBreakdown",
     "ciChartMetric",
+    "ciChartStackBy",
     "ciChartTop",
     "ciChartVariant",
     "ciChartCompare",

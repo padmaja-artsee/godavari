@@ -44,7 +44,8 @@
   </div>
   <div class="card-body">
     <p class="subtitle" style="margin:0 0 .75rem">
-      Pick a <strong>time period</strong>, then how to break bars down (monthly, by company, etc.).
+      Pick a <strong>time period</strong>, filter by company and/or product, then how to break bars down.
+      For one buyer’s mix, pick that company and set <strong>Stack by → Product</strong>.
       Optionally compare a second period. Independent of the Week/Month pills above.
     </p>
     <div class="ci-chart-controls">
@@ -55,7 +56,7 @@
           <option value="quarter">Quarterly</option>
           <option value="year">Yearly</option>
           <option value="fy">By fiscal year</option>
-          <option value="company">By company</option>
+          <option value="company">By company (buyer)</option>
           <option value="product">By product</option>
         </select>
       </label>
@@ -63,7 +64,15 @@
         <span>Value</span>
         <select id="ciChartMetric">
           <option value="commission" selected>Commission $</option>
+          <option value="fob">FOB value</option>
           <option value="quantity">Quantity</option>
+        </select>
+      </label>
+      <label class="ci-chart-field" id="ciChartStackWrap">
+        <span>Stack by</span>
+        <select id="ciChartStackBy">
+          <option value="product" selected>Product</option>
+          <option value="company">Company (buyer)</option>
         </select>
       </label>
       <label class="ci-chart-field" id="ciChartTopWrap">
@@ -83,6 +92,19 @@
           <option value="gbbv">GB BV</option>
         </select>
       </label>
+      <div class="ci-chart-field ci-ms" id="ciChartCompanyWrap">
+        <span>Companies</span>
+        <button type="button" class="ci-ms-btn" id="ciChartCompanyBtn" aria-haspopup="listbox" aria-expanded="false">
+          All companies
+        </button>
+        <div class="ci-ms-panel" id="ciChartCompanyPanel" hidden>
+          <label class="ci-ms-all">
+            <input type="checkbox" id="ciChartCompanyAll" checked />
+            <span>All companies</span>
+          </label>
+          <div class="ci-ms-list" id="ciChartCompanyList"></div>
+        </div>
+      </div>
       <div class="ci-chart-field ci-ms" id="ciChartProductWrap">
         <span>Products</span>
         <button type="button" class="ci-ms-btn" id="ciChartProductBtn" aria-haspopup="listbox" aria-expanded="false">
@@ -422,5 +444,5 @@
 
 {% block extra_js %}
 <script src="/static/vendor/chart.umd.min.js"></script>
-<script src="/static/summary-commission-chart.js?v=8"></script>
+<script src="/static/summary-commission-chart.js?v=11"></script>
 {% endblock %}

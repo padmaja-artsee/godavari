@@ -848,6 +848,7 @@ def summary_commission_rows(period: str = "all") -> list[dict[str, Any]]:
             li.quantity,
             li.unit_price,
             li.cif_price,
+            li.fob_value,
             li.commission_rate,
             li.commission_value,
             li.shipment_date AS line_shipment_date,
@@ -895,6 +896,12 @@ def summary_commission_rows(period: str = "all") -> list[dict[str, Any]]:
             cif_price = _float(r.get("cif_price"))
             price = unit_price if unit_price else cif_price
             qty = _float(r.get("quantity"))
+            fob = _float(r.get("fob_value"))
+            if not fob:
+                if qty and unit_price:
+                    fob = round(qty * unit_price, 2)
+                elif qty and cif_price:
+                    fob = round(qty * cif_price, 2)
             company = (
                 (r.get("end_customer") or "").strip()
                 or (r.get("deal_company") or "").strip()
@@ -929,6 +936,7 @@ def summary_commission_rows(period: str = "all") -> list[dict[str, Any]]:
                     "ci_base": get_ci_variant_meta(variant)["url_prefix"],
                     "deal_id": r.get("deal_id"),
                     "invoice_date": row_date,
+                    "fob": fob,
                     "commission": _float(r.get("commission_value")),
                     "commission_rate": _float(r.get("commission_rate")),
                     "currency": "USD",
