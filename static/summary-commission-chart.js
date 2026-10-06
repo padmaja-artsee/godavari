@@ -32,6 +32,7 @@
     "rgba(71, 85, 105, 0.65)",
   ];
   var COMPARE_COLORS = ["rgba(15, 118, 110, 0.8)", "rgba(37, 99, 235, 0.75)"];
+  var OTHER_COLOR = "rgba(100, 116, 139, 0.55)";
   var MONTH_NAMES = [
     "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
@@ -39,6 +40,17 @@
 
   function $(id) {
     return document.getElementById(id);
+  }
+
+  function colorForProduct(name) {
+    if (name === "Other") return OTHER_COLOR;
+    var s = String(name || "—");
+    var h = 2166136261;
+    for (var i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return COLORS[(h >>> 0) % COLORS.length];
   }
 
   function parseDate(s) {
@@ -239,6 +251,156 @@
     return sorted;
   }
 
+  function addMonths(y, m, n) {
+    var t = y * 12 + (m - 1) + n;
+    return { y: Math.floor(t / 12), m: (t % 12) + 1 };
+  }
+
+  /** Inclusive calendar-month span for an explicit period filter, or null for All time. */
+  function periodMonthRange(spec) {
+    if (!spec || spec.kind === "all") return null;
+    if (spec.kind === "month" && spec.month && /^\d{4}-\d{2}$/.test(spec.month)) {
+      var my = parseInt(spec.month.slice(0, 4), 10);
+      var mm = parseInt(spec.month.slice(5, 7), 10);
+      return { fromY: my, fromM: mm, toY: my, toM: mm };
+    }
+    if (spec.kind === "quarter" && spec.quarter) {
+      var qm = /^(\d{4})-Q([1-4])$/.exec(spec.quarter);
+      if (qm) {
+        var qy = parseInt(qm[1], 10);
+        var qn = parseInt(qm[2], 10);
+        var sm = (qn - 1) * 3 + 1;
+        return { fromY: qy, fromM: sm, toY: qy, toM: sm + 2 };
+      }
+    }
+    if (spec.kind === "year" && spec.year) {
+      var yy = parseInt(spec.year, 10);
+      if (yy) return { fromY: yy, fromM: 1, toY: yy, toM: 12 };
+    }
+    if (spec.kind === "fy" && spec.fy) {
+      var fy = parseInt(spec.fy, 10);
+      if (fy) return { fromY: fy - 1, fromM: 4, toY: fy, toM: 3 };
+    }
+    if (spec.kind === "custom") {
+      var fd = parseDate(spec.from);
+      var td = parseDate(spec.to);
+      if (fd && td) {
+        if (fd.y * 12 + fd.m > td.y * 12 + td.m) {
+          return { fromY: td.y, fromM: td.m, toY: fd.y, toM: fd.m };
+        }
+        return { fromY: fd.y, fromM: fd.m, toY: td.y, toM: td.m };
+      }
+      if (fd) return { fromY: fd.y, fromM: fd.m, toY: fd.y, toM: fd.m };
+      if (td) return { fromY: td.y, fromM: td.m, toY: td.y, toM: td.m };
+    }
+    return null;
+  }
+
+  function monthRangeFromRows(filtered) {
+    var minT = null;
+    var maxT = null;
+    filtered.forEach(function (r) {
+      var d = parseDate(r.date);
+      if (!d) return;
+      var t = d.y * 12 + d.m;
+      if (minT === null || t < minT) minT = t;
+      if (maxT === null || t > maxT) maxT = t;
+    });
+    if (minT === null) return null;
+    return {
+      fromY: Math.floor((minT - 1) / 12),
+      fromM: ((minT - 1) % 12) + 1,
+      toY: Math.floor((maxT - 1) / 12),
+      toM: ((maxT - 1) % 12) + 1,
+    };
+  }
+
+  function enumerateMonthKeys(range) {
+    var keys = [];
+    if (!range) return keys;
+    var cur = { y: range.fromY, m: range.fromM };
+    var end = range.toY * 12 + range.toM;
+    while (cur.y * 12 + cur.m <= end) {
+      keys.push(monthKey(cur));
+      cur = addMonths(cur.y, cur.m, 1);
+    }
+    return keys;
+  }
+
+  function enumerateQuarterKeys(range) {
+    var keys = [];
+    if (!range) return keys;
+    var y = range.fromY;
+    var q = Math.floor((range.fromM - 1) / 3) + 1;
+    var endY = range.toY;
+    var endQ = Math.floor((range.toM - 1) / 3) + 1;
+    while (y < endY || (y === endY && q <= endQ)) {
+      keys.push(y + "-Q" + q);
+      q += 1;
+      if (q > 4) {
+        q = 1;
+        y += 1;
+      }
+    }
+    return keys;
+  }
+
+  function enumerateYearKeys(range) {
+    var keys = [];
+    if (!range) return keys;
+    for (var y = range.fromY; y <= range.toY; y++) keys.push(String(y));
+    return keys;
+  }
+
+  function enumerateFyKeys(range) {
+    var keys = [];
+    if (!range) return keys;
+    var fromFy = range.fromM >= 4 ? range.fromY + 1 : range.fromY;
+    var toFy = range.toM >= 4 ? range.toY + 1 : range.toY;
+    for (var fy = fromFy; fy <= toFy; fy++) keys.push(String(fy));
+    return keys;
+  }
+
+  /**
+   * Continuous time buckets for the chart axis.
+   * Explicit period (FY/year/…) → full span with zeros for empty slots.
+   * All time → every bucket from first to last data month (no gaps in between).
+   */
+  function continuousTimeKeys(b, spec, filtered) {
+    var range = periodMonthRange(spec) || monthRangeFromRows(filtered);
+    if (!range) return [];
+    if (b === "month") return enumerateMonthKeys(range);
+    if (b === "quarter") return enumerateQuarterKeys(range);
+    if (b === "year") return enumerateYearKeys(range);
+    if (b === "fy") return enumerateFyKeys(range);
+    return [];
+  }
+
+  function zeroProductDatasets(keys, stackId) {
+    var picked = selectedProducts();
+    var names =
+      picked && picked.length
+        ? picked
+        : uniqueSorted(
+            rows.map(function (r) {
+              return r.product || "—";
+            })
+          ).slice(0, 1);
+    if (!names.length) names = ["—"];
+    return names.map(function (p) {
+      return {
+        label: p,
+        data: keys.map(function () {
+          return 0;
+        }),
+        backgroundColor: colorForProduct(p),
+        borderWidth: 0,
+        borderSkipped: false,
+        stack: stackId || "products",
+      };
+    });
+  }
+
   function totalsByKey(filtered, keyFn) {
     var totals = {};
     filtered.forEach(function (r) {
@@ -248,25 +410,101 @@
     return totals;
   }
 
+  /** Stacked series: one dataset per product (Top N + Other), stable colors. */
+  function buildProductStackDatasets(filtered, bucketKeys, bucketFn, stackId) {
+    var productTotals = {};
+    var cell = {};
+    filtered.forEach(function (r) {
+      var p = r.product || "—";
+      var b = bucketFn(r);
+      var v = metricValue(r);
+      productTotals[p] = (productTotals[p] || 0) + v;
+      if (!cell[p]) cell[p] = {};
+      cell[p][b] = (cell[p][b] || 0) + v;
+    });
+    var ranked = Object.keys(productTotals).sort(function (a, c) {
+      return productTotals[c] - productTotals[a];
+    });
+    var topN = parseInt(($("ciChartTop") || {}).value, 10) || 0;
+    var keep = ranked;
+    if (topN > 0 && ranked.length > topN) {
+      keep = ranked.slice(0, topN);
+      var otherCell = {};
+      ranked.slice(topN).forEach(function (p) {
+        Object.keys(cell[p] || {}).forEach(function (b) {
+          otherCell[b] = (otherCell[b] || 0) + cell[p][b];
+        });
+      });
+      cell.Other = otherCell;
+      keep = keep.concat(["Other"]);
+    }
+    return keep.map(function (p) {
+      return {
+        label: p,
+        data: bucketKeys.map(function (k) {
+          return Math.round(((cell[p] && cell[p][k]) || 0) * 100) / 100;
+        }),
+        backgroundColor: colorForProduct(p),
+        borderWidth: 0,
+        borderSkipped: false,
+        stack: stackId || "products",
+      };
+    });
+  }
+
   function buildCategoryChart(filtered, label) {
-    var totals = totalsByKey(filtered, categoryOf);
-    var topN = parseInt($("ciChartTop").value, 10) || 0;
-    var labels = topKeys(totals, topN);
+    var b = breakdown();
+    if (b === "product") {
+      var totals = totalsByKey(filtered, categoryOf);
+      var topN = parseInt($("ciChartTop").value, 10) || 0;
+      var labels = topKeys(totals, topN);
+      return {
+        labels: labels,
+        stacked: false,
+        datasets: [
+          {
+            label: label || "Commission",
+            data: labels.map(function (k) {
+              return Math.round((totals[k] || 0) * 100) / 100;
+            }),
+            backgroundColor: labels.map(function (k) {
+              return colorForProduct(k);
+            }),
+            borderWidth: 0,
+            borderRadius: 4,
+          },
+        ],
+      };
+    }
+
+    // By company: each company bar stacked by product
+    var companyTotals = totalsByKey(filtered, function (r) {
+      return r.company || "—";
+    });
+    var topNCo = parseInt($("ciChartTop").value, 10) || 0;
+    var companies = topKeys(companyTotals, topNCo);
+    var keepCo = {};
+    companies.forEach(function (c) {
+      if (c !== "Other") keepCo[c] = true;
+    });
+    var hasOther = companies.indexOf("Other") >= 0;
+    var mapped = filtered.map(function (r) {
+      var c = r.company || "—";
+      return Object.assign({}, r, {
+        _bucket: keepCo[c] ? c : hasOther ? "Other" : c,
+      });
+    });
     return {
-      labels: labels,
-      datasets: [
-        {
-          label: label || "Commission",
-          data: labels.map(function (k) {
-            return Math.round((totals[k] || 0) * 100) / 100;
-          }),
-          backgroundColor: labels.map(function (_, i) {
-            return COLORS[i % COLORS.length];
-          }),
-          borderWidth: 0,
-          borderRadius: 4,
+      labels: companies,
+      stacked: true,
+      datasets: buildProductStackDatasets(
+        mapped,
+        companies,
+        function (r) {
+          return r._bucket;
         },
-      ],
+        "products"
+      ),
     };
   }
 
@@ -284,6 +522,7 @@
     var labels = topKeys(combined, topN);
     return {
       labels: labels,
+      stacked: false,
       datasets: [
         {
           label: periodLabel(periodSpec("PeriodA")),
@@ -309,49 +548,60 @@
 
   function buildTimeChart(filtered, label) {
     var b = breakdown();
-    var totals = totalsByKey(filtered, function (r) {
-      return bucketOf(r, b);
-    });
-    var keys = sortTimeKeys(Object.keys(totals), b);
+    var keys = continuousTimeKeys(b, periodSpec("PeriodA"), filtered);
+    if (!keys.length) {
+      var totals = totalsByKey(filtered, function (r) {
+        return bucketOf(r, b);
+      });
+      keys = sortTimeKeys(Object.keys(totals), b);
+    }
+    var datasets = buildProductStackDatasets(
+      filtered,
+      keys,
+      function (r) {
+        return bucketOf(r, b);
+      },
+      "products"
+    );
+    if (!datasets.length && keys.length) {
+      datasets = zeroProductDatasets(keys, "products");
+    }
     return {
       labels: keys.map(function (k) {
         return prettyBucket(k, b);
       }),
-      datasets: [
-        {
-          label: label || periodLabel(periodSpec("PeriodA")),
-          data: keys.map(function (k) {
-            return Math.round((totals[k] || 0) * 100) / 100;
-          }),
-          backgroundColor: COMPARE_COLORS[0],
-          borderWidth: 0,
-          borderRadius: 4,
-        },
-      ],
-      _keys: keys,
+      stacked: true,
+      datasets: datasets,
     };
   }
 
   function buildCompareTime(rowsA, rowsB) {
     var b = breakdown();
+    var keysA = continuousTimeKeys(b, periodSpec("PeriodA"), rowsA);
+    var keysB = continuousTimeKeys(b, periodSpec("PeriodB"), rowsB);
+    var keySet = {};
+    keysA.forEach(function (k) {
+      keySet[k] = true;
+    });
+    keysB.forEach(function (k) {
+      keySet[k] = true;
+    });
+    // Also include any data months outside the filled range (safety)
+    rowsA.concat(rowsB).forEach(function (r) {
+      keySet[bucketOf(r, b)] = true;
+    });
+    var keys = sortTimeKeys(Object.keys(keySet), b);
     var totA = totalsByKey(rowsA, function (r) {
       return bucketOf(r, b);
     });
     var totB = totalsByKey(rowsB, function (r) {
       return bucketOf(r, b);
     });
-    var keySet = {};
-    Object.keys(totA).forEach(function (k) {
-      keySet[k] = true;
-    });
-    Object.keys(totB).forEach(function (k) {
-      keySet[k] = true;
-    });
-    var keys = sortTimeKeys(Object.keys(keySet), b);
     return {
       labels: keys.map(function (k) {
         return prettyBucket(k, b);
       }),
+      stacked: false,
       datasets: [
         {
           label: periodLabel(periodSpec("PeriodA")),
@@ -412,7 +662,15 @@
     var aLabel = $("ciPeriodALabel");
     if (aLabel) aLabel.textContent = compare ? "Period A" : "Time period";
     var topWrap = $("ciChartTopWrap");
-    if (topWrap) topWrap.hidden = isTimeBreakdown(b);
+    if (topWrap) {
+      // Top N limits products in stacked bars (or bars when by product/company)
+      topWrap.hidden = compare;
+      var topLabel = topWrap.querySelector("span");
+      if (topLabel) {
+        topLabel.textContent =
+          isTimeBreakdown(b) || b === "company" ? "Top products" : "Top N";
+      }
+    }
     syncPeriodKindPanels("PeriodA");
     syncPeriodKindPanels("PeriodB");
   }
@@ -591,14 +849,21 @@
     syncTable(union, sumA, sumB, compare);
 
     if (!union.length) {
-      if (emptyEl) emptyEl.hidden = false;
-      if (canvas) canvas.style.display = "none";
-      if (chart) {
-        chart.destroy();
-        chart = null;
+      var canShowZeros =
+        isTimeBreakdown(b) &&
+        (periodMonthRange(periodSpec("PeriodA")) ||
+          (compare && periodMonthRange(periodSpec("PeriodB"))) ||
+          continuousTimeKeys(b, periodSpec("PeriodA"), rows).length > 0);
+      if (!canShowZeros) {
+        if (emptyEl) emptyEl.hidden = false;
+        if (canvas) canvas.style.display = "none";
+        if (chart) {
+          chart.destroy();
+          chart = null;
+        }
+        setDownloadEnabled(false);
+        return;
       }
-      setDownloadEnabled(false);
-      return;
     }
     if (emptyEl) emptyEl.hidden = true;
     if (canvas) canvas.style.display = "block";
@@ -611,9 +876,20 @@
         ? buildCompareCategory(rowsA, rowsB)
         : buildCategoryChart(rowsA, periodLabel(periodSpec("PeriodA")));
     }
+    if (!data.labels || !data.labels.length) {
+      if (emptyEl) emptyEl.hidden = false;
+      if (canvas) canvas.style.display = "none";
+      if (chart) {
+        chart.destroy();
+        chart = null;
+      }
+      setDownloadEnabled(false);
+      return;
+    }
 
     var metricLabel =
       $("ciChartMetric").value === "quantity" ? "Quantity" : "Commission (USD)";
+    var stacked = !!data.stacked;
 
     if (chart) chart.destroy();
     chart = new Chart(canvas, {
@@ -624,27 +900,39 @@
         maintainAspectRatio: false,
         plugins: {
           legend: {
-            display: compare || isTimeBreakdown(b),
+            display: stacked || compare || breakdown() === "product",
             position: "bottom",
-            labels: { boxWidth: 12, font: { size: 11 } },
+            labels: { boxWidth: 12, font: { size: 11 }, padding: 10 },
           },
           tooltip: {
             callbacks: {
               label: function (ctx) {
                 var v = ctx.parsed.y;
+                if (v == null || v === 0) return null;
                 var prefix = ctx.dataset.label ? ctx.dataset.label + ": " : "";
                 if ($("ciChartMetric").value === "quantity") return prefix + v;
                 return prefix + money(v);
+              },
+              footer: function (items) {
+                if (!stacked || !items.length) return "";
+                var sum = items.reduce(function (a, it) {
+                  return a + (it.parsed.y || 0);
+                }, 0);
+                if ($("ciChartMetric").value === "quantity")
+                  return "Total: " + sum;
+                return "Total: " + money(sum);
               },
             },
           },
         },
         scales: {
           x: {
+            stacked: stacked,
             ticks: { maxRotation: 45, minRotation: 0, font: { size: 11 } },
             grid: { display: false },
           },
           y: {
+            stacked: stacked,
             beginAtZero: true,
             title: { display: true, text: metricLabel, font: { size: 11 } },
             ticks: {
